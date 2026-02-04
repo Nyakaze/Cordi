@@ -1,0 +1,8 @@
+.vs/
+obj/
+bin/
+*.user
+.vscode/
+.idea/
+/Probe
+.editorconfig

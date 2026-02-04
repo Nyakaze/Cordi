@@ -1,0 +1,17 @@
+{
+  "Author": "Nyakaze",
+  "Name": "Cordi",
+  "Punchline": "The ultimate discord plugin",
+  "Description": "Ya ya, I should describe... but why should I",
+  "ApplicableVersion": "any",
+  "Tags": [
+    "cute",
+    "plugin",
+    "made",
+    "by",
+    "Nyakaze"
+  ],
+  "IconUrl": "https://raw.githubusercontent.com/Nyakaze/Cordi/master/Images/icon.png",
+  "InternalName": "Cordi",
+  "RepoUrl": "https://github.com/Nyakaze/Cordi"
+}
