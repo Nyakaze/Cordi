@@ -1,0 +1,69 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - "*.*.*.*"
+  # This enables the manual trigger button
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version Number (e.g. 1.0.2.0)'
+        required: true
+        default: '1.0.0'
+
+jobs:
+  Build:
+    runs-on: ubuntu-latest
+    env:
+      DALAMUD_HOME: /tmp/dalamud
+      DALAMUD_ARCHIVE_URL: ${{ vars.DALAMUD_ARCHIVE_URL || 'https://goatcorp.github.io/dalamud-distrib/latest.zip' }}
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v6 
+
+      - name: Set Version
+        id: version_step
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            echo "BUILD_VERSION=${{ github.event.inputs.version }}" >> $GITHUB_ENV
+          else
+            echo "BUILD_VERSION=${{ github.ref_name }}" >> $GITHUB_ENV
+          fi
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.x 
+          
+      - name: Download Dalamud Latest
+        run: |
+          wget ${{ env.DALAMUD_ARCHIVE_URL }} -O ${{ env.DALAMUD_HOME }}.zip
+          unzip ${{ env.DALAMUD_HOME }}.zip -d ${{ env.DALAMUD_HOME }}
+
+      - name: Restore Project
+        run: dotnet restore -p:EnableWindowsTargeting=true
+
+      - name: Build Project
+        run: dotnet build --configuration Release Cordi/Cordi.csproj -p:AssemblyVersion=${{ env.BUILD_VERSION }} -p:EnableWindowsTargeting=true
+
+      - name: Create Release
+        uses: actions/create-release@v1
+        id: create_release
+        with:
+          draft: false
+          prerelease: false
+          release_name: ${{ env.BUILD_VERSION }}
+          tag_name: ${{ env.BUILD_VERSION }}
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+
+      - name: Upload Release Asset
+        uses: actions/upload-release-asset@v1
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: Cordi/bin/Release/Cordi/latest.zip
+          asset_name: Cordi.zip
+          asset_content_type: application/zip
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
