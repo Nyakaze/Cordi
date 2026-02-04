@@ -42,7 +42,7 @@ jobs:
           unzip ${{ env.DALAMUD_HOME }}.zip -d ${{ env.DALAMUD_HOME }}
 
       - name: Restore Project
-        run: dotnet restore
+        run: dotnet restore -p:EnableWindowsTargeting=true
 
       - name: Build Project
         run: dotnet build --configuration Release Cordi/Cordi.csproj -p:AssemblyVersion=${{ env.BUILD_VERSION }} -p:EnableWindowsTargeting=true
