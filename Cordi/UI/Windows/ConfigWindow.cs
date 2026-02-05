@@ -36,6 +36,8 @@ public sealed class ConfigWindow : Window, IDisposable
 #endif
     private EmoteLogTab emoteLogTab;
     private DiscordActivityTab discordActivityTab;
+    private PartyTab partyTab;
+    private RememberMeTab rememberMeTab;
 
     private int selectedTab = 0;
 
@@ -53,6 +55,8 @@ public sealed class ConfigWindow : Window, IDisposable
         this.debugTab = new DebugTab(plugin, theme);
 #endif
         this.discordActivityTab = new DiscordActivityTab(plugin, theme);
+        this.partyTab = new PartyTab(plugin, theme);
+        this.rememberMeTab = new RememberMeTab(plugin, theme);
 
         SizeConstraints = new WindowSizeConstraints
         {
@@ -157,6 +161,20 @@ public sealed class ConfigWindow : Window, IDisposable
         ImGui.Spacing();
 
 
+        PushBtnColor(selectedTab == 6);
+        if (ImGui.Button("Party", buttonSize)) selectedTab = 6;
+        theme.HoverHandIfItem();
+        ImGui.PopStyleColor(3);
+        ImGui.Spacing();
+
+
+        PushBtnColor(selectedTab == 7);
+        if (ImGui.Button("Remember Me", buttonSize)) selectedTab = 7;
+        theme.HoverHandIfItem();
+        ImGui.PopStyleColor(3);
+        ImGui.Spacing();
+
+
 #if DEBUG
         PushBtnColor(selectedTab == 3);
         if (ImGui.Button("Debug", buttonSize)) selectedTab = 3;
@@ -204,6 +222,14 @@ public sealed class ConfigWindow : Window, IDisposable
             case 5:
 
                 discordActivityTab.Draw();
+                break;
+
+            case 6:
+                partyTab.Draw();
+                break;
+
+            case 7:
+                rememberMeTab.Draw();
                 break;
         }
         ImGui.EndChild();

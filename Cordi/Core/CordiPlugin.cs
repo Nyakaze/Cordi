@@ -13,6 +13,7 @@ using Cordi.Packets.Handler;
 using Cordi.Packets.Handler.Chat;
 using Cordi.Services;
 using Cordi.Services.Discord;
+using Cordi.Services.Features;
 using Dalamud.Interface.Windowing;
 using Dalamud.Plugin.Services;
 
@@ -41,7 +42,8 @@ public class CordiPlugin : IDalamudPlugin
     private readonly ConfigWindow configWindow;
     public readonly DiscordWindow discordWindow;
     public DiscordHandler Discord { get; set; }
-    public AvatarService Avatar { get; private set; }
+    public LodestoneService Lodestone { get; private set; }
+    public TomestoneService Tomestone { get; private set; }
     public DiscordWebhookService Webhook { get; private set; }
     public ActivityManager ActivityManager { get; private set; }
     public HonorificBridge HonorificBridge { get; private set; }
@@ -76,6 +78,8 @@ public class CordiPlugin : IDalamudPlugin
     public CordiPeepWindow CordiPeepWindow { get; private set; }
     public EmoteLogService EmoteLog { get; private set; }
     public EmoteLogWindow EmoteLogWindow { get; private set; }
+    public PartyService PartyService { get; private set; }
+    public RememberMeService RememberMe { get; private set; }
 
     public CordiPlugin()
     {
@@ -89,15 +93,20 @@ public class CordiPlugin : IDalamudPlugin
 
         PluginInterface.UiBuilder.OpenConfigUi += ToggleConfigUI;
         PluginInterface.UiBuilder.OpenMainUi += ToggleConfigUI;
-        Avatar = new AvatarService(this);
+        Lodestone = new LodestoneService(this);
+        Tomestone = new TomestoneService(this);
         Webhook = new DiscordWebhookService(this);
         Discord = new DiscordHandler(this, Webhook);
+
+        NotificationManager = new NotificationManager();
 
 
 
         EmoteLog = new EmoteLogService(this);
         CordiPeep = new CordiPeepService(this);
         HonorificBridge = new HonorificBridge(PluginInterface);
+        PartyService = new PartyService(this, NotificationManager);
+        RememberMe = new RememberMeService(this);
         ActivityManager = new ActivityManager(this, Discord, HonorificBridge);
 
         configWindow = new ConfigWindow(this);
@@ -123,7 +132,8 @@ public class CordiPlugin : IDalamudPlugin
 
         Task.Run(async () =>
         {
-            await Avatar.InitializeAsync();
+            await Lodestone.InitializeAsync();
+            await Tomestone.InitializeAsync();
             await this.Discord.Start();
             this.EmoteLog.Initialize();
 
@@ -145,8 +155,6 @@ public class CordiPlugin : IDalamudPlugin
         Services.AddSingleton<ChatRouter>();
         var provider = Services.BuildServiceProvider();
         _router = provider.GetRequiredService<ChatRouter>();
-
-        NotificationManager = new NotificationManager();
 
 
         UpdateCommandVisibility();
@@ -270,11 +278,12 @@ public class CordiPlugin : IDalamudPlugin
         this.commandManager.Dispose();
         this.CordiPeep?.Dispose();
         this.EmoteLog?.Dispose();
-        this.CordiPeep?.Dispose();
-        this.EmoteLog?.Dispose();
         this.ActivityManager?.Dispose();
         this.HonorificBridge?.Dispose();
-        this.Avatar?.Dispose();
+        this.Lodestone?.Dispose();
+        this.Tomestone?.Dispose();
+        this.PartyService?.Dispose();
+        this.RememberMe?.Dispose();
 
         Service.PluginInterface.UiBuilder.OpenConfigUi -= this.ToggleConfigUI;
         Service.PluginInterface.UiBuilder.OpenMainUi -= this.ToggleConfigUI;

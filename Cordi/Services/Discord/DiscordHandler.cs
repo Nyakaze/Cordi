@@ -238,7 +238,7 @@ public class DiscordHandler : IDisposable
                     channel = thread;
                 }
 
-                var finalAvatarUrl = avatarUrl ?? await _plugin.Avatar.GetAvatarUrlAsync(senderName, senderWorld);
+                var finalAvatarUrl = avatarUrl ?? await _plugin.Lodestone.GetAvatarUrlAsync(senderName, senderWorld);
                 var hookMessage = new DiscordWebhookBuilder()
                     .WithContent(content)
                     .WithUsername($"{senderName}@{senderWorld}")
@@ -286,7 +286,7 @@ public class DiscordHandler : IDisposable
         try
         {
             var channel = await _client.GetChannelAsync(channelId);
-            var avatarUrl = await _plugin.Avatar.GetAvatarUrlAsync(senderName, senderWorld);
+            var avatarUrl = await _plugin.Lodestone.GetAvatarUrlAsync(senderName, senderWorld);
             var username = $"{senderName}@{senderWorld}";
 
             var builder = new DiscordWebhookBuilder()
@@ -299,6 +299,29 @@ public class DiscordHandler : IDisposable
         catch (Exception ex)
         {
             Logger.Error(ex, "Failed to send webhook embed.");
+            return 0;
+        }
+    }
+
+    public async Task<ulong> SendWebhookMessageRaw(ulong channelId, DiscordEmbed embed, string username, string? avatarUrl)
+    {
+        if (_client == null) return 0;
+        try
+        {
+            var channel = await _client.GetChannelAsync(channelId);
+
+            var builder = new DiscordWebhookBuilder()
+                .WithUsername(username)
+                .AddEmbed(embed);
+
+            if (!string.IsNullOrEmpty(avatarUrl))
+                builder.WithAvatarUrl(avatarUrl);
+
+            return await _webhooks.ExecuteWebhookAsync(channel, builder);
+        }
+        catch (Exception ex)
+        {
+            Logger.Error(ex, "Failed to send raw webhook embed.");
             return 0;
         }
     }

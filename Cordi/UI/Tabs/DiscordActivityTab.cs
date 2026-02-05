@@ -32,7 +32,7 @@ public class DiscordActivityTab
         var config = _plugin.Config.ActivityConfig;
         bool changed = false;
 
-        _theme.SpacerY(1f);
+        _theme.SpacerY(2f);
 
 
         bool enabled = config.Enabled;

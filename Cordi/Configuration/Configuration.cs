@@ -19,6 +19,9 @@ public class Configuration : IPluginConfiguration
     public DiscordConfig Discord { get; set; } = new();
     public ChatConfig Chat { get; set; } = new();
     public DiscordActivityConfig ActivityConfig { get; set; } = new();
+    public PartyConfig Party { get; set; } = new();
+    public RememberMeConfig RememberMe { get; set; } = new();
+    public LodestoneConfig Lodestone { get; set; } = new();
     public ThroughputStats Stats { get; set; } = new();
 
     [JsonIgnore] private IDalamudPluginInterface pluginInterface;

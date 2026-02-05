@@ -73,8 +73,6 @@ public class CordiPeepTab
     private void DrawConfigCard(ref bool enabled)
     {
         theme.SpacerY(2f);
-        ImGui.Separator();
-        theme.SpacerY(2f);
 
 
         theme.DrawPluginCardAuto(

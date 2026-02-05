@@ -241,7 +241,7 @@ public class CordiPeepService : IDisposable
         var channelIdStr = plugin.Config.CordiPeep.DiscordChannelId;
         if (ulong.TryParse(channelIdStr, out var channelId))
         {
-            var avatarUrl = await plugin.Avatar.GetAvatarUrlAsync(state.Name, state.World);
+            var avatarUrl = await plugin.Lodestone.GetAvatarUrlAsync(state.Name, state.World);
             state.AvatarUrl = avatarUrl;
 
             var embed = new DiscordEmbedBuilder()

@@ -20,11 +20,13 @@
     <PackageReference Include="Autofac" Version="9.0.0" />
     <PackageReference Include="DSharpPlus.SlashCommands" Version="4.5.1" />
     <PackageReference Include="ECommons" Version="3.1.0.20" />
+    <PackageReference Include="HtmlAgilityPack" Version="1.12.4" />
     <PackageReference Include="Microsoft.Extensions.Logging.Console" Version="10.0.2" />
     <PackageReference Update="DalamudPackager" Version="14.0.1" />
     <PackageReference Update="DotNet.ReproducibleBuilds" Version="2.0.2" />
     <PackageReference Include="NAudio" Version="2.2.1" />
     <PackageReference Include="NetStone" Version="1.4.1" />
+    <PackageReference Include="System.Text.Json" Version="10.0.2" />
     <PackageReference Include="System.Windows.Extensions" Version="10.0.2" />
   </ItemGroup>
 </Project>

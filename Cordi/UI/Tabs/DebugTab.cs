@@ -59,6 +59,12 @@ public class DebugTab
         ImGui.Separator();
         theme.SpacerY(2f);
 
+        DrawLodestoneCache();
+
+        theme.SpacerY(2f);
+        ImGui.Separator();
+        theme.SpacerY(2f);
+
         DrawMessageSimulator();
 
         theme.SpacerY(2f);
@@ -77,8 +83,65 @@ public class DebugTab
         ImGui.Separator();
         theme.SpacerY(2f);
 
+        DrawPartyDebug();
+
+        theme.SpacerY(2f);
+        ImGui.Separator();
+        theme.SpacerY(2f);
 
         DrawStateInspector();
+
+    }
+
+    private void DrawPartyDebug()
+    {
+        bool unused = true;
+        theme.DrawPluginCardAuto(
+            id: "party-debug-card",
+            enabled: ref unused,
+            showCheckbox: false,
+            title: "Party Tracker Debug",
+            drawContent: (avail) =>
+            {
+                ImGui.TextColored(theme.MutedText, "Simulate Party Events.");
+
+                ImGui.Text("Name:");
+                ImGui.SetNextItemWidth(avail / 2);
+                ImGui.InputText("##partyDebugName", ref _debugName, 64);
+
+                ImGui.SameLine();
+                ImGui.Text("World:");
+
+                ImGui.SameLine();
+                ImGui.SetNextItemWidth(ImGui.GetContentRegionAvail().X);
+                ImGui.InputText("##partyDebugWorld", ref _debugWorld, 64);
+
+                theme.SpacerY(0.5f);
+
+                if (ImGui.Button("Trigger Join"))
+                {
+                    // Disabled: PartyService.NotifyJoin now requires IPartyMember parameter
+                    // plugin.PartyService?.DebugTriggerJoin(_debugName, _debugWorld);
+                }
+                theme.HoverHandIfItem();
+
+                ImGui.SameLine();
+
+                if (ImGui.Button("Trigger Leave"))
+                {
+                    plugin.PartyService?.DebugTriggerLeave(_debugName, _debugWorld);
+                }
+                theme.HoverHandIfItem();
+
+                ImGui.SameLine();
+
+                if (ImGui.Button("Trigger Full Party"))
+                {
+                    plugin.PartyService?.DebugTriggerFull();
+                }
+                theme.HoverHandIfItem();
+            }
+        );
     }
 
 
@@ -559,6 +622,63 @@ public class DebugTab
         );
     }
 
+    private void DrawLodestoneCache()
+    {
+        bool unused = true;
+        theme.DrawPluginCardAuto(
+            id: "debug-lodestone-cache-card",
+            enabled: ref unused,
+            showCheckbox: false,
+            title: "Lodestone Character ID Cache",
+            drawContent: (avail) =>
+            {
+                var cache = plugin.Config.Lodestone.CharacterIdCache;
+                ImGui.TextColored(UiTheme.ColorSuccessText, $"Cached Character IDs: {cache.Count}");
+
+                ImGui.SameLine();
+                if (ImGui.Button("Clear Cache"))
+                {
+                    plugin.Lodestone.ClearCache();
+                }
+                theme.HoverHandIfItem();
+                if (ImGui.IsItemHovered()) ImGui.SetTooltip("Clear all cached character IDs (both memory and persistent)");
+
+                theme.SpacerY(1f);
+
+                if (cache.Count == 0)
+                {
+                    ImGui.TextColored(theme.MutedText, "No cached character IDs yet.");
+                }
+                else
+                {
+                    float tableHeight = 200f * ImGuiHelpers.GlobalScale;
+                    if (ImGui.BeginChild("##lodestoneCache", new Vector2(0, tableHeight), false))
+                    {
+                        ImGui.Indent(theme.PadX(0.5f));
+                        if (ImGui.BeginTable("##lodestoneCacheTable", 2, ImGuiTableFlags.NoBordersInBody | ImGuiTableFlags.RowBg | ImGuiTableFlags.SizingStretchProp | ImGuiTableFlags.ScrollY))
+                        {
+                            ImGui.TableSetupColumn("Character", ImGuiTableColumnFlags.WidthStretch);
+                            ImGui.TableSetupColumn("Lodestone ID", ImGuiTableColumnFlags.WidthFixed, 120f);
+                            ImGui.TableHeadersRow();
+
+                            foreach (var kvp in cache.OrderBy(x => x.Key))
+                            {
+                                ImGui.TableNextRow();
+                                ImGui.TableNextColumn();
+                                ImGui.Text(kvp.Key);
+                                ImGui.TableNextColumn();
+                                ImGui.Text(kvp.Value);
+                            }
+                            ImGui.EndTable();
+                        }
+                        ImGui.Unindent(theme.PadX(0.5f));
+                    }
+                    ImGui.EndChild();
+                }
+            }
+        );
+    }
+
     private void DrawStateInspector()
     {
         if (ImGui.CollapsingHeader("Internal State Inspector"))
@@ -685,7 +805,7 @@ public class DebugTab
 
             if (ImGui.TreeNode("Avatar Cache"))
             {
-                var cache = plugin.Avatar.AvatarCache;
+                var cache = plugin.Lodestone.AvatarCache;
                 ImGui.Text($"Cached Entries: {cache.Count}");
 
                 theme.SpacerY(1f);
@@ -721,7 +841,7 @@ public class DebugTab
                     if (!string.IsNullOrWhiteSpace(newAvatarName) && !string.IsNullOrWhiteSpace(newAvatarWorld) && !string.IsNullOrWhiteSpace(newAvatarUrl))
                     {
                         var key = $"{newAvatarName}@{newAvatarWorld}";
-                        plugin.Avatar.UpdateAvatarCache(key, newAvatarUrl);
+                        plugin.Lodestone.UpdateAvatarCache(key, newAvatarUrl);
                         newAvatarName = "";
                         newAvatarWorld = "";
                         newAvatarUrl = "";
@@ -732,7 +852,7 @@ public class DebugTab
 
                 if (ImGui.Button("Clear Entire Cache"))
                 {
-                    plugin.Avatar.ClearAvatarCache();
+                    plugin.Lodestone.ClearCache();
                 }
 
                 theme.SpacerY(1f);
@@ -778,7 +898,7 @@ public class DebugTab
                             ImGui.TableNextColumn();
                             if (ImGui.Button($"X##rem{key}"))
                             {
-                                plugin.Avatar.InvalidateAvatarCache(key);
+                                plugin.Lodestone.InvalidateAvatarCache(key);
                             }
                         }
                         ImGui.EndTable();

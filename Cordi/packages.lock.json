@@ -36,6 +36,12 @@
         "resolved": "3.1.0.20",
         "contentHash": "n+zbgoRp0C5enDU2HWCj0zwEeIV/eP9VoHdu6Me+yI0wJDpcM1jHM5iYOFKr8SDcJt2Jv5mfVuGKoDQEwRxbnQ=="
       },
+      "HtmlAgilityPack": {
+        "type": "Direct",
+        "requested": "[1.12.4, )",
+        "resolved": "1.12.4",
+        "contentHash": "ljqvBabvFwKoLniuoQKO8b5bJfJweKLs4fUNS/V5dsvpo0A8MlJqxxn9XVmP2DaskbUXty6IYaWAi1SArGIMeQ=="
+      },
       "Microsoft.Extensions.Logging.Console": {
         "type": "Direct",
         "requested": "[10.0.2, )",
@@ -74,6 +80,12 @@
           "Newtonsoft.Json": "13.0.3"
         }
       },
+      "System.Text.Json": {
+        "type": "Direct",
+        "requested": "[10.0.2, )",
+        "resolved": "10.0.2",
+        "contentHash": "zy8ey7I16G9neZ6uzxrnYwS7pidElzN8XarsBjGu7lE2m7afTKMEe18KbY3ZSmh/z/bR40oxjd6hlUcmOEaMHw=="
+      },
       "System.Windows.Extensions": {
         "type": "Direct",
         "requested": "[10.0.2, )",
@@ -88,11 +100,6 @@
           "Microsoft.Extensions.Logging.Abstractions": "5.0.0",
           "Newtonsoft.Json": "13.0.2"
         }
-      },
-      "HtmlAgilityPack": {
-        "type": "Transitive",
-        "resolved": "1.11.46",
-        "contentHash": "dLMn4EVfJBHWmWK4Uh0XGD76FPLHI0qr2Tm0s1m/xmgiHb1JUb9zB8AzO8HtrkBBlMN6JfCUBYddhqC0hZNR+g=="
       },
       "Karashiiro.HtmlAgilityPack.CssSelectors.NetCoreFork": {
         "type": "Transitive",

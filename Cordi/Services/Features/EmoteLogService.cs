@@ -260,7 +260,7 @@ public class EmoteLogService : IDisposable
 
         try
         {
-            var avatarUrl = await _plugin.Avatar.GetAvatarUrlAsync(name, world);
+            var avatarUrl = await _plugin.Lodestone.GetAvatarUrlAsync(name, world);
 
             string description = $"**{name}@{world}** used **{emoteName}** on you!";
             if (state.Count > 1) description += $" (x{state.Count})";
@@ -387,7 +387,7 @@ public class EmoteLogService : IDisposable
         {
             try
             {
-                var avatarUrl = await _plugin.Avatar.GetAvatarUrlAsync(state.User, state.World);
+                var avatarUrl = await _plugin.Lodestone.GetAvatarUrlAsync(state.User, state.World);
                 string description = $"**{state.User}@{state.World}** used **{state.EmoteName}** on you!";
                 if (state.Count > 1) description += $" (x{state.Count})";
                 description += "\n\n✅ *You emoted back!*";

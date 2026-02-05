@@ -654,7 +654,7 @@ public class ChatsTab
                             if (ImGui.Button($"{FontAwesomeIcon.Check.ToIconString()}##save-{key}", new Vector2(btnSize, btnSize)))
                             {
                                 plugin.Config.Chat.CustomAvatars[key] = _editingAvatarValue;
-                                plugin.Avatar.InvalidateAvatarCache(key);
+                                plugin.Lodestone.InvalidateAvatarCache(key);
                                 plugin.Config.Save();
                                 plugin.NotificationManager.Add("Custom Avatar Updated", $"Updated avatar for {key}", CordiNotificationType.Success);
                                 _editingAvatarKey = null;
@@ -710,7 +710,7 @@ public class ChatsTab
                         foreach (var k in toRemove)
                         {
                             plugin.Config.Chat.CustomAvatars.Remove(k);
-                            plugin.Avatar.InvalidateAvatarCache(k);
+                            plugin.Lodestone.InvalidateAvatarCache(k);
                             plugin.NotificationManager.Add("Custom Avatar Deleted", $"Removed avatar for {k}", CordiNotificationType.Info);
                         }
                         plugin.Config.Save();
@@ -793,7 +793,7 @@ public class ChatsTab
                 {
                     string key = $"{_addAvatarName}@{_addAvatarWorld}";
                     plugin.Config.Chat.CustomAvatars[key] = _addAvatarUrl;
-                    plugin.Avatar.InvalidateAvatarCache(key);
+                    plugin.Lodestone.InvalidateAvatarCache(key);
                     plugin.Config.Save();
                     plugin.NotificationManager.Add("Custom Avatar Created", $"Added avatar for {key}", CordiNotificationType.Success);
                     _showAddAvatarWindow = false;
