@@ -31,7 +31,9 @@ public sealed class ConfigWindow : Window, IDisposable
     private GeneralTab generalTab;
     private ChatsTab chatsTab;
     private CordiPeepTab cordiPeepTab;
+#if DEBUG
     private DebugTab debugTab;
+#endif
     private EmoteLogTab emoteLogTab;
     private DiscordActivityTab discordActivityTab;
 
@@ -47,7 +49,9 @@ public sealed class ConfigWindow : Window, IDisposable
         this.chatsTab = new ChatsTab(plugin, theme);
         this.cordiPeepTab = new CordiPeepTab(plugin, theme);
         this.emoteLogTab = new EmoteLogTab(plugin, theme);
+#if DEBUG
         this.debugTab = new DebugTab(plugin, theme);
+#endif
         this.discordActivityTab = new DiscordActivityTab(plugin, theme);
 
         SizeConstraints = new WindowSizeConstraints
@@ -153,11 +157,13 @@ public sealed class ConfigWindow : Window, IDisposable
         ImGui.Spacing();
 
 
+#if DEBUG
         PushBtnColor(selectedTab == 3);
         if (ImGui.Button("Debug", buttonSize)) selectedTab = 3;
         theme.HoverHandIfItem();
         ImGui.PopStyleColor(3);
         ImGui.Spacing();
+#endif
 
         ImGui.PopStyleVar(2);
         ImGui.SetWindowFontScale(1.0f);
@@ -185,10 +191,12 @@ public sealed class ConfigWindow : Window, IDisposable
                 cordiPeepTab.Draw();
                 break;
 
+#if DEBUG
             case 3:
 
                 debugTab.Draw();
                 break;
+#endif
             case 4:
 
                 emoteLogTab.Draw();

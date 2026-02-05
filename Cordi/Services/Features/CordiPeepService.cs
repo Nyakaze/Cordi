@@ -176,11 +176,13 @@ public class CordiPeepService : IDisposable
         {
             state.LastSeen = now;
 
-            state.IsLooking = true;
-            state.StartTime = now;
-            state.EndTime = null;
-
-            _ = SendAlert(state, GetLocalPlayerTargetName());
+            if (!state.IsLooking)
+            {
+                state.IsLooking = true;
+                state.StartTime = now;
+                state.EndTime = null;
+                _ = SendAlert(state, GetLocalPlayerTargetName());
+            }
         }
         else
         {
@@ -251,7 +253,16 @@ public class CordiPeepService : IDisposable
                 .WithFooter($"Started looking at {state.StartTime:HH:mm:ss}")
                 .Build();
 
-            if (state.DiscordMessageId != 0)
+            if (state.DiscordMessageId == 0)
+            {
+                state.DiscordMessageId = await plugin.Discord.SendWebhookMessage(channelId, embed, state.Name, state.World);
+                if (state.DiscordMessageId != 0)
+                {
+                    _messageIdCache[state.DiscordMessageId] = state;
+                    configChanged = true;
+                }
+            }
+            else
             {
                 _messageIdCache[state.DiscordMessageId] = state;
 
@@ -260,7 +271,10 @@ public class CordiPeepService : IDisposable
                     var oldest = _messageIdCache.Keys.OrderBy(x => x).Take(10);
                     foreach (var key in oldest) _messageIdCache.TryRemove(key, out _);
                 }
+            }
 
+            if (state.DiscordMessageId != 0)
+            {
                 await plugin.Discord.AddReaction(channelId, state.DiscordMessageId, DiscordEmoji.FromUnicode("👀"));
 
                 if (!state.IsLooking)
@@ -301,6 +315,7 @@ public class CordiPeepService : IDisposable
     private void PlaySound()
     {
         if (!plugin.Config.CordiPeep.SoundEnabled) return;
+        if ((DateTime.Now - _lastSoundPlayTime) < _minAlertInterval) return;
 
         bool windowOpen = plugin.CordiPeepWindow != null && plugin.CordiPeepWindow.IsOpen;
 

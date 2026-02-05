@@ -192,6 +192,7 @@ public class CordiPeepTab
                 theme.HoverHandIfItem();
                 ImGui.EndGroup();
 
+                ImGui.SameLine();
                 ImGui.SetCursorPosX(ImGui.GetCursorPosX() + theme.Gap(2f));
 
                 ImGui.BeginGroup();
