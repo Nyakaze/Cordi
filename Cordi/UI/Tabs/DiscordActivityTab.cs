@@ -19,7 +19,7 @@ public class DiscordActivityTab
     private readonly CordiPlugin _plugin;
     private readonly UiTheme _theme;
 
-
+    private string newGameInputState = "";
 
     public DiscordActivityTab(CordiPlugin plugin, UiTheme theme)
     {
@@ -94,7 +94,77 @@ public class DiscordActivityTab
 
 
 
-        DrawTypeCard(ActivityType.Playing, "Activity: Playing", config, ref changed);
+        DrawTypeCard(ActivityType.Playing, "Activity: Playing", config, ref changed, (avail) =>
+        {
+            _theme.SpacerY(1f);
+            ImGui.Separator();
+            _theme.SpacerY(1f);
+
+            ImGui.TextColored(_theme.MutedText, "Game Specific Overrides");
+            _theme.MutedLabel("Define special formats for specific games by name.");
+            _theme.SpacerY(0.5f);
+
+            if (ImGui.BeginTable("GamesTable", 2, ImGuiTableFlags.SizingStretchProp))
+            {
+                ImGui.TableSetupColumn("Game Name", ImGuiTableColumnFlags.WidthStretch);
+                ImGui.TableSetupColumn("##Action", ImGuiTableColumnFlags.WidthFixed, 100f * ImGuiHelpers.GlobalScale);
+
+                string gameToRemove = null;
+                List<string> games = config.GameConfigs.Keys.ToList();
+
+                for (int i = 0; i < games.Count; i++)
+                {
+                    var game = games[i];
+                    ImGui.TableNextRow();
+                    ImGui.TableNextColumn();
+                    bool nodeOpen = ImGui.TreeNodeEx($"##GameNode_{i}", ImGuiTreeNodeFlags.SpanAvailWidth, game);
+
+                    ImGui.TableNextColumn();
+                    if (ImGui.Button($"Delete##DelGame_{i}")) gameToRemove = game;
+
+                    if (nodeOpen)
+                    {
+                        ImGui.TableNextRow();
+                        ImGui.TableNextColumn();
+                        // Spanning both columns for the editor
+                        ImGui.TableSetColumnIndex(0);
+
+                        var gameConf = config.GameConfigs[game];
+                        DrawTypeCardInner(gameConf, $"Settings: {game}", ref changed, showLimits: false);
+
+                        ImGui.TreePop();
+                    }
+                }
+                ImGui.EndTable();
+
+                if (gameToRemove != null)
+                {
+                    config.GameConfigs.Remove(gameToRemove);
+                    changed = true;
+                }
+            }
+
+            _theme.SpacerY(0.5f);
+
+            string newGameName = newGameInputState;
+            ImGui.SetNextItemWidth(200f * ImGuiHelpers.GlobalScale);
+            if (ImGui.InputText("##NewGameName", ref newGameName, 64)) newGameInputState = newGameName;
+            ImGui.SameLine();
+            if (ImGui.Button("Add Game Override") && !string.IsNullOrEmpty(newGameInputState))
+            {
+                if (!config.GameConfigs.ContainsKey(newGameInputState))
+                {
+                    config.GameConfigs[newGameInputState] = new ActivityTypeConfig
+                    {
+                        Enabled = true,
+                        Priority = 10,
+                        Format = "Playing {name}"
+                    };
+                    newGameInputState = "";
+                    changed = true;
+                }
+            }
+        });
         _theme.SpacerY(0.5f);
 
 
@@ -205,7 +275,7 @@ public class DiscordActivityTab
         }
     }
 
-    private void DrawTypeCard(ActivityType type, string label, DiscordActivityConfig config, ref bool changed)
+    private void DrawTypeCard(ActivityType type, string label, DiscordActivityConfig config, ref bool changed, Action<float>? extraContent = null)
     {
         if (!config.TypeConfigs.TryGetValue(type, out var conf))
         {
@@ -215,7 +285,7 @@ public class DiscordActivityTab
         }
 
         bool enabled = conf.Enabled;
-        bool localChanged = false;
+        bool cardChanged = false;
 
         _theme.DrawPluginCardAuto(
             id: $"act-card-{type}",
@@ -224,271 +294,190 @@ public class DiscordActivityTab
             title: label,
             drawContent: (avail) =>
             {
+                if (enabled != conf.Enabled) { conf.Enabled = enabled; cardChanged = true; }
+                DrawTypeCardInner(conf, label, ref cardChanged, showLimits: type == ActivityType.ListeningTo);
 
-                float scale = ImGuiHelpers.GlobalScale;
-                var startPos = ImGui.GetCursorPos();
-                ImGui.SetCursorPosX(avail - 20 * scale);
-                ImGui.TextDisabled("(?)");
-                if (ImGui.IsItemHovered())
+                if (extraContent != null)
                 {
-                    string tip = "Common Placeholders:\n";
-                    tip += "- {name}: Activity Name\n";
-                    tip += "- {details}: Track / Details\n";
-                    tip += "- {state}: Artist / Status\n";
-                    tip += "- {elapsed}, {duration}, {time_start}, {time_end}\n";
-
-                    if (type == ActivityType.ListeningTo)
-                        tip += "\nMusic Specific:\n- {album}, {track}, {artist}";
-                    else if (type == ActivityType.Watching)
-                        tip += "\nVideo Specific:\n- {details} (Title)\n- {state} (Status)\n- {album} (Show/Series)";
-
-                    ImGui.SetTooltip(tip);
-                }
-                _theme.HoverHandIfItem();
-                ImGui.SetCursorPos(startPos);
-
-
-                if (enabled != conf.Enabled) { conf.Enabled = enabled; localChanged = true; }
-
-                ImGui.BeginGroup();
-                ImGui.TextColored(_theme.MutedText, "Priority: ");
-                ImGui.SameLine();
-                int prio = conf.Priority;
-                ImGui.SetNextItemWidth(80f * ImGuiHelpers.GlobalScale);
-                if (ImGui.InputInt($"##Prio_{type}", ref prio)) { conf.Priority = prio; localChanged = true; }
-                ImGui.EndGroup();
-
-                _theme.SpacerY(0.5f);
-
-                ImGui.Text("Format");
-                string fmt = conf.Format;
-                ImGui.SetNextItemWidth(ImGui.GetContentRegionAvail().X);
-                if (ImGui.InputText($"##Fmt_{type}", ref fmt, 128)) { conf.Format = fmt; localChanged = true; }
-
-                _theme.SpacerY(0.5f);
-                ImGui.Separator();
-                _theme.SpacerY(0.5f);
-
-                bool cycle = conf.EnableCycling;
-                if (ImGui.Checkbox($"Cycling Mode##{type}", ref cycle)) { conf.EnableCycling = cycle; localChanged = true; }
-                _theme.HoverHandIfItem();
-
-                if (cycle)
-                {
-                    ImGui.Indent();
-
-                    if (conf.CycleFormats == null) conf.CycleFormats = new();
-
-
-
-                    if (ImGui.BeginTable($"##CycleFmts_{type}", 2, ImGuiTableFlags.SizingStretchProp | ImGuiTableFlags.BordersInnerV))
-                    {
-                        ImGui.TableSetupColumn("Format String", ImGuiTableColumnFlags.WidthStretch);
-                        ImGui.TableSetupColumn("##Action", ImGuiTableColumnFlags.WidthFixed, 30);
-
-                        int formatToDelete = -1;
-                        for (int i = 0; i < conf.CycleFormats.Count; i++)
-                        {
-                            ImGui.TableNextRow();
-                            ImGui.TableNextColumn();
-                            string fmtStr = conf.CycleFormats[i];
-                            ImGui.SetNextItemWidth(-1);
-                            if (ImGui.InputText($"##CycleFmt_{type}_{i}", ref fmtStr, 128))
-                            {
-                                conf.CycleFormats[i] = fmtStr;
-                                localChanged = true;
-                            }
-
-                            ImGui.TableNextColumn();
-                            if (ImGui.Button($"X##DelCycleFmt_{type}_{i}"))
-                            {
-                                formatToDelete = i;
-                            }
-                        }
-
-                        if (formatToDelete != -1)
-                        {
-                            conf.CycleFormats.RemoveAt(formatToDelete);
-                            localChanged = true;
-                        }
-
-                        ImGui.EndTable();
-                    }
-
-                    if (_theme.SecondaryButton($"+ Add Cycle Format##{type}"))
-                    {
-                        conf.CycleFormats.Add("");
-                        localChanged = true;
-                    }
-
-                    _theme.SpacerY(0.5f);
-                    ImGui.Text("Switch Interval (s)");
-                    int interval = conf.CycleIntervalSeconds;
-                    ImGui.SetNextItemWidth(100f * ImGuiHelpers.GlobalScale);
-                    if (ImGui.DragInt($"##Int_{type}", ref interval, 1, 3, 300)) { conf.CycleIntervalSeconds = interval; localChanged = true; }
-                    ImGui.Unindent();
-                }
-
-                if (type == ActivityType.ListeningTo)
-                {
-                    _theme.SpacerY(0.5f);
-                    ImGui.Separator();
-                    _theme.SpacerY(0.5f);
-                    ImGui.Text("Truncation Limits");
-
-                    ImGui.BeginGroup();
-                    ImGui.Text("Track");
-                    ImGui.SameLine();
-                    int tLim = conf.TrackLimit;
-                    ImGui.SetNextItemWidth(80f * ImGuiHelpers.GlobalScale);
-                    if (ImGui.InputInt($"##TLim_{type}", ref tLim)) { conf.TrackLimit = Math.Max(0, tLim); localChanged = true; }
-
-
-                    ImGui.SameLine();
-                    _theme.SpacerX(1f);
-                    ImGui.SameLine();
-
-                    ImGui.Text("Artist");
-                    ImGui.SameLine();
-                    int aLim = conf.ArtistLimit;
-                    ImGui.SetNextItemWidth(80f * ImGuiHelpers.GlobalScale);
-                    if (ImGui.InputInt($"##ALim_{type}", ref aLim)) { conf.ArtistLimit = Math.Max(0, aLim); localChanged = true; }
-                    ImGui.EndGroup();
-                    if (ImGui.IsItemHovered()) ImGui.SetTooltip("Limits the character count of {details} (Track) and {state} (Artist) before insertion.");
-                }
-
-                _theme.SpacerY(0.5f);
-                ImGui.Separator();
-                _theme.SpacerY(0.5f);
-
-
-                ImGui.Text("Title Colors");
-
-                ImGui.BeginGroup();
-
-                Vector3? cVal = conf.Color;
-                bool hasColor = cVal.HasValue;
-                if (ImGui.Checkbox($"Override Color##{type}", ref hasColor))
-                {
-                    conf.Color = hasColor ? new Vector3(1, 1, 1) : null;
-                    localChanged = true;
-                }
-                _theme.HoverHandIfItem();
-                if (hasColor)
-                {
-                    ImGui.SameLine();
-                    Vector3 col = conf.Color ?? new Vector3(1, 1, 1);
-                    if (ImGui.ColorEdit3($"##ColPick_{type}", ref col, ImGuiColorEditFlags.NoInputs))
-                    {
-                        conf.Color = col;
-                        localChanged = true;
-                    }
-                    _theme.HoverHandIfItem();
-                }
-
-                ImGui.SameLine();
-                _theme.SpacerX(2f);
-                ImGui.SameLine();
-
-                Vector3? gVal = conf.Glow;
-                bool hasGlow = gVal.HasValue;
-                if (ImGui.Checkbox($"Override Glow##{type}", ref hasGlow))
-                {
-                    conf.Glow = hasGlow ? new Vector3(1, 1, 1) : null;
-                    localChanged = true;
-                }
-                _theme.HoverHandIfItem();
-                if (hasGlow)
-                {
-                    ImGui.SameLine();
-                    Vector3 glo = conf.Glow ?? new Vector3(1, 1, 1);
-                    if (ImGui.ColorEdit3($"##GlowPick_{type}", ref glo, ImGuiColorEditFlags.NoInputs))
-                    {
-                        conf.Glow = glo;
-                        localChanged = true;
-                    }
-                    _theme.HoverHandIfItem();
-                }
-                ImGui.EndGroup();
-
-                _theme.SpacerY(0.5f);
-                ImGui.Separator();
-                _theme.SpacerY(0.5f);
-
-                ImGui.Text("Exclusion Filters");
-                _theme.MutedLabel("If a filter matches, the activity is hidden.");
-
-                if (ImGui.BeginTable($"##FiltersTbl_{type}", 4, ImGuiTableFlags.Borders | ImGuiTableFlags.SizingFixedFit))
-                {
-                    ImGui.TableSetupColumn("Placeholder", ImGuiTableColumnFlags.WidthFixed, 100f * ImGuiHelpers.GlobalScale);
-                    ImGui.TableSetupColumn("Mode", ImGuiTableColumnFlags.WidthFixed, 120f * ImGuiHelpers.GlobalScale);
-                    ImGui.TableSetupColumn("Value", ImGuiTableColumnFlags.WidthStretch);
-                    ImGui.TableSetupColumn("##Action", ImGuiTableColumnFlags.WidthFixed, 30f * ImGuiHelpers.GlobalScale);
-                    ImGui.TableHeadersRow();
-
-                    bool removeRule = false;
-                    FilterRule ruleToRemove = null;
-
-                    foreach (var rule in conf.Filters)
-                    {
-                        ImGui.TableNextRow();
-                        ImGui.TableNextColumn();
-
-                        ImGui.SetNextItemWidth(-1);
-                        string ph = rule.TargetPlaceholder;
-                        if (ImGui.InputText($"##LoopPH_{rule.GetHashCode()}", ref ph, 32)) { rule.TargetPlaceholder = ph; localChanged = true; }
-
-                        ImGui.TableNextColumn();
-
-                        ImGui.SetNextItemWidth(-1);
-                        var mode = rule.Mode;
-                        string[] modeNames = Enum.GetNames(typeof(FilterMode));
-                        int modeIdx = (int)mode;
-                        if (ImGui.Combo($"##LoopMode_{rule.GetHashCode()}", ref modeIdx, modeNames, modeNames.Length))
-                        {
-                            rule.Mode = (FilterMode)modeIdx;
-                            localChanged = true;
-                        }
-
-                        ImGui.TableNextColumn();
-
-                        ImGui.SetNextItemWidth(-1);
-                        string val = rule.Value;
-                        if (ImGui.InputText($"##LoopVal_{rule.GetHashCode()}", ref val, 64)) { rule.Value = val; localChanged = true; }
-
-                        ImGui.TableNextColumn();
-                        if (ImGui.Button($"X##Rm_{rule.GetHashCode()}"))
-                        {
-                            ruleToRemove = rule;
-                            removeRule = true;
-                        }
-                    }
-
-
-                    ImGui.TableNextRow();
-                    ImGui.TableNextColumn();
-                    ImGui.TextDisabled("{placeholder}");
-                    ImGui.TableNextColumn();
-                    ImGui.TextDisabled("Mode");
-                    ImGui.TableNextColumn();
-                    if (ImGui.Button("+ Add New Filter", new Vector2(-1, 0)))
-                    {
-                        conf.Filters.Add(new FilterRule { TargetPlaceholder = "{artist}", Mode = FilterMode.Contains, Value = "" });
-                        localChanged = true;
-                    }
-                    _theme.HoverHandIfItem();
-                    ImGui.TableNextColumn();
-
-                    ImGui.EndTable();
-
-                    if (removeRule && ruleToRemove != null)
-                    {
-                        conf.Filters.Remove(ruleToRemove);
-                        localChanged = true;
-                    }
+                    extraContent(avail);
                 }
             }
         );
+
+        if (cardChanged) changed = true;
+    }
+
+    private void DrawTypeCardInner(ActivityTypeConfig conf, string label, ref bool changed, bool showLimits)
+    {
+        bool localChanged = false;
+
+        float scale = ImGuiHelpers.GlobalScale;
+
+        // Help Tooltip
+        ImGui.TextDisabled("(?) Help Placeholders");
+        if (ImGui.IsItemHovered())
+        {
+            string tip = "Common Placeholders:\n";
+            tip += "- {name}: Activity Name\n";
+            tip += "- {details}: Track / Details\n";
+            tip += "- {state}: Artist / Status\n";
+            tip += "- {elapsed}, {duration}, {time_start}, {time_end}\n";
+
+            ImGui.SetTooltip(tip);
+        }
+
+        ImGui.SameLine();
+        ImGui.TextColored(_theme.MutedText, "| Priority: ");
+        ImGui.SameLine();
+        int prio = conf.Priority;
+        ImGui.SetNextItemWidth(80f * ImGuiHelpers.GlobalScale);
+        if (ImGui.InputInt($"##Prio_{label.GetHashCode()}", ref prio)) { conf.Priority = prio; localChanged = true; }
+
+        _theme.SpacerY(0.5f);
+
+        ImGui.Text("Format");
+        string fmt = conf.Format;
+        ImGui.SetNextItemWidth(ImGui.GetContentRegionAvail().X);
+        if (ImGui.InputText($"##Fmt_{label.GetHashCode()}", ref fmt, 128)) { conf.Format = fmt; localChanged = true; }
+
+        _theme.SpacerY(0.5f);
+        ImGui.Separator();
+        _theme.SpacerY(0.5f);
+
+        bool cycle = conf.EnableCycling;
+        if (ImGui.Checkbox($"Cycling Mode##{label.GetHashCode()}", ref cycle)) { conf.EnableCycling = cycle; localChanged = true; }
+        _theme.HoverHandIfItem();
+
+        if (cycle)
+        {
+            ImGui.Indent();
+            if (conf.CycleFormats == null) conf.CycleFormats = new();
+
+            if (ImGui.BeginTable($"##CycleFmts_{label.GetHashCode()}", 2, ImGuiTableFlags.SizingStretchProp | ImGuiTableFlags.BordersInnerV))
+            {
+                ImGui.TableSetupColumn("Format String", ImGuiTableColumnFlags.WidthStretch);
+                ImGui.TableSetupColumn("##Action", ImGuiTableColumnFlags.WidthFixed, 30);
+
+                int formatToDelete = -1;
+                for (int i = 0; i < conf.CycleFormats.Count; i++)
+                {
+                    ImGui.TableNextRow();
+                    ImGui.TableNextColumn();
+                    string fmtStr = conf.CycleFormats[i];
+                    ImGui.SetNextItemWidth(-1);
+                    if (ImGui.InputText($"##CycleFmt_{label.GetHashCode()}_{i}", ref fmtStr, 128))
+                    {
+                        conf.CycleFormats[i] = fmtStr;
+                        localChanged = true;
+                    }
+
+                    ImGui.TableNextColumn();
+                    if (ImGui.Button($"X##DelCycleFmt_{label.GetHashCode()}_{i}"))
+                    {
+                        formatToDelete = i;
+                    }
+                }
+
+                if (formatToDelete != -1)
+                {
+                    conf.CycleFormats.RemoveAt(formatToDelete);
+                    localChanged = true;
+                }
+
+                ImGui.EndTable();
+            }
+
+            if (_theme.SecondaryButton($"+ Add Cycle Format##{label.GetHashCode()}"))
+            {
+                conf.CycleFormats.Add("");
+                localChanged = true;
+            }
+
+            _theme.SpacerY(0.5f);
+            ImGui.Text("Switch Interval (s)");
+            int interval = conf.CycleIntervalSeconds;
+            ImGui.SetNextItemWidth(100f * ImGuiHelpers.GlobalScale);
+            if (ImGui.DragInt($"##Int_{label.GetHashCode()}", ref interval, 1, 3, 300)) { conf.CycleIntervalSeconds = interval; localChanged = true; }
+            ImGui.Unindent();
+        }
+
+        if (showLimits)
+        {
+            _theme.SpacerY(0.5f);
+            ImGui.Separator();
+            _theme.SpacerY(0.5f);
+
+            ImGui.Text("Lists / Limits");
+            ImGui.BeginGroup();
+            ImGui.Text("Track Limit");
+            ImGui.SameLine();
+            int tLim = conf.TrackLimit;
+            ImGui.SetNextItemWidth(80f * ImGuiHelpers.GlobalScale);
+            if (ImGui.InputInt($"##TLim_{label.GetHashCode()}", ref tLim)) { conf.TrackLimit = Math.Max(0, tLim); localChanged = true; }
+
+            ImGui.SameLine();
+            _theme.SpacerX(1f);
+            ImGui.SameLine();
+
+            ImGui.Text("Artist Limit");
+            ImGui.SameLine();
+            int aLim = conf.ArtistLimit;
+            ImGui.SetNextItemWidth(80f * ImGuiHelpers.GlobalScale);
+            if (ImGui.InputInt($"##ALim_{label.GetHashCode()}", ref aLim)) { conf.ArtistLimit = Math.Max(0, aLim); localChanged = true; }
+            ImGui.EndGroup();
+        }
+
+        _theme.SpacerY(0.5f);
+        ImGui.Separator();
+        _theme.SpacerY(0.5f);
+
+        ImGui.Text("Title Colors");
+        ImGui.BeginGroup();
+
+        Vector3? cVal = conf.Color;
+        bool hasColor = cVal.HasValue;
+        if (ImGui.Checkbox($"Override Color##{label.GetHashCode()}", ref hasColor))
+        {
+            conf.Color = hasColor ? new Vector3(1, 1, 1) : null;
+            localChanged = true;
+        }
+        _theme.HoverHandIfItem();
+        if (hasColor)
+        {
+            ImGui.SameLine();
+            Vector3 col = conf.Color ?? new Vector3(1, 1, 1);
+            if (ImGui.ColorEdit3($"##ColPick_{label.GetHashCode()}", ref col, ImGuiColorEditFlags.NoInputs))
+            {
+                conf.Color = col;
+                localChanged = true;
+            }
+            _theme.HoverHandIfItem();
+        }
+
+        ImGui.SameLine();
+        _theme.SpacerX(2f);
+        ImGui.SameLine();
+
+        Vector3? gVal = conf.Glow;
+        bool hasGlow = gVal.HasValue;
+        if (ImGui.Checkbox($"Override Glow##{label.GetHashCode()}", ref hasGlow))
+        {
+            conf.Glow = hasGlow ? new Vector3(1, 1, 1) : null;
+            localChanged = true;
+        }
+        _theme.HoverHandIfItem();
+        if (hasGlow)
+        {
+            ImGui.SameLine();
+            Vector3 glo = conf.Glow ?? new Vector3(1, 1, 1);
+            if (ImGui.ColorEdit3($"##GlowPick_{label.GetHashCode()}", ref glo, ImGuiColorEditFlags.NoInputs))
+            {
+                conf.Glow = glo;
+                localChanged = true;
+            }
+            _theme.HoverHandIfItem();
+        }
+        ImGui.EndGroup();
 
         if (localChanged) changed = true;
     }

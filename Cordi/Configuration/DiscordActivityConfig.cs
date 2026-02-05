@@ -11,6 +11,8 @@ public class DiscordActivityConfig
     public bool PrefixTitle { get; set; } = false;
     public Dictionary<string, string> Replacements { get; set; } = new();
 
+    public Dictionary<string, ActivityTypeConfig> GameConfigs { get; set; } = new();
+
     public Dictionary<ActivityType, ActivityTypeConfig> TypeConfigs { get; set; } = new()
     {
         { ActivityType.Playing, new ActivityTypeConfig { Priority = 1, Enabled = true, Format = "Playing {name}" } },

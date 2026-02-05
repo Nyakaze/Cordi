@@ -75,7 +75,20 @@ namespace Cordi.Services
             }
 
             var candidates = presence.Activities
-                .Select(a => new { Activity = a, Config = GetConfigForType(a.ActivityType, config) })
+                .Select(a =>
+                {
+                    ActivityTypeConfig conf = null;
+                    // Check for Game Override first (Only for Playing activities)
+                    if (a.ActivityType == ActivityType.Playing && !string.IsNullOrEmpty(a.Name) && config.GameConfigs.TryGetValue(a.Name, out var gameConf))
+                    {
+                        conf = gameConf;
+                    }
+                    else
+                    {
+                        conf = GetConfigForType(a.ActivityType, config);
+                    }
+                    return new { Activity = a, Config = conf };
+                })
                 .Where(x => x.Config != null && x.Config.Enabled)
                 .OrderByDescending(x => x.Config.Priority)
                 .ToList();
