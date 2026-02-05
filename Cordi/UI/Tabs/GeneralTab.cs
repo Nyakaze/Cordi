@@ -61,6 +61,43 @@ public class GeneralTab
             }
         );
 
+        theme.SpacerY(2f);
+        ImGui.Separator();
+        theme.SpacerY(2f);
+
+        theme.DrawPluginCardAuto(
+            id: "dsc-commands",
+            enabled: ref enabled,
+            showCheckbox: false,
+            title: "Discord Commands",
+            drawContent: (avail) =>
+            {
+                bool allowCommands = plugin.Config.Discord.AllowDiscordCommands;
+                if (ImGui.Checkbox("Enable Discord Commands", ref allowCommands))
+                {
+                    plugin.Config.Discord.AllowDiscordCommands = allowCommands;
+                    plugin.Config.Save();
+                }
+                if (plugin.Config.Discord.AllowDiscordCommands)
+                {
+                    ImGui.Indent();
+
+                    string prefix = plugin.Config.Discord.CommandPrefix;
+                    if (ImGui.InputText("Command Prefix", ref prefix, 10))
+                    {
+                        plugin.Config.Discord.CommandPrefix = prefix;
+                        plugin.Config.Save();
+                    }
+
+                    ImGui.TextWrapped("Available commands:");
+                    ImGui.BulletText("!target PlayerName World - Target a player");
+                    ImGui.BulletText("!emote emotename PlayerName World - Emote at a player");
+
+                    ImGui.Unindent();
+                }
+            }
+        );
+
 
     }
 }

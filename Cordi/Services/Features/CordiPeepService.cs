@@ -428,17 +428,6 @@ public class CordiPeepService : IDisposable
         return Task.CompletedTask;
     }
 
-    public void Dispose()
-    {
-        if (configChanged)
-        {
-            plugin.Config.Save();
-        }
-        Service.Framework.Update -= OnFrameworkUpdate;
-        if (plugin.Discord != null)
-            plugin.Discord.OnReactionAdded -= OnDiscordReactionAdded;
-    }
-
     private string GetLocalPlayerTargetName()
     {
         var target = Service.TargetManager.Target;
@@ -450,4 +439,62 @@ public class CordiPeepService : IDisposable
         }
         return target.Name.ToString();
     }
+
+    public async Task<bool> TargetPlayer(string name, string? world = null)
+    {
+        var tcs = new TaskCompletionSource<bool>();
+
+        await Service.Framework.RunOnFrameworkThread(() =>
+        {
+            try
+            {
+                IGameObject? target = null;
+
+                if (string.IsNullOrEmpty(world))
+                {
+                    target = Service.ObjectTable.FirstOrDefault(x =>
+                        x is IPlayerCharacter pc &&
+                        pc.Name.ToString() == name);
+                }
+                else
+                {
+                    target = Service.ObjectTable.FirstOrDefault(x =>
+                        x is IPlayerCharacter pc &&
+                        pc.Name.ToString() == name &&
+                        pc.HomeWorld.Value.Name.ToString() == world);
+                }
+
+                if (target != null)
+                {
+                    Service.TargetManager.Target = target;
+                    Service.Log.Info($"[CordiPeep] TARGETED: {target.Name}");
+                    tcs.SetResult(true);
+                }
+                else
+                {
+                    Service.Log.Warning($"[CordiPeep] Could not find {name}{(string.IsNullOrEmpty(world) ? "" : "@" + world)}");
+                    tcs.SetResult(false);
+                }
+            }
+            catch (Exception ex)
+            {
+                Service.Log.Error(ex, "[CordiPeep] Error while targeting player.");
+                tcs.SetResult(false);
+            }
+        });
+
+        return await tcs.Task;
+    }
+
+    public void Dispose()
+    {
+        if (configChanged)
+        {
+            plugin.Config.Save();
+        }
+        Service.Framework.Update -= OnFrameworkUpdate;
+        if (plugin.Discord != null)
+            plugin.Discord.OnReactionAdded -= OnDiscordReactionAdded;
+    }
+
 }

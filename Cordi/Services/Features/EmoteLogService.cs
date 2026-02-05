@@ -35,6 +35,7 @@ public class EmoteLogService : IDisposable
 {
     private readonly CordiPlugin _plugin;
     private readonly IPluginLog _logger;
+
     private readonly List<EmoteLogEntry> _logs = new();
     public IReadOnlyList<EmoteLogEntry> Logs => _logs;
 
@@ -406,6 +407,7 @@ public class EmoteLogService : IDisposable
             catch (Exception ex) { _logger.Error(ex, "Failed to update embed after reaction."); }
         }
     }
+
 
     public void Dispose()
     {
