@@ -32,6 +32,7 @@ using ECommons;
 
 using Cordi.Configuration;
 using Cordi.UI.Windows;
+using Newtonsoft.Json;
 
 namespace Cordi.Core;
 
@@ -51,7 +52,7 @@ public class CordiPlugin : IDalamudPlugin
 
     static readonly IPluginLog Logger = Service.Log;
 
-    public Cordi.Configuration.Configuration Config;
+    public Cordi.Configuration.Configuration Config = null!;
 
     public ServiceCollection Services = new();
 
@@ -66,7 +67,7 @@ public class CordiPlugin : IDalamudPlugin
     [PluginService] internal static IDalamudPluginInterface PluginInterface { get; private set; } = null!;
     [PluginService] internal static ICommandManager CommandManager { get; private set; } = null!;
 
-    private readonly WindowSystem windowSystem = new("MeinPlugin");
+    private readonly WindowSystem windowSystem = new("Cordi");
 
     [PluginService] internal static IChatGui ChatGui { get; private set; } = null!;
     [PluginService] internal static IFramework Framework { get; private set; } = null!;
@@ -86,10 +87,7 @@ public class CordiPlugin : IDalamudPlugin
         Plugin = this;
         ECommonsMain.Init(PluginInterface, this);
         PluginInterface.Create<Service>();
-        windowSystem = new WindowSystem("Cordi");
-
-        Config = PluginInterface.GetPluginConfig() as Cordi.Configuration.Configuration ?? new Cordi.Configuration.Configuration();
-        Config.Initialize(PluginInterface);
+        InitializeConfig();
 
         PluginInterface.UiBuilder.OpenConfigUi += ToggleConfigUI;
         PluginInterface.UiBuilder.OpenMainUi += ToggleConfigUI;
@@ -141,8 +139,8 @@ public class CordiPlugin : IDalamudPlugin
             await Task.Delay(1000);
             if (Service.ClientState.IsLoggedIn)
             {
-                if (Config.CordiPeep.OpenOnLogin) CordiPeepWindow.IsOpen = true;
-                if (Config.EmoteLog.WindowOpenOnLogin) this.EmoteLogWindow.IsOpen = true;
+                if (Config!.CordiPeep.OpenOnLogin) CordiPeepWindow.IsOpen = true;
+                if (Config!.EmoteLog.WindowOpenOnLogin) this.EmoteLogWindow.IsOpen = true;
             }
         });
 
@@ -158,6 +156,47 @@ public class CordiPlugin : IDalamudPlugin
 
 
         UpdateCommandVisibility();
+    }
+
+    private void InitializeConfig()
+    {
+        var oldConfig = PluginInterface.ConfigFile;
+        var newConfigDir = PluginInterface.ConfigDirectory;
+        var newConfigFile = Path.Combine(newConfigDir.FullName, "Config.json");
+
+        if (!newConfigDir.Exists)
+        {
+            newConfigDir.Create();
+        }
+
+        if (oldConfig.Exists && !File.Exists(newConfigFile))
+        {
+            try
+            {
+                oldConfig.MoveTo(newConfigFile);
+                Logger.Info($"Migrated config from {oldConfig.FullName} to {newConfigFile}");
+            }
+            catch (Exception ex)
+            {
+                Logger.Error(ex, "Failed to migrate config file.");
+            }
+        }
+
+        if (File.Exists(newConfigFile))
+        {
+            try
+            {
+                var json = File.ReadAllText(newConfigFile);
+                Config = JsonConvert.DeserializeObject<Cordi.Configuration.Configuration>(json) ?? new Cordi.Configuration.Configuration();
+            }
+            catch (Exception ex)
+            {
+                Logger.Error(ex, "Failed to load config file.");
+            }
+        }
+
+        Config ??= new Cordi.Configuration.Configuration();
+        Config.Initialize(PluginInterface);
     }
 
     private void DrawUI()
@@ -288,7 +327,7 @@ public class CordiPlugin : IDalamudPlugin
         Service.PluginInterface.UiBuilder.OpenConfigUi -= this.ToggleConfigUI;
         Service.PluginInterface.UiBuilder.OpenMainUi -= this.ToggleConfigUI;
 
-        Service.PluginInterface.SavePluginConfig(this.Config);
+        this.Config?.Save();
 
         Service.PluginInterface.UiBuilder.Draw -= configWindow.Draw;
 

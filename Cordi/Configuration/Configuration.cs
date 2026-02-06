@@ -5,6 +5,7 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using System.Collections.Generic;
 using Dalamud.Game.Text;
+using System.IO;
 
 namespace Cordi.Configuration;
 
@@ -21,10 +22,13 @@ public class Configuration : IPluginConfiguration
     public DiscordActivityConfig ActivityConfig { get; set; } = new();
     public PartyConfig Party { get; set; } = new();
     public RememberMeConfig RememberMe { get; set; } = new();
+    public AdvertisementFilterConfig AdvertisementFilter { get; set; } = new();
     public LodestoneConfig Lodestone { get; set; } = new();
     public ThroughputStats Stats { get; set; } = new();
 
+
     [JsonIgnore] private IDalamudPluginInterface pluginInterface;
+    [JsonIgnore] public string ConfigFilePath => Path.Combine(pluginInterface.ConfigDirectory.FullName, "Config.json");
     [JsonExtensionData] private IDictionary<string, JToken> _additionalData;
 
     [JsonIgnore] public Dictionary<XivChatType, string> MappingCache { get; private set; } = new();
@@ -34,6 +38,9 @@ public class Configuration : IPluginConfiguration
         this.pluginInterface = pluginInterface;
         MigrateConfig();
         BuildCache();
+
+        // Initialize advertisement filter defaults on first load
+        AdvertisementFilter.InitializeDefaults();
     }
 
     private void MigrateConfig()
@@ -262,6 +269,7 @@ public class Configuration : IPluginConfiguration
     public void Save()
     {
         BuildCache();
-        pluginInterface.SavePluginConfig(this);
+        var json = JsonConvert.SerializeObject(this, Formatting.Indented);
+        File.WriteAllText(ConfigFilePath, json);
     }
 }
