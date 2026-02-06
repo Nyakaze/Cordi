@@ -45,6 +45,9 @@ public class DiscordHandler : IDisposable
         _intent = DiscordIntents.AllUnprivileged | DiscordIntents.MessageContents | DiscordIntents.Guilds | DiscordIntents.GuildWebhooks | DiscordIntents.GuildMessageReactions | DiscordIntents.GuildMembers | DiscordIntents.GuildPresences;
     }
 
+    private readonly ConcurrentDictionary<string, List<(string Content, DateTime Timestamp, ulong MessageId)>> _messageBuffer = new();
+    private readonly ConcurrentDictionary<string, DateTime> _penaltyBox = new();
+
     public async Task Start()
     {
         if (string.IsNullOrEmpty(_plugin.Config.Discord.BotToken))
@@ -240,14 +243,123 @@ public class DiscordHandler : IDisposable
                 }
 
                 var finalAvatarUrl = avatarUrl ?? await _plugin.Lodestone.GetAvatarUrlAsync(senderName, senderWorld);
+
+                // Sanitize content to convert FFXIV special characters to Discord-compatible text
+                var sanitizedContent = DiscordTextSanitizer.Sanitize(content);
+
+                // Check if advertisement filter is enabled for this channel
+                bool channelFilterEnabled = true;
+                var mapping = _plugin.Config.Chat.Mappings.FirstOrDefault(m => m.GameChatType == chatType);
+                if (mapping != null)
+                {
+                    channelFilterEnabled = mapping.EnableAdvertisementFilter;
+                }
+
+                // Check if message is a club advertisement
+                if (_plugin.Config.AdvertisementFilter.Enabled && channelFilterEnabled)
+                {
+                    string senderKey = $"{senderName}@{senderWorld}";
+
+                    // Check Penalty Box
+                    if (_penaltyBox.TryGetValue(senderKey, out var releaseTime))
+                    {
+                        if (DateTime.UtcNow < releaseTime)
+                        {
+                            Logger.Info($"[AdvertisementFilter] Blocked message from penalized user {senderKey} until {releaseTime}");
+                            return;
+                        }
+                        else
+                        {
+                            _penaltyBox.TryRemove(senderKey, out _);
+                        }
+                    }
+
+                    // Buffer logic for split messages
+                    var cleanupTime = DateTime.UtcNow.AddSeconds(-5); // 5 second buffer window
+
+                    var userMessages = _messageBuffer.GetOrAdd(senderKey, _ => new List<(string, DateTime, ulong)>());
+
+                    bool isAd = false;
+                    string combinedMessage = "";
+
+                    lock (userMessages)
+                    {
+                        // Clean up old messages
+                        userMessages.RemoveAll(x => x.Timestamp < cleanupTime);
+
+                        // Construct combined message to check
+                        var recentContent = userMessages.Select(x => x.Content).ToList();
+                        recentContent.Add(sanitizedContent);
+                        combinedMessage = string.Join(" ", recentContent);
+                    }
+
+                    // Check if the individual message OR the combined message is an ad
+                    // Check individual first (optimization)
+                    isAd = AdvertisementFilter.IsAdvertisement(
+                        sanitizedContent,
+                        _plugin.Config.AdvertisementFilter.ScoreThreshold,
+                        _plugin.Config.AdvertisementFilter.HighScoreRegexPatterns,
+                        _plugin.Config.AdvertisementFilter.HighScoreKeywords,
+                        _plugin.Config.AdvertisementFilter.MediumScoreRegexPatterns,
+                        _plugin.Config.AdvertisementFilter.MediumScoreKeywords,
+                        _plugin.Config.AdvertisementFilter.Whitelist);
+
+                    if (!isAd)
+                    {
+                        // Check combined
+                        isAd = AdvertisementFilter.IsAdvertisement(
+                            combinedMessage,
+                            _plugin.Config.AdvertisementFilter.ScoreThreshold,
+                            _plugin.Config.AdvertisementFilter.HighScoreRegexPatterns,
+                            _plugin.Config.AdvertisementFilter.HighScoreKeywords,
+                            _plugin.Config.AdvertisementFilter.MediumScoreRegexPatterns,
+                            _plugin.Config.AdvertisementFilter.MediumScoreKeywords,
+                            _plugin.Config.AdvertisementFilter.Whitelist);
+                    }
+
+                    if (isAd)
+                    {
+                        Logger.Info($"[AdvertisementFilter] Blocked advertisement: {sanitizedContent.Substring(0, Math.Min(100, sanitizedContent.Length))}...");
+
+                        // Add to Penalty Box (10 seconds)
+                        _penaltyBox.AddOrUpdate(senderKey, DateTime.UtcNow.AddSeconds(10), (key, oldValue) => DateTime.UtcNow.AddSeconds(10));
+
+                        // Retroactive Deletion: Delete previous messages that were part of this detected ad
+                        lock (userMessages)
+                        {
+                            foreach (var (_, _, msgId) in userMessages)
+                            {
+                                if (msgId != 0)
+                                {
+                                    _ = _webhooks.DeleteWebhookMessageAsync(channel, msgId);
+                                    Logger.Info($"[AdvertisementFilter] Retroactively deleted message ID: {msgId}");
+                                }
+                            }
+                            userMessages.Clear();
+                        }
+                        return;
+                    }
+                }
+
                 var hookMessage = new DiscordWebhookBuilder()
-                    .WithContent(content)
+                    .WithContent(sanitizedContent)
                     .WithUsername($"{senderName}@{senderWorld}")
                     .WithAvatarUrl(finalAvatarUrl);
 
                 Logger.Info($"[DiscordHandler] Executing webhook for channel {channel.Id}...");
-                await _webhooks.ExecuteWebhookAsync(channel, hookMessage);
-                Logger.Info($"{chatType} | Sent via webhook: {content}");
+                ulong sentMessageId = await _webhooks.ExecuteWebhookAsync(channel, hookMessage);
+                Logger.Info($"{chatType} | Sent via webhook: {sanitizedContent} (ID: {sentMessageId})");
+
+                // Add to buffer with message ID
+                if (_plugin.Config.AdvertisementFilter.Enabled && channelFilterEnabled)
+                {
+                    string senderKey = $"{senderName}@{senderWorld}";
+                    var userMessages = _messageBuffer.GetOrAdd(senderKey, _ => new List<(string, DateTime, ulong)>());
+                    lock (userMessages)
+                    {
+                        userMessages.Add((sanitizedContent, DateTime.UtcNow, sentMessageId));
+                    }
+                }
 
                 _plugin.Config.Stats.IncrementTotal();
                 if (chatType != XivChatType.None) _plugin.Config.Stats.IncrementChatType(chatType);
@@ -382,6 +494,8 @@ public class DiscordHandler : IDisposable
         _client.Dispose();
         _client = null;
         _webhooks.ClearCache();
+        _messageBuffer.Clear();
+        _penaltyBox.Clear();
         Logger.Info("Discord client disconnected.");
         _plugin.Config.Discord.BotStarted = false;
         _plugin.Config.Save();

@@ -106,5 +106,18 @@ public class DiscordWebhookService
         }
     }
 
+    public async Task DeleteWebhookMessageAsync(DiscordChannel channel, ulong messageId)
+    {
+        try
+        {
+            var webhook = await GetWebhookAsync(channel);
+            await webhook.DeleteMessageAsync(messageId);
+        }
+        catch (Exception ex)
+        {
+            Logger.Error(ex, "Failed to delete webhook message.");
+        }
+    }
+
     public void ClearCache() => _webhookCache.Clear();
 }
