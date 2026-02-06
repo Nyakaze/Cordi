@@ -1,0 +1,151 @@
+name: Build, Release and Update
+
+on:
+  push:
+    tags:
+      - "*.*.*.*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version Number (e.g. 1.0.2.0)'
+        required: true
+        default: '1.0.0.0'
+
+jobs:
+  Build:
+    runs-on: ubuntu-latest
+    env:
+      DALAMUD_ARCHIVE_URL: https://goatcorp.github.io/dalamud-distrib/latest.zip
+      DALAMUD_HOME: ${{ github.workspace }}/dalamud
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v6
+
+      - name: Set Version
+        id: version_step
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            echo "BUILD_VERSION=${{ github.event.inputs.version }}" >> $GITHUB_ENV
+          else
+            echo "BUILD_VERSION=${{ github.ref_name }}" >> $GITHUB_ENV
+          fi
+
+      - name: Extract Changelog from MD
+        id: extract_changelog
+        run: |
+          if [ ! -f CHANGELOG.md ]; then
+            echo "CHANGELOG.md not found! Using default text."
+            echo "CHANGELOG_TEXT=See GitHub Release for details." >> $GITHUB_ENV
+            exit 0
+          fi
+
+          echo "Extracting changelog for version ${{ env.BUILD_VERSION }}..."
+
+          VER_REGEX="${{ env.BUILD_VERSION }}"
+          VER_REGEX=${VER_REGEX//./\\.}
+
+          CONTENT=$(awk -v ver="$VER_REGEX" '
+            /^v?[0-9]+\.[0-9]+/ {     
+              if ($0 ~ "^v?" ver) {   
+                printing=1;           
+                next;                 
+              }
+              if (printing) exit;     
+            }
+            printing { print }        
+          ' CHANGELOG.md)
+
+          
+          CONTENT=$(echo "$CONTENT" | sed -e :a -e '/^\n*$/{$d;N;};/\n$/ba')
+
+          
+          if [ -z "$CONTENT" ]; then
+             CONTENT="Update ${{ env.BUILD_VERSION }}"
+          fi
+
+          echo "Extracted Changelog:"
+          echo "$CONTENT"
+
+          echo "CHANGELOG_TEXT<<EOF" >> $GITHUB_ENV
+          echo "$CONTENT" >> $GITHUB_ENV
+          echo "EOF" >> $GITHUB_ENV
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Download Dalamud (Required for Build)
+        run: |
+          mkdir -p $DALAMUD_HOME
+          wget $DALAMUD_ARCHIVE_URL -O dalamud.zip
+          unzip dalamud.zip -d $DALAMUD_HOME
+
+      - name: Restore
+        run: dotnet restore -p:EnableWindowsTargeting=true
+
+      - name: Build and Package
+        run: |
+           dotnet build "Cordi/Cordi.csproj" -c Release -p:Version=${{ env.BUILD_VERSION }} -p:AssemblyVersion=${{ env.BUILD_VERSION }} -p:FileVersion=${{ env.BUILD_VERSION }} -p:EnableWindowsTargeting=true
+
+      - name: Prepare Artifact
+        id: prepare_artifact
+        run: |
+          ZIP_PATH=$(find Cordi/bin/Release -name "latest.zip" | head -n 1)
+          mv "$ZIP_PATH" "./Cordi.zip"
+          echo "ZIP_PATH=./Cordi.zip" >> $GITHUB_ENV
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: ${{ env.BUILD_VERSION }}
+          tag_name: ${{ env.BUILD_VERSION }}
+          body: ${{ env.CHANGELOG_TEXT }} 
+          files: ${{ env.ZIP_PATH }}
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+
+      - name: Checkout External Repository
+        uses: actions/checkout@v4
+        with:
+          repository: Nyakaze/DalamudPlugins
+          path: dalamud-plugins-repo
+          token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+
+      - name: Update uwu.json and Push
+        run: |
+          NEW_LINK="https://github.com/${{ github.repository }}/releases/download/${{ env.BUILD_VERSION }}/Cordi.zip"
+          CURRENT_TIME=$(date +%s)
+          
+          echo "Updating uwu.json..."
+
+          cd dalamud-plugins-repo
+
+          jq --arg ver "${{ env.BUILD_VERSION }}" \
+             --arg link "$NEW_LINK" \
+             --arg time "$CURRENT_TIME" \
+             --arg changelog "${{ env.CHANGELOG_TEXT }}" \
+             'map(if .InternalName == "Cordi" then . + {
+                "AssemblyVersion": $ver, 
+                "DownloadLinkInstall": $link, 
+                "DownloadLinkTesting": $link, 
+                "DownloadLinkUpdate": $link,
+                "LastUpdate": $time,
+                "Changelog": $changelog
+              } else . end)' \
+             uwu.json > tmp.json && mv tmp.json uwu.json
+
+          git config user.name "GitHub Action Bot"
+          git config user.email "action@github.com"
+          
+          if [[ -n $(git status -s) ]]; then
+            git add uwu.json
+            git commit -m "Auto-update Cordi to ${{ env.BUILD_VERSION }}"
+            git push origin main
+            echo "Successfully updated DalamudPlugins repo."
+          else
+            echo "No changes detected in uwu.json."
+          fi
