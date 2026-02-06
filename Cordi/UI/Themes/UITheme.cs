@@ -4,6 +4,9 @@ using System.Numerics;
 using Cordi.Extensions;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Interface.Utility;
+using Dalamud.Interface;
+using System.Collections.Generic;
+using System.Linq;
 
 
 namespace Cordi.UI.Themes;
@@ -171,7 +174,7 @@ public sealed class UiTheme
         ImGui.PushStyleColor(ImGuiCol.ButtonHovered, Lerp(Accent, Vector4.One, 0.08f));
         ImGui.PushStyleColor(ImGuiCol.ButtonActive, Lerp(Accent, Vector4.Zero, 0.10f));
         ImGui.PushStyleVar(ImGuiStyleVar.FrameRounding, Radius());
-        var clicked = ImGui.Button(label, size);
+        var clicked = Button(label, size);
         if (ImGui.IsItemHovered()) ImGui.SetMouseCursor(ImGuiMouseCursor.Hand);
         ImGui.PopStyleVar();
         ImGui.PopStyleColor(3);
@@ -184,11 +187,32 @@ public sealed class UiTheme
         ImGui.PushStyleColor(ImGuiCol.ButtonHovered, FrameBgHover);
         ImGui.PushStyleColor(ImGuiCol.ButtonActive, FrameBgActive);
         ImGui.PushStyleVar(ImGuiStyleVar.FrameRounding, Radius());
-        var clicked = ImGui.Button(label, size);
+        var clicked = Button(label, size);
         if (ImGui.IsItemHovered()) ImGui.SetMouseCursor(ImGuiMouseCursor.Hand);
         ImGui.PopStyleVar();
         ImGui.PopStyleColor(3);
         return clicked;
+    }
+
+    public bool Button(string label, Vector2 size = default)
+    {
+        var ret = ImGui.Button(label, size);
+        HoverHandIfItem();
+        return ret;
+    }
+
+    public bool Checkbox(string label, ref bool v)
+    {
+        var ret = ImGui.Checkbox(label, ref v);
+        HoverHandIfItem();
+        return ret;
+    }
+
+    public bool InvisibleButton(string id, Vector2 size = default)
+    {
+        var ret = ImGui.InvisibleButton(id, size);
+        HoverHandIfItem();
+        return ret;
     }
 
     public bool IconToggleButton(string id, ref bool state, float size = 28f)
@@ -199,7 +223,7 @@ public sealed class UiTheme
 
         var colText = new Vector4(1f, 1f, 1f, 1f);
 
-        bool pressed = ImGui.Button(id, s);
+        bool pressed = Button(id, s);
         if (ImGui.IsItemHovered()) ImGui.SetMouseCursor(ImGuiMouseCursor.Hand);
 
 
@@ -359,7 +383,7 @@ public sealed class UiTheme
         dl.AddRectFilled(rMin, rMax, ImGui.GetColorU32(bg), Radius(0.9f));
         dl.AddRect(rMin, rMax, ImGui.GetColorU32(WindowBorder), Radius(0.9f));
 
-        HoverHandIfItem();
+
 
         Vector2 iconMin, iconMax, textPos;
 
@@ -814,7 +838,7 @@ public sealed class UiTheme
             {
                 enabled = chk;
             }
-            HoverHandIfItem();
+
             ImGui.SameLine();
             contentStartX = 0;
         }
@@ -905,4 +929,523 @@ public sealed class UiTheme
     }
     public void HoverHandIfItem() { if (ImGui.IsItemHovered()) ImGui.SetMouseCursor(ImGuiMouseCursor.Hand); }
 
+    public void DrawCollapsableCardWithTable<T>(
+        string id,
+        string title,
+        ref bool expanded,
+        IEnumerable<T> collection,
+        Action<T, int> drawRow,
+        string[]? headers = null,
+        bool showCount = false,
+        int? explicitCount = null,
+        Action? setupColumns = null,
+        bool showHeaders = false,
+        Action? drawFooter = null)
+    {
+        int count = explicitCount ?? collection.Count();
+        title = showCount ? $"{title}: {count}" : title;
+
+        float scale = ImGuiHelpers.GlobalScale;
+        float headerHeight = 35f * scale;
+        if (headerHeight < ImGui.GetFrameHeightWithSpacing()) headerHeight = ImGui.GetFrameHeightWithSpacing();
+
+        float padX = PadX(0.9f);
+        float padY = PadY(0.9f);
+        float radius = Radius(1.0f);
+
+        var draw = ImGui.GetWindowDrawList();
+        var startPos = ImGui.GetCursorScreenPos();
+        var availW = ImGui.GetContentRegionAvail().X;
+
+        draw.ChannelsSplit(2);
+        draw.ChannelsSetCurrent(1);
+
+        ImGui.BeginGroup();
+
+        float titleCenterY = startPos.Y + (headerHeight - ImGui.GetTextLineHeight()) * 0.5f;
+        ImGui.SetCursorScreenPos(new Vector2(startPos.X + padX, titleCenterY));
+
+        ImGui.PushStyleColor(ImGuiCol.Text, Text);
+        ImGui.TextUnformatted(title);
+        ImGui.PopStyleColor();
+
+        ImGui.PushFont(Dalamud.Interface.UiBuilder.IconFont);
+        string icon = expanded ? FontAwesomeIcon.ChevronUp.ToIconString() : FontAwesomeIcon.ChevronDown.ToIconString();
+        var iconSize = ImGui.CalcTextSize(icon);
+        ImGui.SetCursorScreenPos(new Vector2(startPos.X + availW - padX - iconSize.X, titleCenterY));
+        ImGui.TextUnformatted(icon);
+        ImGui.PopFont();
+
+        ImGui.SetCursorScreenPos(startPos);
+        if (InvisibleButton($"##{id}HeaderBtn", new Vector2(availW, headerHeight)))
+        {
+            expanded = !expanded;
+        }
+
+        if (expanded)
+        {
+            ImGui.SetCursorScreenPos(new Vector2(startPos.X + padX, startPos.Y + headerHeight + Gap(0.2f)));
+
+            if (count == 0 && drawFooter == null)
+            {
+                ImGui.TextUnformatted("No items");
+            }
+            else
+            {
+                if (count > 0)
+                    DrawTable(id, collection, drawRow, headers, setupColumns, showHeaders);
+
+                if (drawFooter != null)
+                {
+                    SpacerY(0.5f);
+                    drawFooter();
+                }
+            }
+
+            ImGui.Dummy(new Vector2(0, padY * 0.5f));
+        }
+
+        ImGui.EndGroup();
+        var itemMin = ImGui.GetItemRectMin();
+        var itemMax = ImGui.GetItemRectMax();
+
+        float totalHeight = itemMax.Y - startPos.Y;
+        if (totalHeight < headerHeight) totalHeight = headerHeight;
+
+        var endPos = new Vector2(startPos.X + availW, startPos.Y + totalHeight);
+        draw.ChannelsSetCurrent(0);
+
+        draw.AddRectFilled(startPos, endPos, ImGui.GetColorU32(CardBg), radius);
+        draw.AddRect(startPos, endPos, ImGui.GetColorU32(WindowBorder), radius);
+
+        var headerRectMax = new Vector2(endPos.X, startPos.Y + headerHeight);
+        var mousePos = ImGui.GetMousePos();
+        bool headerHovered = mousePos.X >= startPos.X && mousePos.X < endPos.X &&
+                             mousePos.Y >= startPos.Y && mousePos.Y < headerRectMax.Y;
+
+        if (headerHovered)
+        {
+            draw.AddRectFilled(startPos, headerRectMax, ImGui.GetColorU32(new Vector4(1, 1, 1, 0.05f)), radius, ImDrawFlags.RoundCornersTop);
+        }
+
+        draw.ChannelsMerge();
+
+        SpacerY(0.5f);
+    }
+
+    public void DrawTable<T>(
+        string id,
+        IEnumerable<T> collection,
+        Action<T, int> drawRow,
+        string[]? headers = null,
+        Action? setupColumns = null,
+        bool showHeaders = false)
+    {
+        int columns = headers?.Length ?? 1;
+
+        if (ImGui.BeginTable($"##table_{id}", columns, ImGuiTableFlags.BordersInnerH | ImGuiTableFlags.SizingStretchProp))
+        {
+            if (setupColumns != null)
+            {
+                setupColumns();
+            }
+            else if (headers != null)
+            {
+                foreach (var h in headers)
+                {
+                    ImGui.TableSetupColumn(h);
+                }
+            }
+
+            if (showHeaders && (headers != null || setupColumns != null))
+            {
+                ImGui.TableHeadersRow();
+            }
+
+            // Snapshot collection to avoid modification errors during iteration
+            var snapshot = collection.ToList();
+            int idx = 0;
+            foreach (var item in snapshot)
+            {
+                ImGui.TableNextRow();
+                ImGui.TableNextColumn();
+                drawRow(item, idx++);
+            }
+            ImGui.EndTable();
+        }
+    }
+
+    public void DrawTable<T>(string id, IEnumerable<T> collection, Action<T, int> drawRow, int columns)
+    {
+        if (ImGui.BeginTable($"##table_{id}", columns, ImGuiTableFlags.BordersInnerH | ImGuiTableFlags.SizingStretchProp))
+        {
+            // Snapshot collection here too
+            var snapshot = collection.ToList();
+            int idx = 0;
+            foreach (var item in snapshot)
+            {
+                ImGui.TableNextRow();
+                ImGui.TableNextColumn();
+                drawRow(item, idx++);
+            }
+            ImGui.EndTable();
+        }
+    }
+
+    private Dictionary<string, (int Index, string Value)> _stringEditStates = new();
+
+    public void DrawStringTable(
+        string id,
+        string title,
+        ref bool expanded,
+        IList<string> list,
+        Action onListModified,
+        bool allowAdd = true,
+        string itemName = "Item")
+    {
+        var headers = new[] { itemName, "Actions" };
+        Action setupCols = () =>
+        {
+            ImGui.TableSetupColumn(itemName, ImGuiTableColumnFlags.WidthStretch);
+            ImGui.TableSetupColumn("Actions", ImGuiTableColumnFlags.WidthFixed, 80f * ImGuiHelpers.GlobalScale);
+        };
+
+        var postDrawActions = new List<Action>();
+
+        Action<string, int> drawRow = (item, idx) =>
+        {
+            var editKey = id;
+            bool isEditing = _stringEditStates.TryGetValue(editKey, out var state) && state.Index == idx;
+
+            // Item Column
+            if (isEditing)
+            {
+                float inputWidth = ImGui.GetContentRegionAvail().X;
+                ImGui.SetNextItemWidth(inputWidth);
+
+                // Focus newly added items
+                if (string.IsNullOrEmpty(item) && ImGui.IsWindowAppearing())
+                    ImGui.SetKeyboardFocusHere();
+
+                string editValue = state.Value;
+                if (ImGui.InputText($"##edit-{id}-{idx}", ref editValue, 256))
+                {
+                    _stringEditStates[editKey] = (idx, editValue);
+                }
+            }
+            else
+            {
+                ImGui.Text(item);
+            }
+
+            ImGui.TableNextColumn();
+
+            // Actions Column
+            if (isEditing)
+            {
+                ImGui.PushFont(Dalamud.Interface.UiBuilder.IconFont);
+                if (Button($"{FontAwesomeIcon.Check.ToIconString()}##save-{id}-{idx}"))
+                {
+                    list[idx] = _stringEditStates[editKey].Value;
+                    _stringEditStates.Remove(editKey);
+                    onListModified();
+                }
+                ImGui.PopFont();
+                if (ImGui.IsItemHovered()) ImGui.SetTooltip("Save");
+
+                ImGui.SameLine();
+                ImGui.PushFont(Dalamud.Interface.UiBuilder.IconFont);
+                if (Button($"{FontAwesomeIcon.Times.ToIconString()}##cancel-{id}-{idx}"))
+                {
+                    // If canceling a new empty item, remove it
+                    if (string.IsNullOrEmpty(list[idx]))
+                    {
+                        postDrawActions.Add(() =>
+                        {
+                            list.RemoveAt(idx);
+                            onListModified();
+                        });
+                    }
+                    _stringEditStates.Remove(editKey);
+                }
+                ImGui.PopFont();
+                if (ImGui.IsItemHovered()) ImGui.SetTooltip("Cancel");
+            }
+            else
+            {
+                ImGui.PushFont(Dalamud.Interface.UiBuilder.IconFont);
+                ImGui.PushStyleColor(ImGuiCol.Button, new Vector4(0, 0, 0, 0));
+                if (Button($"{FontAwesomeIcon.Pen.ToIconString()}##edit-{id}-{idx}"))
+                {
+                    _stringEditStates[editKey] = (idx, item);
+                }
+                ImGui.PopStyleColor();
+                ImGui.PopFont();
+
+                if (ImGui.IsItemHovered()) ImGui.SetTooltip("Edit");
+
+                ImGui.SameLine();
+                ImGui.PushFont(Dalamud.Interface.UiBuilder.IconFont);
+                ImGui.PushStyleColor(ImGuiCol.Button, new Vector4(0.56f, 0f, 0f, 1f));
+                ImGui.PushStyleColor(ImGuiCol.ButtonHovered, new Vector4(0.7f, 0.1f, 0.1f, 1f));
+                ImGui.PushStyleColor(ImGuiCol.ButtonActive, new Vector4(0.4f, 0f, 0f, 1f));
+                if (Button($"{FontAwesomeIcon.Trash.ToIconString()}##del-{id}-{idx}"))
+                {
+                    postDrawActions.Add(() =>
+                    {
+                        list.RemoveAt(idx);
+                        onListModified();
+                        // If we deleted the item being edited, clear state
+                        if (_stringEditStates.TryGetValue(editKey, out var s) && s.Index == idx)
+                            _stringEditStates.Remove(editKey);
+                    });
+                }
+                ImGui.PopStyleColor(3);
+                ImGui.PopFont();
+
+                if (ImGui.IsItemHovered()) ImGui.SetTooltip("Delete");
+            }
+        };
+
+        Action drawFooter = () =>
+        {
+            if (allowAdd)
+            {
+                float avail = ImGui.GetContentRegionAvail().X;
+                float width = avail * 0.95f;
+                ImGui.SetCursorPosX(ImGui.GetCursorPosX() + ((avail - width) * 0.5f));
+                if (Button($"Add new {itemName}##{id}", new Vector2(width, 0)))
+                {
+                    list.Add("");
+                    _stringEditStates[id] = (list.Count - 1, "");
+                    onListModified();
+                }
+
+            }
+        };
+
+        DrawCollapsableCardWithTable(
+            id,
+            title,
+            ref expanded,
+            list,
+            drawRow,
+            headers,
+            setupColumns: setupCols,
+            drawFooter: allowAdd ? drawFooter : null
+        );
+
+        foreach (var action in postDrawActions) action();
+    }
+
+    public delegate void DrawDictionaryEditUI(string key, ref string currentValue, Action cancel);
+
+    private Dictionary<string, (string Key, string Value)> _dictEditStates = new();
+    private Dictionary<string, (string NewKey, string NewValue)> _dictAddStates = new();
+
+    public void DrawDictionaryTable(
+        string id,
+        string title,
+        ref bool expanded,
+        IDictionary<string, string> dictionary,
+        Action onModified,
+        string[] headers,
+        Action? setupColumns = null,
+        Func<string, string, string>? getDisplayValue = null,
+        DrawDictionaryEditUI? drawEditUI = null,
+        Action? drawFooter = null,
+        bool allowAdd = false)
+    {
+        var list = dictionary.ToList();
+        var postDrawActions = new List<Action>();
+
+        Action<KeyValuePair<string, string>, int> drawRow = (kvp, idx) =>
+        {
+            var key = kvp.Key;
+            var value = kvp.Value;
+            var editKey = id;
+
+            bool isEditing = _dictEditStates.TryGetValue(editKey, out var state) && state.Key == key;
+
+            ImGui.AlignTextToFramePadding();
+            ImGui.Text(key);
+
+            ImGui.TableNextColumn();
+
+            if (isEditing)
+            {
+                // If custom edit UI is provided (e.g. for Dropdowns), use it.
+                // Otherwise default to InputText.
+                // We pass a 'cancel' action to the custom UI if needed.
+                string currentEditValue = state.Value;
+
+                if (drawEditUI != null)
+                {
+                    Action cancelAction = () => { _dictEditStates.Remove(editKey); };
+                    drawEditUI(key, ref currentEditValue, cancelAction);
+
+                    if (currentEditValue != state.Value)
+                    {
+                        _dictEditStates[editKey] = (key, currentEditValue);
+                    }
+                }
+                else
+                {
+                    float inputWidth = ImGui.GetContentRegionAvail().X;
+                    ImGui.SetNextItemWidth(inputWidth);
+                    ImGui.InputText($"##edit-{id}-{key}", ref currentEditValue, 512);
+                    _dictEditStates[editKey] = (key, currentEditValue);
+                }
+            }
+            else
+            {
+                string display = getDisplayValue != null ? getDisplayValue(key, value) : value;
+                ImGui.AlignTextToFramePadding();
+                ImGui.Text(display);
+            }
+
+            ImGui.TableNextColumn();
+
+            if (isEditing)
+            {
+                ImGui.PushFont(Dalamud.Interface.UiBuilder.IconFont);
+                if (Button($"{FontAwesomeIcon.Check.ToIconString()}##save-{id}-{idx}"))
+                {
+                    dictionary[key] = state.Value;
+                    _dictEditStates.Remove(editKey);
+                    onModified();
+                }
+                ImGui.PopFont();
+                if (ImGui.IsItemHovered()) ImGui.SetTooltip("Save");
+
+                ImGui.SameLine();
+                ImGui.PushFont(Dalamud.Interface.UiBuilder.IconFont);
+                if (Button($"{FontAwesomeIcon.Times.ToIconString()}##cancel-{id}-{idx}"))
+                {
+                    _dictEditStates.Remove(editKey);
+                }
+                ImGui.PopFont();
+                if (ImGui.IsItemHovered()) ImGui.SetTooltip("Cancel");
+            }
+            else
+            {
+                ImGui.PushFont(Dalamud.Interface.UiBuilder.IconFont);
+                ImGui.PushStyleColor(ImGuiCol.Button, new Vector4(0, 0, 0, 0));
+                if (Button($"{FontAwesomeIcon.Pen.ToIconString()}##edit-{id}-{idx}"))
+                {
+                    _dictEditStates[editKey] = (key, value);
+                    _dictAddStates.Remove(id);
+                }
+                ImGui.PopStyleColor();
+                ImGui.PopFont();
+
+                if (ImGui.IsItemHovered()) ImGui.SetTooltip("Edit");
+
+                ImGui.SameLine();
+                ImGui.PushFont(Dalamud.Interface.UiBuilder.IconFont);
+                ImGui.PushStyleColor(ImGuiCol.Button, new Vector4(0.56f, 0f, 0f, 1f));
+                ImGui.PushStyleColor(ImGuiCol.ButtonHovered, new Vector4(0.7f, 0.1f, 0.1f, 1f));
+                ImGui.PushStyleColor(ImGuiCol.ButtonActive, new Vector4(0.4f, 0f, 0f, 1f));
+
+                if (Button($"{FontAwesomeIcon.Trash.ToIconString()}##del-{id}-{idx}"))
+                {
+                    postDrawActions.Add(() =>
+                    {
+                        dictionary.Remove(key);
+                        onModified();
+                        if (_dictEditStates.TryGetValue(editKey, out var s) && s.Key == key)
+                            _dictEditStates.Remove(editKey);
+                    });
+                }
+                ImGui.PopStyleColor(3);
+                ImGui.PopFont();
+
+                if (ImGui.IsItemHovered()) ImGui.SetTooltip("Delete");
+            }
+        };
+
+        Action? internalFooter = drawFooter;
+
+        if (allowAdd)
+        {
+            internalFooter = () =>
+            {
+                if (drawFooter != null) drawFooter();
+                float avail = ImGui.GetContentRegionAvail().X;
+
+                if (_dictAddStates.TryGetValue(id, out var addState))
+                {
+                    float pad = PadX(0.6f);
+                    float actionsWidth = 80f * ImGuiHelpers.GlobalScale; // Reserve space for buttons aligned with table actions
+                    float inputsTotalWidth = avail - actionsWidth - pad;
+                    float keyWidth = inputsTotalWidth * 0.35f;
+                    float valWidth = inputsTotalWidth - keyWidth - Gap();
+
+                    ImGui.SetCursorPosX(ImGui.GetCursorPosX() + pad);
+
+                    string nKey = addState.NewKey;
+                    string nVal = addState.NewValue;
+
+                    ImGui.PushItemWidth(keyWidth);
+                    ImGui.InputTextWithHint($"##add-key-{id}", headers.Length > 0 ? headers[0] : "Key", ref nKey, 128);
+                    ImGui.PopItemWidth();
+
+                    ImGui.SameLine();
+                    ImGui.PushItemWidth(valWidth);
+                    ImGui.InputTextWithHint($"##add-val-{id}", headers.Length > 1 ? headers[1] : "Value", ref nVal, 512);
+                    ImGui.PopItemWidth();
+
+                    _dictAddStates[id] = (nKey, nVal);
+
+                    ImGui.SameLine();
+                    ImGui.PushFont(Dalamud.Interface.UiBuilder.IconFont);
+                    var saved = Button($"{FontAwesomeIcon.Check.ToIconString()}##mod-save-{id}");
+                    ImGui.PopFont();
+                    if (saved)
+                    {
+                        if (!string.IsNullOrWhiteSpace(nKey) && !dictionary.ContainsKey(nKey))
+                        {
+                            dictionary[nKey] = nVal;
+                            _dictAddStates.Remove(id);
+                            onModified();
+                        }
+                    }
+                    if (ImGui.IsItemHovered()) ImGui.SetTooltip(dictionary.ContainsKey(nKey) ? "Key already exists" : "Add");
+
+                    ImGui.SameLine();
+                    ImGui.PushFont(Dalamud.Interface.UiBuilder.IconFont);
+                    var canceled = Button($"{FontAwesomeIcon.Times.ToIconString()}##cancel-{id}");
+                    ImGui.PopFont();
+                    if (canceled)
+                    {
+                        _dictAddStates.Remove(id);
+                    }
+
+                    SpacerY(1f);
+                }
+                float width = avail * 0.95f;
+                ImGui.SetCursorPosX(ImGui.GetCursorPosX() + ((avail - width) * 0.5f));
+                if (Button($"Add New {title.Split(' ')[0]} {title.Split(' ')[1][..^2]}", new Vector2(width, 0)))
+                {
+                    _dictAddStates[id] = ("", "");
+                    _dictEditStates.Remove(id);
+                }
+            }
+                ;
+        }
+
+        DrawCollapsableCardWithTable(
+            id,
+            title,
+            ref expanded,
+            list,
+            drawRow,
+            headers,
+            explicitCount: list.Count,
+            setupColumns: setupColumns,
+            drawFooter: internalFooter
+        );
+
+        foreach (var action in postDrawActions) action();
+    }
 }

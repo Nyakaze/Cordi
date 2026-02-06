@@ -23,19 +23,16 @@ public class ChatsTab
     private readonly UiTheme theme;
 
 
-    private string? _editingTellKey = null;
+
     private bool _activeTellsExpanded = false;
 
 
     private bool _existingAvatarsExpanded = false;
-    private string? _editingAvatarKey = null;
-    private string _editingAvatarValue = "";
 
 
-    private bool _showAddAvatarWindow = false;
-    private string _addAvatarName = "";
-    private string _addAvatarWorld = "";
-    private string _addAvatarUrl = "";
+
+
+
 
 
     private DateTime _lastChannelFetch = DateTime.MinValue;
@@ -94,7 +91,7 @@ public class ChatsTab
 
         DrawChatMappingsCard(textChannels, forumChannels, ref enabled);
 
-        if (_showAddAvatarWindow) DrawAddAvatarWindow();
+
 
         theme.SpacerY(2f);
     }
@@ -218,10 +215,11 @@ public class ChatsTab
                ImGui.TextColored(theme.MutedText, "Assign Discord channels to Game Chat types.");
                theme.SpacerY(1f);
 
-               if (ImGui.BeginTable("##mappingsTable", 2, ImGuiTableFlags.BordersInnerH | ImGuiTableFlags.SizingStretchProp))
+               if (ImGui.BeginTable("##mappingsTable", 3, ImGuiTableFlags.BordersInnerH | ImGuiTableFlags.SizingStretchProp))
                {
                    ImGui.TableSetupColumn("Chat Type", ImGuiTableColumnFlags.WidthFixed, 150f);
                    ImGui.TableSetupColumn("Discord Channel / Forum", ImGuiTableColumnFlags.WidthStretch);
+                   ImGui.TableSetupColumn("Filter Ads", ImGuiTableColumnFlags.WidthFixed, 30f);
 
                    Action<XivChatType> drawRow = (chatType) =>
                    {
@@ -293,6 +291,23 @@ public class ChatsTab
                            ImGui.EndCombo();
                        }
                        theme.HoverHandIfItem();
+
+                       // Advertisement Filter checkbox
+                       ImGui.TableNextColumn();
+                       var mapping = plugin.Config.Chat.Mappings.FirstOrDefault(m => m.GameChatType == chatType);
+                       if (mapping != null && !string.IsNullOrEmpty(mapping.DiscordChannelId))
+                       {
+                           bool filterEnabled = mapping.EnableAdvertisementFilter;
+                           if (ImGui.Checkbox($"##filter-{chatType}", ref filterEnabled))
+                           {
+                               mapping.EnableAdvertisementFilter = filterEnabled;
+                               plugin.Config.Save();
+                           }
+                           if (ImGui.IsItemHovered())
+                           {
+                               ImGui.SetTooltip("Enable advertisement filter for this channel");
+                           }
+                       }
                    };
 
                    foreach (var chatType in supportedChatTypes)
@@ -342,474 +357,98 @@ public class ChatsTab
 
     private void DrawActiveTellsCard(List<DiscordChannel>? forumChannels, ref bool enabled)
     {
-        int count = plugin.Config.Chat.TellThreadMappings.Count;
-        string title = $"Active Private Conversation: {count}";
-
-
-        float scale = ImGuiHelpers.GlobalScale;
-        float headerHeight = 35f * scale;
-        if (headerHeight < ImGui.GetFrameHeightWithSpacing()) headerHeight = ImGui.GetFrameHeightWithSpacing();
-
-        float padX = theme.PadX(0.9f);
-        float padY = theme.PadY(0.9f);
-        float radius = theme.Radius(1.0f);
-
-
-        var draw = ImGui.GetWindowDrawList();
-        var startPos = ImGui.GetCursorScreenPos();
-        var availW = ImGui.GetContentRegionAvail().X;
-
-        draw.ChannelsSplit(2);
-        draw.ChannelsSetCurrent(1);
-
-        ImGui.BeginGroup();
-
-        float titleCenterY = startPos.Y + (headerHeight - ImGui.GetTextLineHeight()) * 0.5f;
-        ImGui.SetCursorScreenPos(new Vector2(startPos.X + padX, titleCenterY));
-
-        ImGui.PushStyleColor(ImGuiCol.Text, theme.Text);
-        ImGui.TextUnformatted(title);
-        ImGui.PopStyleColor();
-
-
-        ImGui.PushFont(Dalamud.Interface.UiBuilder.IconFont);
-        string icon = _activeTellsExpanded ? FontAwesomeIcon.ChevronUp.ToIconString() : FontAwesomeIcon.ChevronDown.ToIconString();
-        var iconSize = ImGui.CalcTextSize(icon);
-        ImGui.SetCursorScreenPos(new Vector2(startPos.X + availW - padX - iconSize.X, titleCenterY));
-        ImGui.TextUnformatted(icon);
-        ImGui.PopFont();
-
-        ImGui.SetCursorScreenPos(startPos);
-        if (ImGui.InvisibleButton("##activeTellsHeaderBtn", new Vector2(availW, headerHeight)))
-        {
-            _activeTellsExpanded = !_activeTellsExpanded;
-        }
-        if (ImGui.IsItemHovered()) ImGui.SetMouseCursor(ImGuiMouseCursor.Hand);
-
-
-        if (_activeTellsExpanded)
-        {
-            ImGui.SetCursorScreenPos(new Vector2(startPos.X + padX, startPos.Y + headerHeight + theme.Gap(0.2f)));
-
-            if (count == 0)
-            {
-                ImGui.TextColored(theme.MutedText, "No active private conversations.");
-            }
-            else
-            {
-                DrawActiveTellsTable(forumChannels, count);
-            }
-
-
-            ImGui.Dummy(new Vector2(0, padY * 0.5f));
-        }
-
-        ImGui.EndGroup();
-        var itemMin = ImGui.GetItemRectMin();
-        var itemMax = ImGui.GetItemRectMax();
-
-        float totalHeight = itemMax.Y - startPos.Y;
-        if (totalHeight < headerHeight) totalHeight = headerHeight;
-
-        var endPos = new Vector2(startPos.X + availW, startPos.Y + totalHeight);
-        draw.ChannelsSetCurrent(0);
-
-        draw.AddRectFilled(startPos, endPos, ImGui.GetColorU32(theme.CardBg), radius);
-        draw.AddRect(startPos, endPos, ImGui.GetColorU32(theme.WindowBorder), radius);
-
-        var headerRectMax = new Vector2(endPos.X, startPos.Y + headerHeight);
-        var mousePos = ImGui.GetMousePos();
-        bool headerHovered = mousePos.X >= startPos.X && mousePos.X < endPos.X &&
-                             mousePos.Y >= startPos.Y && mousePos.Y < headerRectMax.Y;
-
-        if (headerHovered)
-        {
-            draw.AddRectFilled(startPos, headerRectMax, ImGui.GetColorU32(new Vector4(1, 1, 1, 0.05f)), radius, ImDrawFlags.RoundCornersTop);
-        }
-
-        draw.ChannelsMerge();
-
-        theme.SpacerY(0.5f);
-    }
-
-    private void DrawActiveTellsTable(List<DiscordChannel>? forumChannels, int count)
-    {
-
+        var tells = plugin.Config.Chat.TellThreadMappings;
         var availableThreads = _cachedAvailableThreads;
 
-        ImGui.PushStyleColor(ImGuiCol.TableHeaderBg, theme.FrameBg);
-        if (ImGui.BeginTable("##tellsTable", 3, ImGuiTableFlags.BordersInnerH | ImGuiTableFlags.SizingStretchProp))
+        var headers = new[] { "Correspondent", "Thread ID / Name", "Action" };
+
+        Action setupCols = () =>
         {
             ImGui.TableSetupColumn("Correspondent", ImGuiTableColumnFlags.WidthFixed | ImGuiTableColumnFlags.NoSort | ImGuiTableColumnFlags.NoReorder);
             ImGui.TableSetupColumn("Thread ID / Name", ImGuiTableColumnFlags.WidthStretch | ImGuiTableColumnFlags.NoSort | ImGuiTableColumnFlags.NoReorder);
-            ImGui.TableSetupColumn("Action", ImGuiTableColumnFlags.WidthFixed | ImGuiTableColumnFlags.NoSort | ImGuiTableColumnFlags.NoReorder, 80f);
+            ImGui.TableSetupColumn("Action", ImGuiTableColumnFlags.WidthFixed | ImGuiTableColumnFlags.NoSort | ImGuiTableColumnFlags.NoReorder, 80f * ImGuiHelpers.GlobalScale);
+        };
 
-            var toRemove = new List<string>();
-            var keys = plugin.Config.Chat.TellThreadMappings.Keys.ToList();
+        Func<string, string, string> getDisplayValue = (key, value) =>
+        {
+            if (ulong.TryParse(value, out var cid) && availableThreads.TryGetValue(cid, out var name))
+                return $"#{name}";
+            return value;
+        };
 
-            foreach (var key in keys)
+        UiTheme.DrawDictionaryEditUI drawEdit = (string key, ref string currentValue, Action cancel) =>
+        {
+            if (availableThreads.Count > 0)
             {
-                if (!plugin.Config.Chat.TellThreadMappings.ContainsKey(key)) continue;
-                string currentThreadId = plugin.Config.Chat.TellThreadMappings[key];
-
-                ImGui.TableNextRow();
-                ImGui.TableNextColumn();
-                ImGui.AlignTextToFramePadding();
-                ImGui.Text(key);
-
-                ImGui.TableNextColumn();
-
-                if (_editingTellKey == key)
+                string preview = currentValue;
+                if (ulong.TryParse(currentValue, out var cid) && availableThreads.TryGetValue(cid, out var name))
                 {
-                    if (availableThreads.Count > 0)
-                    {
-                        string preview = currentThreadId;
-                        if (ulong.TryParse(currentThreadId, out var cid) && availableThreads.TryGetValue(cid, out var name))
-                        {
-                            preview = $"#{name}";
-                        }
-
-                        float btnSize = ImGui.GetFrameHeight();
-                        float spacing = ImGui.GetStyle().ItemSpacing.X;
-
-                        float inputWidth = ImGui.GetContentRegionAvail().X - btnSize - spacing;
-
-                        ImGui.SetNextItemWidth(inputWidth);
-                        if (ImGui.BeginCombo($"##threadSelect-{key}", preview))
-                        {
-                            foreach (var kvp in availableThreads)
-                            {
-                                bool isSelected = kvp.Key.ToString() == currentThreadId;
-                                if (ImGui.Selectable($"#{kvp.Value}##{kvp.Key}", isSelected))
-                                {
-                                    plugin.Config.Chat.TellThreadMappings[key] = kvp.Key.ToString();
-                                    plugin.Config.Save();
-                                    plugin.NotificationManager.Add("Conversation Updated", $"Changed thread for {key}", CordiNotificationType.Success);
-                                    _editingTellKey = null;
-                                }
-                                if (isSelected) ImGui.SetItemDefaultFocus();
-                            }
-                            ImGui.EndCombo();
-                        }
-
-                        ImGui.SameLine();
-                        ImGui.PushFont(Dalamud.Interface.UiBuilder.IconFont);
-                        if (ImGui.Button($"{FontAwesomeIcon.Times.ToIconString()}##cancel-{key}", new Vector2(btnSize, btnSize)))
-                        {
-                            _editingTellKey = null;
-                        }
-                        ImGui.PopFont();
-                        if (ImGui.IsItemHovered()) ImGui.SetTooltip("Cancel");
-                    }
-                    else
-                    {
-                        ImGui.TextColored(theme.MutedText, "No threads found.");
-                        ImGui.SameLine();
-                        ImGui.PushFont(Dalamud.Interface.UiBuilder.IconFont);
-                        if (ImGui.Button($"{FontAwesomeIcon.Times.ToIconString()}##cancel-{key}"))
-                        {
-                            _editingTellKey = null;
-                        }
-                        ImGui.PopFont();
-                    }
-                }
-                else
-                {
-                    string display = currentThreadId;
-                    if (ulong.TryParse(currentThreadId, out var cid) && availableThreads.TryGetValue(cid, out var name))
-                    {
-                        display = $"#{name}";
-                    }
-
-                    ImGui.AlignTextToFramePadding();
-                    ImGui.Text(display);
-
-                    ImGui.SameLine();
-                    ImGui.PushFont(Dalamud.Interface.UiBuilder.IconFont);
-                    ImGui.PushStyleColor(ImGuiCol.Button, new Vector4(0, 0, 0, 0));
-                    if (ImGui.Button($"{FontAwesomeIcon.Pen.ToIconString()}##edit-{key}"))
-                    {
-                        _editingTellKey = key;
-                    }
-                    ImGui.PopStyleColor();
-                    ImGui.PopFont();
-                    theme.HoverHandIfItem();
-                    if (ImGui.IsItemHovered()) ImGui.SetTooltip("Change Thread");
+                    preview = $"#{name}";
                 }
 
-                ImGui.TableNextColumn();
-                ImGui.PushFont(Dalamud.Interface.UiBuilder.IconFont);
-                ImGui.PushStyleColor(ImGuiCol.Button, new Vector4(0.56f, 0f, 0f, 1f));
-                ImGui.PushStyleColor(ImGuiCol.ButtonHovered, new Vector4(0.7f, 0.1f, 0.1f, 1f));
-                ImGui.PushStyleColor(ImGuiCol.ButtonActive, new Vector4(0.4f, 0f, 0f, 1f));
-                if (ImGui.Button($"{FontAwesomeIcon.Trash.ToIconString()}##del-{key}"))
+                ImGui.SetNextItemWidth(ImGui.GetContentRegionAvail().X - 50f * ImGuiHelpers.GlobalScale);
+                if (ImGui.BeginCombo($"##threadSelect-{key}", preview))
                 {
-                    toRemove.Add(key);
+                    foreach (var thread in availableThreads)
+                    {
+                        bool isSelected = thread.Key.ToString() == currentValue;
+                        if (ImGui.Selectable($"#{thread.Value}##{thread.Key}", isSelected))
+                        {
+                            currentValue = thread.Key.ToString();
+                            plugin.NotificationManager.Add("Conversation Updated", $"Changed thread for {key}", CordiNotificationType.Success);
+                        }
+                        if (isSelected) ImGui.SetItemDefaultFocus();
+                    }
+                    ImGui.EndCombo();
                 }
-                ImGui.PopStyleColor(3);
-                ImGui.PopFont();
-                if (ImGui.IsItemHovered()) ImGui.SetTooltip("Remove Mapping");
             }
-            ImGui.EndTable();
-
-            if (toRemove.Count > 0)
+            else
             {
-                foreach (var k in toRemove)
-                {
-                    plugin.Config.Chat.TellThreadMappings.Remove(k);
-                    plugin.NotificationManager.Add("Conversation Removed", $"Forgot conversation with {k}", CordiNotificationType.Info);
-                }
-                plugin.Config.Save();
+                ImGui.TextColored(theme.MutedText, "No threads found.");
             }
-        }
+        };
+
+        theme.DrawDictionaryTable(
+            "activeTells",
+            $"Active Private Conversation: {tells.Count}",
+            ref _activeTellsExpanded,
+            tells,
+            () => plugin.Config.Save(),
+            headers,
+            setupColumns: setupCols,
+            getDisplayValue: getDisplayValue,
+            drawEditUI: drawEdit
+        );
     }
 
     private void DrawExistingAvatarsCard(ref bool enabled)
     {
-        int count = plugin.Config.Chat.CustomAvatars.Count;
-        string title = $"Custom Avatars: {count}";
+        var avatars = plugin.Config.Chat.CustomAvatars;
+        var headers = new[] { "Character", "URL", "Action" };
 
-
-        float scale = ImGuiHelpers.GlobalScale;
-        float headerHeight = 35f * scale;
-        if (headerHeight < ImGui.GetFrameHeightWithSpacing()) headerHeight = ImGui.GetFrameHeightWithSpacing();
-
-        float padX = theme.PadX(0.9f);
-        float padY = theme.PadY(0.9f);
-        float radius = theme.Radius(1.0f);
-
-        var draw = ImGui.GetWindowDrawList();
-        var startPos = ImGui.GetCursorScreenPos();
-        var availW = ImGui.GetContentRegionAvail().X;
-
-        draw.ChannelsSplit(2);
-        draw.ChannelsSetCurrent(1);
-
-        ImGui.BeginGroup();
-
-        float titleCenterY = startPos.Y + (headerHeight - ImGui.GetTextLineHeight()) * 0.5f;
-        ImGui.SetCursorScreenPos(new Vector2(startPos.X + padX, titleCenterY));
-
-        ImGui.PushStyleColor(ImGuiCol.Text, theme.Text);
-        ImGui.TextUnformatted(title);
-        ImGui.PopStyleColor();
-
-        ImGui.PushFont(Dalamud.Interface.UiBuilder.IconFont);
-        string icon = _existingAvatarsExpanded ? FontAwesomeIcon.ChevronUp.ToIconString() : FontAwesomeIcon.ChevronDown.ToIconString();
-        var iconSize = ImGui.CalcTextSize(icon);
-        ImGui.SetCursorScreenPos(new Vector2(startPos.X + availW - padX - iconSize.X, titleCenterY));
-        ImGui.TextUnformatted(icon);
-        ImGui.PopFont();
-
-        ImGui.SetCursorScreenPos(startPos);
-        if (ImGui.InvisibleButton("##existingAvatarsHeaderBtn", new Vector2(availW, headerHeight)))
+        Action setupCols = () =>
         {
-            _existingAvatarsExpanded = !_existingAvatarsExpanded;
-        }
-        if (ImGui.IsItemHovered()) ImGui.SetMouseCursor(ImGuiMouseCursor.Hand);
+            ImGui.TableSetupColumn("Character", ImGuiTableColumnFlags.WidthFixed, 150f * ImGuiHelpers.GlobalScale);
+            ImGui.TableSetupColumn("URL", ImGuiTableColumnFlags.WidthStretch);
+            ImGui.TableSetupColumn("Action", ImGuiTableColumnFlags.WidthFixed, 80f * ImGuiHelpers.GlobalScale);
+        };
 
-
-        if (_existingAvatarsExpanded)
-        {
-            ImGui.SetCursorScreenPos(new Vector2(startPos.X + padX, startPos.Y + headerHeight + theme.Gap(0.2f)));
-
-            if (count == 0)
+        theme.DrawDictionaryTable(
+            "customAvatars",
+            $"Custom Avatars: {avatars.Count}",
+            ref _existingAvatarsExpanded,
+            avatars,
+            () =>
             {
-                ImGui.TextColored(theme.MutedText, "No custom avatars defined.");
-            }
-            else
-            {
-                if (ImGui.BeginTable("##custAvTable", 3, ImGuiTableFlags.BordersInnerH | ImGuiTableFlags.SizingStretchProp))
-                {
-                    ImGui.TableSetupColumn("Character", ImGuiTableColumnFlags.WidthFixed);
-                    ImGui.TableSetupColumn("URL", ImGuiTableColumnFlags.WidthStretch);
-                    ImGui.TableSetupColumn("Action", ImGuiTableColumnFlags.WidthFixed, 60f);
-
-                    var toRemove = new List<string>();
-                    var keys = plugin.Config.Chat.CustomAvatars.Keys.ToList();
-
-                    foreach (var key in keys)
-                    {
-                        var url = plugin.Config.Chat.CustomAvatars[key];
-
-                        ImGui.TableNextRow();
-                        ImGui.TableNextColumn();
-                        ImGui.Text(key);
-
-                        ImGui.TableNextColumn();
-
-                        if (_editingAvatarKey == key)
-                        {
-
-                            float btnSize = ImGui.GetFrameHeight();
-                            float spacing = ImGui.GetStyle().ItemSpacing.X;
-
-                            float inputWidth = ImGui.GetContentRegionAvail().X - (btnSize * 2) - (spacing * 2);
-
-                            ImGui.SetNextItemWidth(inputWidth);
-                            ImGui.InputText($"##editUrl-{key}", ref _editingAvatarValue, 512);
-
-                            ImGui.SameLine();
-                            ImGui.PushFont(Dalamud.Interface.UiBuilder.IconFont);
-                            if (ImGui.Button($"{FontAwesomeIcon.Check.ToIconString()}##save-{key}", new Vector2(btnSize, btnSize)))
-                            {
-                                plugin.Config.Chat.CustomAvatars[key] = _editingAvatarValue;
-                                plugin.Lodestone.InvalidateAvatarCache(key);
-                                plugin.Config.Save();
-                                plugin.NotificationManager.Add("Custom Avatar Updated", $"Updated avatar for {key}", CordiNotificationType.Success);
-                                _editingAvatarKey = null;
-                            }
-                            ImGui.PopFont();
-                            if (ImGui.IsItemHovered()) ImGui.SetTooltip("Save");
-
-                            ImGui.SameLine();
-                            ImGui.PushFont(Dalamud.Interface.UiBuilder.IconFont);
-                            if (ImGui.Button($"{FontAwesomeIcon.Times.ToIconString()}##cancel-{key}", new Vector2(btnSize, btnSize)))
-                            {
-                                _editingAvatarKey = null;
-                            }
-                            ImGui.PopFont();
-                            if (ImGui.IsItemHovered()) ImGui.SetTooltip("Cancel");
-                        }
-                        else
-                        {
-
-                            ImGui.Text(url);
-
-                            ImGui.SameLine();
-                            ImGui.PushFont(Dalamud.Interface.UiBuilder.IconFont);
-                            ImGui.PushStyleColor(ImGuiCol.Button, new Vector4(0, 0, 0, 0));
-                            if (ImGui.Button($"{FontAwesomeIcon.Pen.ToIconString()}##edit-{key}"))
-                            {
-                                _editingAvatarKey = key;
-                                _editingAvatarValue = url;
-                            }
-                            ImGui.PopStyleColor();
-                            ImGui.PopFont();
-                            theme.HoverHandIfItem();
-                            if (ImGui.IsItemHovered()) ImGui.SetTooltip("Edit URL");
-                        }
-
-                        ImGui.TableNextColumn();
-                        ImGui.PushFont(Dalamud.Interface.UiBuilder.IconFont);
-                        ImGui.PushStyleColor(ImGuiCol.Button, new Vector4(0.56f, 0f, 0f, 1f)); // #900000
-                        ImGui.PushStyleColor(ImGuiCol.ButtonHovered, new Vector4(0.7f, 0.1f, 0.1f, 1f));
-                        ImGui.PushStyleColor(ImGuiCol.ButtonActive, new Vector4(0.4f, 0f, 0f, 1f));
-                        if (ImGui.Button($"{FontAwesomeIcon.Trash.ToIconString()}##del-{key}"))
-                        {
-                            toRemove.Add(key);
-                        }
-                        ImGui.PopStyleColor(3);
-                        ImGui.PopFont();
-                        if (ImGui.IsItemHovered()) ImGui.SetTooltip("Remove Avatar");
-                    }
-                    ImGui.EndTable();
-
-                    if (toRemove.Count > 0)
-                    {
-                        foreach (var k in toRemove)
-                        {
-                            plugin.Config.Chat.CustomAvatars.Remove(k);
-                            plugin.Lodestone.InvalidateAvatarCache(k);
-                            plugin.NotificationManager.Add("Custom Avatar Deleted", $"Removed avatar for {k}", CordiNotificationType.Info);
-                        }
-                        plugin.Config.Save();
-                    }
-                }
-            }
-
-            theme.SpacerY(0.5f);
-
-
-            if (ImGui.Button("Add Custom Avatar", new Vector2(ImGui.GetContentRegionAvail().X, 0)))
-            {
-                _showAddAvatarWindow = true;
-                _addAvatarName = "";
-                _addAvatarWorld = "";
-                _addAvatarUrl = "";
-            }
-
-            ImGui.Dummy(new Vector2(0, padY * 0.5f));
-        }
-
-        ImGui.EndGroup();
-        var itemMin = ImGui.GetItemRectMin();
-        var itemMax = ImGui.GetItemRectMax();
-
-        float totalHeight = itemMax.Y - startPos.Y;
-        if (totalHeight < headerHeight) totalHeight = headerHeight;
-
-        var endPos = new Vector2(startPos.X + availW, startPos.Y + totalHeight);
-        draw.ChannelsSetCurrent(0);
-
-        draw.AddRectFilled(startPos, endPos, ImGui.GetColorU32(theme.CardBg), radius);
-        draw.AddRect(startPos, endPos, ImGui.GetColorU32(theme.WindowBorder), radius);
-
-        var headerRectMax = new Vector2(endPos.X, startPos.Y + headerHeight);
-        var mousePos = ImGui.GetMousePos();
-        bool headerHovered = mousePos.X >= startPos.X && mousePos.X < endPos.X &&
-                             mousePos.Y >= startPos.Y && mousePos.Y < headerRectMax.Y;
-
-        if (headerHovered)
-        {
-            draw.AddRectFilled(startPos, headerRectMax, ImGui.GetColorU32(new Vector4(1, 1, 1, 0.05f)), radius, ImDrawFlags.RoundCornersTop);
-        }
-
-        draw.ChannelsMerge();
-
-        theme.SpacerY(0.5f);
+                plugin.Config.Save();
+                // Invalidate all for safety since we don't know exactly which one changed in this generic callback, 
+                // but for avatars it's cheap enough.
+                foreach (var key in avatars.Keys) plugin.Lodestone.InvalidateAvatarCache(key);
+            },
+            headers,
+            setupColumns: setupCols,
+            allowAdd: true
+        );
     }
 
-    private void DrawAddAvatarWindow()
-    {
-        bool open = _showAddAvatarWindow;
-        if (ImGui.Begin("Add Custom Avatar", ref open, ImGuiWindowFlags.NoCollapse | ImGuiWindowFlags.AlwaysAutoResize))
-        {
-            float fullWidth = 400f * ImGuiHelpers.GlobalScale;
-
-            ImGui.Text("Character Name");
-            ImGui.SetNextItemWidth(fullWidth);
-            ImGui.InputText("##add-ca-name", ref _addAvatarName, 64);
-
-            theme.SpacerY(0.5f);
-
-            ImGui.Text("World");
-            ImGui.SetNextItemWidth(fullWidth);
-            ImGui.InputText("##add-ca-world", ref _addAvatarWorld, 32);
-
-            theme.SpacerY(0.5f);
-
-            ImGui.Text("Image URL (Publicly Accessible)");
-            ImGui.SetNextItemWidth(fullWidth);
-            ImGui.InputText("##add-ca-url", ref _addAvatarUrl, 512);
-
-            theme.SpacerY(1f);
-            ImGui.Separator();
-            theme.SpacerY(1f);
-
-            if (ImGui.Button("Add", new Vector2(100f * ImGuiHelpers.GlobalScale, 0)))
-            {
-                if (!string.IsNullOrEmpty(_addAvatarName) && !string.IsNullOrEmpty(_addAvatarWorld) && !string.IsNullOrEmpty(_addAvatarUrl))
-                {
-                    string key = $"{_addAvatarName}@{_addAvatarWorld}";
-                    plugin.Config.Chat.CustomAvatars[key] = _addAvatarUrl;
-                    plugin.Lodestone.InvalidateAvatarCache(key);
-                    plugin.Config.Save();
-                    plugin.NotificationManager.Add("Custom Avatar Created", $"Added avatar for {key}", CordiNotificationType.Success);
-                    _showAddAvatarWindow = false;
-                }
-            }
-
-            ImGui.SameLine();
-
-            if (ImGui.Button("Cancel", new Vector2(100f * ImGuiHelpers.GlobalScale, 0)))
-            {
-                _showAddAvatarWindow = false;
-            }
-
-            ImGui.End();
-        }
-
-        if (!open) _showAddAvatarWindow = false;
-    }
 }
