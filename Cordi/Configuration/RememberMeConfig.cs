@@ -7,5 +7,7 @@ namespace Cordi.Configuration;
 public class RememberMeConfig
 {
     public bool Enabled { get; set; } = true;
+    public bool EnableExamineFeature { get; set; } = false;
     public List<RememberedPlayerEntry> RememberedPlayers { get; set; } = new();
+    public List<RememberedPlayerEntry> ExaminedPlayers { get; set; } = new();
 }

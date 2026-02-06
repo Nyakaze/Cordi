@@ -10,6 +10,8 @@ public class RememberedPlayerEntry
     public string World { get; set; } = string.Empty;
     public DateTime LastSeen { get; set; } = DateTime.Now;
     public string Notes { get; set; } = string.Empty;
+    public PlayerGlamour? Glamour { get; set; }
+
 
     public RememberedPlayerEntry() { }
 
