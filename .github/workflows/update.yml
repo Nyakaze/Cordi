@@ -46,13 +46,13 @@ jobs:
           echo "Extracting changelog for version ${{ env.BUILD_VERSION }}..."
 
           VER_REGEX="${{ env.BUILD_VERSION }}"
-          VER_REGEX=${VER_REGEX//./\\.}
-
+          VER_REGEX=${VER_REGEX//./\\\\.}
+          
           CONTENT=$(awk -v ver="$VER_REGEX" '
-            /^\[?v?[0-9]+\.[0-9]+/ { 
-              if ($0 ~ "^[\\[]?[vV]?" ver) {
+            /^#*[[:space:]]*\[?[vV]?[0-9]+\.[0-9]+/ {
+              if ($0 ~ "(\\[|[[:space:]]|^)[vV]?" ver "(\\]|\\)|[^0-9]|$)") {
                 printing=1;
-                next; 
+                next;
               }
               if (printing) exit;
             }
