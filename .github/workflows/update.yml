@@ -49,20 +49,18 @@ jobs:
           VER_REGEX=${VER_REGEX//./\\.}
 
           CONTENT=$(awk -v ver="$VER_REGEX" '
-            /^v?[0-9]+\.[0-9]+/ {     
-              if ($0 ~ "^v?" ver) {   
-                printing=1;           
-                next;                 
+            /^\[?v?[0-9]+\.[0-9]+/ { 
+              if ($0 ~ "^[\\[]?[vV]?" ver) {
+                printing=1;
+                next; 
               }
-              if (printing) exit;     
+              if (printing) exit;
             }
-            printing { print }        
+            printing { print }
           ' CHANGELOG.md)
 
-          
           CONTENT=$(echo "$CONTENT" | sed -e :a -e '/^\n*$/{$d;N;};/\n$/ba')
 
-          
           if [ -z "$CONTENT" ]; then
              CONTENT="Update ${{ env.BUILD_VERSION }}"
           fi
