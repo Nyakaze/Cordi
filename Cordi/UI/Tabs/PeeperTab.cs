@@ -78,7 +78,6 @@ public class CordiPeepTab
         theme.DrawPluginCardAuto(
             id: "cordi-peep-general",
             title: "General",
-            mutedText: "(Monitor player targeting)",
             enabled: ref enabled,
             drawContent: (avail) =>
             {

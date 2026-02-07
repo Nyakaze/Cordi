@@ -18,6 +18,7 @@ public class GeneralTab
     private readonly CordiPlugin plugin;
     private readonly UiTheme theme;
     private string botToken = string.Empty;
+    private bool _botTokenInputActive = false;
 
 
 
@@ -54,7 +55,9 @@ public class GeneralTab
                 float spacing = style.ItemSpacing.X;
 
                 ImGui.PushItemWidth(avail - btnWidth - spacing);
-                ImGui.InputText("##bot-token-input", ref botToken, 256);
+                var flags = _botTokenInputActive ? ImGuiInputTextFlags.None : ImGuiInputTextFlags.Password;
+                ImGui.InputText("##bot-token-input", ref botToken, 256, flags);
+                _botTokenInputActive = ImGui.IsItemActive();
                 ImGui.PopItemWidth();
 
                 ImGui.SameLine();
@@ -79,6 +82,7 @@ public class GeneralTab
             title: "Discord Commands",
             drawContent: (avail) =>
             {
+                ImGui.TextColored(UiTheme.ColorDangerText, "WARNING: This feature is experimental!");
                 bool allowCommands = plugin.Config.Discord.AllowDiscordCommands;
                 if (ImGui.Checkbox("Enable Discord Commands", ref allowCommands))
                 {

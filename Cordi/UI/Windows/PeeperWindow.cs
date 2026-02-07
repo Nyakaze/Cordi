@@ -14,7 +14,7 @@ public class CordiPeepWindow : Window
 {
     private readonly CordiPlugin _plugin;
 
-    public CordiPeepWindow(CordiPlugin plugin) : base("Cordi Peep", ImGuiWindowFlags.None)
+    public CordiPeepWindow(CordiPlugin plugin) : base("Peeper###Cordi Peep", ImGuiWindowFlags.None)
     {
         _plugin = plugin;
         this.SizeConstraints = new WindowSizeConstraints

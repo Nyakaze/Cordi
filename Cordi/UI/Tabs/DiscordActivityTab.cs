@@ -41,7 +41,7 @@ public class DiscordActivityTab
             id: "act-general-card",
             enabled: ref unused,
             showCheckbox: false,
-            title: "General Settings",
+            title: "General",
             drawContent: (avail) =>
             {
                 ImGui.TextColored(_theme.MutedText, "Configure the target Discord user and main settings.");
@@ -301,6 +301,20 @@ public class DiscordActivityTab
                 {
                     extraContent(avail);
                 }
+            },
+            drawHeaderRight: () =>
+            {
+                ImGui.TextDisabled("(?)");
+                if (ImGui.IsItemHovered())
+                {
+                    string tip = "Common Placeholders:\n";
+                    tip += "- {name}: Activity Name\n";
+                    tip += "- {details}: Track / Details\n";
+                    tip += "- {state}: Artist / Status\n";
+                    tip += "- {elapsed}, {duration}, {time_start}, {time_end}\n";
+
+                    ImGui.SetTooltip(tip);
+                }
             }
         );
 
@@ -313,21 +327,8 @@ public class DiscordActivityTab
 
         float scale = ImGuiHelpers.GlobalScale;
 
-        // Help Tooltip
-        ImGui.TextDisabled("(?) Help Placeholders");
-        if (ImGui.IsItemHovered())
-        {
-            string tip = "Common Placeholders:\n";
-            tip += "- {name}: Activity Name\n";
-            tip += "- {details}: Track / Details\n";
-            tip += "- {state}: Artist / Status\n";
-            tip += "- {elapsed}, {duration}, {time_start}, {time_end}\n";
-
-            ImGui.SetTooltip(tip);
-        }
-
         ImGui.SameLine();
-        ImGui.TextColored(_theme.MutedText, "| Priority: ");
+        ImGui.TextColored(_theme.MutedText, "Priority: ");
         ImGui.SameLine();
         int prio = conf.Priority;
         ImGui.SetNextItemWidth(80f * ImGuiHelpers.GlobalScale);

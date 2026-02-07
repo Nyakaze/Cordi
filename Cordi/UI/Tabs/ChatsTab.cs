@@ -298,7 +298,7 @@ public class ChatsTab
                        if (mapping != null && !string.IsNullOrEmpty(mapping.DiscordChannelId))
                        {
                            bool filterEnabled = mapping.EnableAdvertisementFilter;
-                           if (ImGui.Checkbox($"##filter-{chatType}", ref filterEnabled))
+                           if (theme.Checkbox($"##filter-{chatType}", ref filterEnabled))
                            {
                                mapping.EnableAdvertisementFilter = filterEnabled;
                                plugin.Config.Save();
@@ -351,7 +351,20 @@ public class ChatsTab
 
                    ImGui.EndTable();
                }
-           }
+           },
+            drawHeaderRight: () =>
+            {
+                ImGui.TextDisabled("(?)");
+                if (ImGui.IsItemHovered())
+                {
+                    string tip = "Info:\n";
+                    tip += "- Every Chat Type can be mapped to a Discord Channel\n";
+                    tip += "- You can also enable an advertisement filter for each chat type.\n";
+                    tip += "\n";
+                    tip += "- Tell needs to be mapped to a thread to be sent to Discord.\n";
+                    ImGui.SetTooltip(tip);
+                }
+            }
        );
     }
 

@@ -33,7 +33,7 @@ public class DiscordHandler : IDisposable
     private DiscordIntents _intent;
     public DiscordClient Client => _client;
 
-
+    public bool IsBusy { get; private set; }
 
     private readonly DiscordWebhookService _webhooks;
 
@@ -59,12 +59,16 @@ public class DiscordHandler : IDisposable
             _plugin.Config.Save();
             return;
         }
+
+        if (IsBusy) return;
+        IsBusy = true;
+
         try
         {
             if (_plugin.Config.Discord.BotStarted)
             {
                 Logger.Info("Bot already started... Trying to stop and restart.");
-                await Stop();
+                await StopInternal();
             }
             _client = new DiscordClient(new DiscordConfiguration
             {
@@ -86,6 +90,10 @@ public class DiscordHandler : IDisposable
         {
             Logger.Error($"Failed to connect to the bot. {e.StackTrace}");
             _plugin.Config.Discord.BotStarted = false;
+        }
+        finally
+        {
+            IsBusy = false;
         }
         _plugin.Config.Save();
     }
@@ -485,6 +493,20 @@ public class DiscordHandler : IDisposable
     }
 
     public async Task Stop()
+    {
+        if (IsBusy) return;
+        IsBusy = true;
+        try
+        {
+            await StopInternal();
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
+
+    private async Task StopInternal()
     {
         if (_client == null) return;
         Logger.Info("Disconnecting Discord client...");

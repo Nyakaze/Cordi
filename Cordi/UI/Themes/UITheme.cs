@@ -805,7 +805,8 @@ public sealed class UiTheme
         Action<float> drawContent,
         ref bool enabled,
         bool showCheckbox = false,
-        string? mutedText = null)
+        string? mutedText = null,
+        Action? drawHeaderRight = null)
     {
         float scale = ImGuiHelpers.GlobalScale;
         float padX = PadX(0.9f);
@@ -855,6 +856,18 @@ public sealed class UiTheme
         {
             ImGui.SameLine();
             ImGui.TextColored(MutedText, mutedText);
+        }
+
+        if (drawHeaderRight != null)
+        {
+            ImGui.SameLine();
+            float reservedWidth = 10f * scale; // Reduced to fit "((?))" icon snugly
+            float headerRightCursorX = (startPos.X + availW - padX) - reservedWidth;
+            if (headerRightCursorX < ImGui.GetCursorPosX()) headerRightCursorX = ImGui.GetCursorPosX() + 10f; // Prevent overlap
+            ImGui.SetCursorScreenPos(new Vector2(headerRightCursorX, ImGui.GetCursorScreenPos().Y));
+
+            drawHeaderRight();
+            ImGui.NewLine(); // Ensure subsequent content starts on a new line
         }
 
 

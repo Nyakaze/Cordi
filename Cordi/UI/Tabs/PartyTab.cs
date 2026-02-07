@@ -63,34 +63,31 @@ public class PartyTab
                 ImGui.TextColored(UiTheme.ColorDangerText, "(INFORMATIONS MAY NOT BE ACCURATE)");
 
                 bool includeSelf = plugin.Config.Party.IncludeSelf;
-                if (ImGui.Checkbox("Include self", ref includeSelf))
+                if (theme.Checkbox("Include self", ref includeSelf))
                 {
                     plugin.Config.Party.IncludeSelf = includeSelf;
                     plugin.Config.Save();
                 }
-                theme.HoverHandIfItem();
                 ImGui.TextDisabled("Send Discord notifications for yourself and fetch your information.");
 
                 theme.SpacerY(0.5f);
 
                 bool showSavageProgress = plugin.Config.Party.ShowSavageProgress;
-                if (ImGui.Checkbox("Show savage progress", ref showSavageProgress))
+                if (theme.Checkbox("Show savage progress", ref showSavageProgress))
                 {
                     plugin.Config.Party.ShowSavageProgress = showSavageProgress;
                     plugin.Config.Save();
                 }
-                theme.HoverHandIfItem();
                 ImGui.TextDisabled("Fetch and display savage raid progress from Tomestone.");
 
                 theme.SpacerY(0.5f);
 
                 bool showGearLevel = plugin.Config.Party.ShowGearLevel;
-                if (ImGui.Checkbox("Show gearlevel", ref showGearLevel))
+                if (theme.Checkbox("Show gearlevel", ref showGearLevel))
                 {
                     plugin.Config.Party.ShowGearLevel = showGearLevel;
                     plugin.Config.Save();
                 }
-                theme.HoverHandIfItem();
                 ImGui.TextDisabled("Shows the character's current gearlevel from Tomestone.");
             }
         );
@@ -107,22 +104,18 @@ public class PartyTab
             drawContent: (avail) =>
             {
                 bool partyEnabled = plugin.Config.Party.Enabled;
-                if (ImGui.Checkbox("Enable Party Tracker", ref partyEnabled))
+                if (theme.Checkbox("Enable Party Tracker", ref partyEnabled))
                 {
                     plugin.Config.Party.Enabled = partyEnabled;
                     plugin.Config.Save();
                 }
-                theme.HoverHandIfItem();
-
-                theme.SpacerY(0.5f);
 
                 bool excludeAlliance = plugin.Config.Party.ExcludeAlliance;
-                if (ImGui.Checkbox("Exclude Alliance Parties", ref excludeAlliance))
+                if (theme.Checkbox("Exclude Alliance Parties", ref excludeAlliance))
                 {
                     plugin.Config.Party.ExcludeAlliance = excludeAlliance;
                     plugin.Config.Save();
                 }
-                theme.HoverHandIfItem();
                 ImGui.TextDisabled("Prevents tracking alliance parties (up to 24 members).");
 
                 theme.SpacerY(0.5f);

@@ -74,6 +74,7 @@ public sealed class ConfigWindow : Window, IDisposable
     {
         bool botStarted = plugin.Config.Discord.BotStarted;
 
+        ImGui.BeginDisabled(plugin.Discord.IsBusy);
         var botStatus = theme.BadgeToggle(
             id: "##botStatus",
             ref botStarted,
@@ -90,8 +91,11 @@ public sealed class ConfigWindow : Window, IDisposable
             else
                 plugin.Discord.Stop();
         }
+        ImGui.EndDisabled();
+        theme.HoverHandIfItem();
 
-        theme.SpacerY(3.5f);
+        DrawStats();
+        theme.SpacerY(1f);
         ImGui.Separator();
 
 
@@ -233,6 +237,73 @@ public sealed class ConfigWindow : Window, IDisposable
                 break;
         }
         ImGui.EndChild();
+    }
+
+    private void DrawStats()
+    {
+        var stats = plugin.Config.Stats;
+        bool showMessages = plugin.Config.Chat.Mappings.Count > 0;
+        bool showPeeps = plugin.Config.CordiPeep.Enabled;
+        bool showEmotes = plugin.Config.EmoteLog.Enabled;
+
+        if (!showMessages && !showPeeps && !showEmotes) return;
+
+        // Calculate total width first
+        float totalWidth = 0f;
+        float spacing = 15f;
+        string msgText = $"Msgs: {stats.TotalMessages}";
+        string peepText = $"Peeps: {stats.TotalPeepsTracked}";
+        string emoteText = $"Emotes: {stats.TotalEmotesTracked}";
+
+        if (showMessages) totalWidth += ImGui.CalcTextSize(msgText).X;
+        if (showPeeps) totalWidth += (totalWidth > 0 ? spacing : 0) + ImGui.CalcTextSize(peepText).X;
+        if (showEmotes) totalWidth += (totalWidth > 0 ? spacing : 0) + ImGui.CalcTextSize(emoteText).X;
+
+        // Get the badge rect (last item) for vertical alignment
+        var min = ImGui.GetItemRectMin();
+        var max = ImGui.GetItemRectMax();
+
+        // Calculate start X position (Right aligned)
+        // GetWindowContentRegionMax is relative to WindowPos
+        float rightEdge = ImGui.GetWindowPos().X + ImGui.GetWindowContentRegionMax().X;
+        float startX = rightEdge - totalWidth;
+
+        // Calculate Y position (Vertically centered)
+        var centerY = (min.Y + max.Y) * 0.5f;
+        var textY = centerY - ImGui.GetTextLineHeight() * 0.5f;
+
+        ImGui.SetCursorScreenPos(new Vector2(startX, textY));
+
+        // Helper to draw a single stat
+        void DrawStat(string label, long value, string tooltip)
+        {
+            ImGui.TextColored(theme.MutedText, $"{label}: {value}");
+            if (ImGui.IsItemHovered())
+            {
+                ImGui.SetTooltip(tooltip);
+            }
+        }
+
+        bool first = true;
+
+        if (showMessages)
+        {
+            DrawStat("Msgs", stats.TotalMessages, "Total messages processed");
+            first = false;
+        }
+
+        if (showPeeps)
+        {
+            if (!first) ImGui.SameLine(0, spacing);
+            DrawStat("Peeps", stats.TotalPeepsTracked, "Total players tracked");
+            first = false;
+        }
+
+        if (showEmotes)
+        {
+            if (!first) ImGui.SameLine(0, spacing);
+            DrawStat("Emotes", stats.TotalEmotesTracked, "Total emotes tracked");
+        }
     }
 
     public void Dispose() { }
