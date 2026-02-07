@@ -3,7 +3,10 @@ name: Build, Release and Update
 on:
   push:
     tags:
-      - "*.*.*.*"
+      - "v*"      
+      - "*.*"      
+      - "*.*.*"    
+      - "*.*.*.*" 
   workflow_dispatch:
     inputs:
       version:
