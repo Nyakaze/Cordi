@@ -302,27 +302,24 @@ public class DiscordHandler : IDisposable
                     }
 
                     // Check if the individual message OR the combined message is an ad
-                    // Check individual first (optimization)
-                    isAd = AdvertisementFilter.IsAdvertisement(
-                        sanitizedContent,
-                        _plugin.Config.AdvertisementFilter.ScoreThreshold,
-                        _plugin.Config.AdvertisementFilter.HighScoreRegexPatterns,
-                        _plugin.Config.AdvertisementFilter.HighScoreKeywords,
-                        _plugin.Config.AdvertisementFilter.MediumScoreRegexPatterns,
-                        _plugin.Config.AdvertisementFilter.MediumScoreKeywords,
-                        _plugin.Config.AdvertisementFilter.Whitelist);
+                    // Create local function to avoid repeating the same 6 config parameters
+                    var filterConfig = _plugin.Config.AdvertisementFilter;
+                    bool checkAd(string content) => AdvertisementFilter.IsAdvertisement(
+                        content,
+                        filterConfig.ScoreThreshold,
+                        filterConfig.HighScoreRegexPatterns,
+                        filterConfig.HighScoreKeywords,
+                        filterConfig.MediumScoreRegexPatterns,
+                        filterConfig.MediumScoreKeywords,
+                        filterConfig.Whitelist);
 
-                    if (!isAd)
+                    // Check individual first (optimization) - if single message is an ad, skip combined check
+                    isAd = checkAd(sanitizedContent);
+
+                    if (!isAd && combinedMessage != sanitizedContent)
                     {
-                        // Check combined
-                        isAd = AdvertisementFilter.IsAdvertisement(
-                            combinedMessage,
-                            _plugin.Config.AdvertisementFilter.ScoreThreshold,
-                            _plugin.Config.AdvertisementFilter.HighScoreRegexPatterns,
-                            _plugin.Config.AdvertisementFilter.HighScoreKeywords,
-                            _plugin.Config.AdvertisementFilter.MediumScoreRegexPatterns,
-                            _plugin.Config.AdvertisementFilter.MediumScoreKeywords,
-                            _plugin.Config.AdvertisementFilter.Whitelist);
+                        // Only check combined if it's different and individual wasn't an ad
+                        isAd = checkAd(combinedMessage);
                     }
 
                     if (isAd)
@@ -464,31 +461,79 @@ public class DiscordHandler : IDisposable
     public async Task AddReaction(ulong channelId, ulong messageId, DiscordEmoji emoji)
     {
         if (_client == null) return;
-        try
+        int retryCount = 0;
+        const int maxRetries = 3;
+
+        while (true)
         {
-            var channel = await _client.GetChannelAsync(channelId);
-            var msg = await channel.GetMessageAsync(messageId);
-            await msg.CreateReactionAsync(emoji);
-        }
-        catch (Exception ex)
-        {
-            Logger.Error(ex, "Failed to add reaction.");
+            try
+            {
+                var channel = await _client.GetChannelAsync(channelId);
+                var msg = await channel.GetMessageAsync(messageId);
+                await msg.CreateReactionAsync(emoji);
+                break;
+            }
+            catch (Exception ex)
+            {
+                if (retryCount++ >= maxRetries)
+                {
+                    Logger.Error(ex, "Failed to add reaction after retries.");
+                    break;
+                }
+
+                // Check if it's a network/socket error worth retrying
+                if (ex is System.Net.Http.HttpRequestException ||
+                    ex is System.Net.Sockets.SocketException ||
+                    ex is System.IO.IOException)
+                {
+                    Logger.Warning($"AddReaction failed (Retry {retryCount}/{maxRetries}): {ex.Message}");
+                    await Task.Delay(1000 * retryCount);
+                }
+                else
+                {
+                    Logger.Error(ex, "Failed to add reaction (Non-transient error).");
+                    break;
+                }
+            }
         }
     }
 
     public async Task RemoveReaction(ulong channelId, ulong messageId, DiscordEmoji emoji)
     {
         if (_client == null) return;
-        try
-        {
-            var channel = await _client.GetChannelAsync(channelId);
-            var msg = await channel.GetMessageAsync(messageId);
+        int retryCount = 0;
+        const int maxRetries = 3;
 
-            await msg.DeleteOwnReactionAsync(emoji);
-        }
-        catch (Exception ex)
+        while (true)
         {
-            Logger.Error(ex, "Failed to remove reaction.");
+            try
+            {
+                var channel = await _client.GetChannelAsync(channelId);
+                var msg = await channel.GetMessageAsync(messageId);
+                await msg.DeleteOwnReactionAsync(emoji);
+                break;
+            }
+            catch (Exception ex)
+            {
+                if (retryCount++ >= maxRetries)
+                {
+                    Logger.Error(ex, "Failed to remove reaction after retries.");
+                    break;
+                }
+
+                if (ex is System.Net.Http.HttpRequestException ||
+                    ex is System.Net.Sockets.SocketException ||
+                    ex is System.IO.IOException)
+                {
+                    Logger.Warning($"RemoveReaction failed (Retry {retryCount}/{maxRetries}): {ex.Message}");
+                    await Task.Delay(1000 * retryCount);
+                }
+                else
+                {
+                    Logger.Error(ex, "Failed to remove reaction (Non-transient error).");
+                    break;
+                }
+            }
         }
     }
 

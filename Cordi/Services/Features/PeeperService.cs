@@ -85,6 +85,8 @@ public class CordiPeepService : IDisposable
     {
         if (!plugin.Config.CordiPeep.Enabled) return;
 
+        if (plugin.CordiPeepWindow == null) return;
+
         bool windowOpen = plugin.CordiPeepWindow.IsOpen;
         bool detectClosed = plugin.Config.CordiPeep.DetectWhenClosed;
         if (!windowOpen && !detectClosed) return;

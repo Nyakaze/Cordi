@@ -35,10 +35,6 @@ public class ChatsTab
 
 
 
-    private DateTime _lastChannelFetch = DateTime.MinValue;
-    private readonly TimeSpan _cacheInterval = TimeSpan.FromSeconds(5);
-    private List<DiscordChannel> _cachedTextChannels = new();
-    private List<DiscordChannel> _cachedForumChannels = new();
     private Dictionary<ulong, string> _cachedAvailableThreads = new();
 
 
@@ -61,13 +57,11 @@ public class ChatsTab
         bool enabled = true;
 
 
-        if (DateTime.Now - _lastChannelFetch > _cacheInterval)
-        {
-            RefreshChannelCache();
-        }
+        plugin.ChannelCache.RefreshIfNeeded();
+        RefreshThreadCache();
 
-        var textChannels = _cachedTextChannels;
-        var forumChannels = _cachedForumChannels;
+        var textChannels = plugin.ChannelCache.TextChannels;
+        var forumChannels = plugin.ChannelCache.ForumChannels;
 
 
         DrawDefaultChannelCard(textChannels, ref enabled);
@@ -96,47 +90,17 @@ public class ChatsTab
         theme.SpacerY(2f);
     }
 
-    private void RefreshChannelCache()
+    private void RefreshThreadCache()
     {
-        _lastChannelFetch = DateTime.Now;
-        var allChannels = plugin.Discord.Client?.Guilds.Values
-            .SelectMany(g => g.Channels.Values)
-            .ToList();
-
-        if (allChannels == null)
-        {
-            _cachedTextChannels.Clear();
-            _cachedForumChannels.Clear();
-        }
-        else
-        {
-            _cachedTextChannels = allChannels.Where(c => c.Type == ChannelType.Text).ToList();
-            _cachedForumChannels = allChannels.Where(c => c.Type == ChannelType.GuildForum).ToList();
-        }
-
-
         _cachedAvailableThreads.Clear();
         var tellMap = plugin.Config.Chat.Mappings.FirstOrDefault(m => m.GameChatType == XivChatType.TellIncoming);
-        if (tellMap != null && ulong.TryParse(tellMap.DiscordChannelId, out var forumId) && plugin.Discord.Client != null)
+        if (tellMap != null && ulong.TryParse(tellMap.DiscordChannelId, out var forumId))
         {
-            foreach (var guild in plugin.Discord.Client.Guilds.Values)
-            {
-                if (guild.Channels.ContainsKey(forumId))
-                {
-                    foreach (var thread in guild.Threads.Values)
-                    {
-                        if (thread.ParentId == forumId)
-                        {
-                            _cachedAvailableThreads[thread.Id] = thread.Name;
-                        }
-                    }
-                    break;
-                }
-            }
+            _cachedAvailableThreads = plugin.ChannelCache.GetThreadsForForum(forumId);
         }
     }
 
-    private void DrawDefaultChannelCard(List<DiscordChannel>? textChannels, ref bool enabled)
+    private void DrawDefaultChannelCard(IReadOnlyList<DiscordChannel>? textChannels, ref bool enabled)
     {
         string defaultChannelId = plugin.Config.Discord.DefaultChannelId;
 
@@ -152,39 +116,18 @@ public class ChatsTab
 
                 if (textChannels != null)
                 {
-                    string preview = "Select a Channel...";
-                    if (!string.IsNullOrEmpty(defaultChannelId))
-                    {
-                        var current = textChannels.FirstOrDefault(c => c.Id.ToString() == defaultChannelId);
-                        if (current != null) preview = $"#{current.Name}";
-                        else preview = defaultChannelId;
-                    }
-
-                    ImGui.PushItemWidth(availWidth);
-                    if (ImGui.BeginCombo("##dsc-default-channel-combo", preview))
-                    {
-                        if (ImGui.Selectable("None", string.IsNullOrEmpty(defaultChannelId)))
+                    theme.ChannelPicker(
+                        "dsc-default-channel-combo",
+                        defaultChannelId,
+                        textChannels,
+                        (newId) =>
                         {
-                            defaultChannelId = string.Empty;
-                            plugin.Config.Discord.DefaultChannelId = defaultChannelId;
+                            plugin.Config.Discord.DefaultChannelId = newId;
                             plugin.Config.Save();
-                        }
-
-                        foreach (var channel in textChannels)
-                        {
-                            bool isSelected = channel.Id.ToString() == defaultChannelId;
-                            if (ImGui.Selectable($"#{channel.Name}", isSelected))
-                            {
-                                defaultChannelId = channel.Id.ToString();
-                                plugin.Config.Discord.DefaultChannelId = defaultChannelId;
-                                plugin.Config.Save();
-                                _lastChannelFetch = DateTime.MinValue;
-                            }
-                            if (isSelected) ImGui.SetItemDefaultFocus();
-                        }
-                        ImGui.EndCombo();
-                    }
-                    ImGui.PopItemWidth();
+                            plugin.ChannelCache.Invalidate();
+                        },
+                        defaultLabel: "Select a Channel..."
+                    );
                 }
                 else
                 {
@@ -203,7 +146,7 @@ public class ChatsTab
         );
     }
 
-    private void DrawChatMappingsCard(List<DiscordChannel>? textChannels, List<DiscordChannel>? forumChannels, ref bool enabled)
+    private void DrawChatMappingsCard(IReadOnlyList<DiscordChannel>? textChannels, IReadOnlyList<DiscordChannel>? forumChannels, ref bool enabled)
     {
         theme.DrawPluginCardAuto(
            id: "chat-mappings-card",
@@ -231,66 +174,47 @@ public class ChatsTab
                        ImGui.Text(label);
 
                        ImGui.TableNextColumn();
-                       ImGui.SetNextItemWidth(-1);
-
                        string currentId = "";
                        if (plugin.Config.MappingCache.TryGetValue(chatType, out var cachedId)) currentId = cachedId;
-
-                       string preview = "None";
 
                        bool isTell = chatType == XivChatType.TellIncoming;
                        var targetChannels = isTell ? forumChannels : textChannels;
 
-                       if (!string.IsNullOrEmpty(currentId) && targetChannels != null)
-                       {
-                           var ch = targetChannels.FirstOrDefault(c => c.Id.ToString() == currentId);
-                           if (ch != null) preview = $"#{ch.Name}";
-                           else preview = currentId;
-                       }
-
-                       if (ImGui.BeginCombo($"##combo-{chatType}", preview))
-                       {
-                           if (ImGui.Selectable("None", string.IsNullOrEmpty(currentId)))
+                       theme.ChannelPicker(
+                           $"combo-{chatType}",
+                           currentId,
+                           targetChannels,
+                           (newId) =>
                            {
-                               var map = plugin.Config.Chat.Mappings.FirstOrDefault(m => m.GameChatType == chatType);
-                               if (map != null) plugin.Config.Chat.Mappings.Remove(map);
-                               if (isTell)
+                               if (string.IsNullOrEmpty(newId))
                                {
-                                   var mapOut = plugin.Config.Chat.Mappings.FirstOrDefault(m => m.GameChatType == XivChatType.TellOutgoing);
-                                   if (mapOut != null) plugin.Config.Chat.Mappings.Remove(mapOut);
+                                   var map = plugin.Config.Chat.Mappings.FirstOrDefault(m => m.GameChatType == chatType);
+                                   if (map != null) plugin.Config.Chat.Mappings.Remove(map);
+                                   if (isTell)
+                                   {
+                                       var mapOut = plugin.Config.Chat.Mappings.FirstOrDefault(m => m.GameChatType == XivChatType.TellOutgoing);
+                                       if (mapOut != null) plugin.Config.Chat.Mappings.Remove(mapOut);
+                                   }
+                               }
+                               else
+                               {
+                                   var map = plugin.Config.Chat.Mappings.FirstOrDefault(m => m.GameChatType == chatType);
+
+                                   if (map != null) map.DiscordChannelId = newId;
+                                   else plugin.Config.Chat.Mappings.Add(new ChannelMapping { GameChatType = chatType, DiscordChannelId = newId });
+
+                                   if (isTell)
+                                   {
+                                       var mapOut = plugin.Config.Chat.Mappings.FirstOrDefault(m => m.GameChatType == XivChatType.TellOutgoing);
+                                       if (mapOut != null) mapOut.DiscordChannelId = newId;
+                                       else plugin.Config.Chat.Mappings.Add(new ChannelMapping { GameChatType = XivChatType.TellOutgoing, DiscordChannelId = newId });
+                                   }
                                }
                                plugin.Config.Save();
-                           }
-
-                           if (targetChannels != null)
-                           {
-                               foreach (var channel in targetChannels)
-                               {
-                                   bool isSelected = channel.Id.ToString() == currentId;
-                                   if (ImGui.Selectable($"#{channel.Name}", isSelected))
-                                   {
-                                       string newId = channel.Id.ToString();
-
-                                       var map = plugin.Config.Chat.Mappings.FirstOrDefault(m => m.GameChatType == chatType);
-
-                                       if (map != null) map.DiscordChannelId = newId;
-                                       else plugin.Config.Chat.Mappings.Add(new ChannelMapping { GameChatType = chatType, DiscordChannelId = newId });
-
-                                       if (isTell)
-                                       {
-                                           var mapOut = plugin.Config.Chat.Mappings.FirstOrDefault(m => m.GameChatType == XivChatType.TellOutgoing);
-                                           if (mapOut != null) mapOut.DiscordChannelId = newId;
-                                           else plugin.Config.Chat.Mappings.Add(new ChannelMapping { GameChatType = XivChatType.TellOutgoing, DiscordChannelId = newId });
-                                       }
-                                       plugin.Config.Save();
-                                       _lastChannelFetch = DateTime.MinValue;
-                                   }
-                                   if (isSelected) ImGui.SetItemDefaultFocus();
-                               }
-                           }
-                           ImGui.EndCombo();
-                       }
-                       theme.HoverHandIfItem();
+                               plugin.ChannelCache.Invalidate();
+                           },
+                           showLabel: false
+                       );
 
                        // Advertisement Filter checkbox
                        ImGui.TableNextColumn();
@@ -298,11 +222,11 @@ public class ChatsTab
                        if (mapping != null && !string.IsNullOrEmpty(mapping.DiscordChannelId))
                        {
                            bool filterEnabled = mapping.EnableAdvertisementFilter;
-                           if (theme.Checkbox($"##filter-{chatType}", ref filterEnabled))
+                           theme.ConfigCheckbox($"##filter-{chatType}", ref filterEnabled, () =>
                            {
                                mapping.EnableAdvertisementFilter = filterEnabled;
                                plugin.Config.Save();
-                           }
+                           });
                            if (ImGui.IsItemHovered())
                            {
                                ImGui.SetTooltip("Enable advertisement filter for this channel");
@@ -368,7 +292,7 @@ public class ChatsTab
        );
     }
 
-    private void DrawActiveTellsCard(List<DiscordChannel>? forumChannels, ref bool enabled)
+    private void DrawActiveTellsCard(IReadOnlyList<DiscordChannel>? forumChannels, ref bool enabled)
     {
         var tells = plugin.Config.Chat.TellThreadMappings;
         var availableThreads = _cachedAvailableThreads;

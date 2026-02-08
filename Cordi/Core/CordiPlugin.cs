@@ -48,6 +48,7 @@ public class CordiPlugin : IDalamudPlugin
     public DiscordWebhookService Webhook { get; private set; }
     public ActivityManager ActivityManager { get; private set; }
     public HonorificBridge HonorificBridge { get; private set; }
+    public DiscordChannelCache ChannelCache { get; private set; }
 
 
     static readonly IPluginLog Logger = Service.Log;
@@ -94,6 +95,7 @@ public class CordiPlugin : IDalamudPlugin
         Lodestone = new LodestoneService(this);
         Tomestone = new TomestoneService(this);
         Webhook = new DiscordWebhookService(this);
+        ChannelCache = new DiscordChannelCache(this);
         Discord = new DiscordHandler(this, Webhook);
 
         NotificationManager = new NotificationManager();

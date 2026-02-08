@@ -22,9 +22,6 @@ public class EmoteLogTab
     private readonly UiTheme theme;
 
 
-    private DateTime _lastChannelFetch = DateTime.MinValue;
-    private readonly TimeSpan _cacheInterval = TimeSpan.FromSeconds(5);
-    private List<DiscordChannel> _cachedTextChannels = new();
 
     private string newBlacklistName = string.Empty;
     private string newBlacklistWorld = string.Empty;
@@ -40,10 +37,7 @@ public class EmoteLogTab
         theme.SpacerY(2f);
 
 
-        if (DateTime.Now - _lastChannelFetch > _cacheInterval)
-        {
-            RefreshChannelCache();
-        }
+        plugin.ChannelCache.RefreshIfNeeded();
 
         bool enabled = true;
 
@@ -55,27 +49,27 @@ public class EmoteLogTab
             drawContent: (avail) =>
             {
                 var logEnabled = plugin.Config.EmoteLog.Enabled;
-                if (ImGui.Checkbox("Enable Emote Detection", ref logEnabled))
+                theme.ConfigCheckbox("Enable Emote Detection", ref logEnabled, () =>
                 {
                     plugin.Config.EmoteLog.Enabled = logEnabled;
                     plugin.Config.Save();
-                }
+                });
                 theme.HoverHandIfItem();
 
                 var detectClosed = plugin.Config.EmoteLog.DetectWhenClosed;
-                if (ImGui.Checkbox("Detect when Window is Closed", ref detectClosed))
+                theme.ConfigCheckbox("Detect when Window is Closed", ref detectClosed, () =>
                 {
                     plugin.Config.EmoteLog.DetectWhenClosed = detectClosed;
                     plugin.Config.Save();
-                }
+                });
                 theme.HoverHandIfItem();
 
                 var discordEnabled = plugin.Config.EmoteLog.DiscordEnabled;
-                if (ImGui.Checkbox("Enable Discord Notifications", ref discordEnabled))
+                theme.ConfigCheckbox("Enable Discord Notifications", ref discordEnabled, () =>
                 {
                     plugin.Config.EmoteLog.DiscordEnabled = discordEnabled;
                     plugin.Config.Save();
-                }
+                });
                 theme.HoverHandIfItem();
 
                 theme.SpacerY(0.5f);
@@ -85,38 +79,24 @@ public class EmoteLogTab
                 string currentId = plugin.Config.EmoteLog.ChannelId;
                 string preview = "None";
 
-                if (!string.IsNullOrEmpty(currentId) && _cachedTextChannels != null)
+                if (!string.IsNullOrEmpty(currentId) && plugin.ChannelCache.TextChannels != null)
                 {
-                    var ch = _cachedTextChannels.FirstOrDefault(c => c.Id.ToString() == currentId);
+                    var ch = plugin.ChannelCache.TextChannels.FirstOrDefault(c => c.Id.ToString() == currentId);
                     if (ch != null) preview = $"#{ch.Name}";
                     else preview = currentId;
                 }
 
-                ImGui.PushItemWidth(avail);
-                if (ImGui.BeginCombo("##emoteLogChannel", preview))
-                {
-                    if (ImGui.Selectable("None", string.IsNullOrEmpty(currentId)))
+                theme.ChannelPicker(
+                    "emoteLogChannel",
+                    plugin.Config.EmoteLog.ChannelId,
+                    plugin.ChannelCache.TextChannels,
+                    (newId) =>
                     {
-                        plugin.Config.EmoteLog.ChannelId = string.Empty;
+                        plugin.Config.EmoteLog.ChannelId = newId;
                         plugin.Config.Save();
-                    }
-
-                    if (_cachedTextChannels != null)
-                    {
-                        foreach (var channel in _cachedTextChannels)
-                        {
-                            bool isSelected = channel.Id.ToString() == currentId;
-                            if (ImGui.Selectable($"#{channel.Name}", isSelected))
-                            {
-                                plugin.Config.EmoteLog.ChannelId = channel.Id.ToString();
-                                plugin.Config.Save();
-                            }
-                            if (isSelected) ImGui.SetItemDefaultFocus();
-                        }
-                    }
-                    ImGui.EndCombo();
-                }
-                ImGui.PopItemWidth();
+                    },
+                    defaultLabel: "None"
+                );
                 theme.HoverHandIfItem();
             }
         );
@@ -136,29 +116,29 @@ public class EmoteLogTab
 
                 ImGui.BeginGroup();
                 bool windowOpen = plugin.EmoteLogWindow.IsOpen;
-                if (ImGui.Checkbox("Enable Window", ref windowOpen))
+                theme.ConfigCheckbox("Enable Window", ref windowOpen, () =>
                 {
                     plugin.EmoteLogWindow.IsOpen = windowOpen;
                     plugin.Config.EmoteLog.WindowEnabled = windowOpen;
                     plugin.Config.Save();
                     plugin.UpdateCommandVisibility();
-                }
+                });
                 theme.HoverHandIfItem();
 
                 var openOnLogin = plugin.Config.EmoteLog.WindowOpenOnLogin;
-                if (ImGui.Checkbox("Open on Login", ref openOnLogin))
+                theme.ConfigCheckbox("Open on Login", ref openOnLogin, () =>
                 {
                     plugin.Config.EmoteLog.WindowOpenOnLogin = openOnLogin;
                     plugin.Config.Save();
-                }
+                });
                 theme.HoverHandIfItem();
 
                 var lockPos = plugin.Config.EmoteLog.WindowLockPosition;
-                if (ImGui.Checkbox("Lock Position", ref lockPos))
+                theme.ConfigCheckbox("Lock Position", ref lockPos, () =>
                 {
                     plugin.Config.EmoteLog.WindowLockPosition = lockPos;
                     plugin.Config.Save();
-                }
+                });
                 theme.HoverHandIfItem();
                 ImGui.EndGroup();
 
@@ -167,19 +147,19 @@ public class EmoteLogTab
 
                 ImGui.BeginGroup();
                 var lockSize = plugin.Config.EmoteLog.WindowLockSize;
-                if (ImGui.Checkbox("Lock Size", ref lockSize))
+                theme.ConfigCheckbox("Lock Size", ref lockSize, () =>
                 {
                     plugin.Config.EmoteLog.WindowLockSize = lockSize;
                     plugin.Config.Save();
-                }
+                });
                 theme.HoverHandIfItem();
 
                 var showReply = plugin.Config.EmoteLog.ShowReplyButton;
-                if (ImGui.Checkbox("Show Reply Button", ref showReply))
+                theme.ConfigCheckbox("Show Reply Button", ref showReply, () =>
                 {
                     plugin.Config.EmoteLog.ShowReplyButton = showReply;
                     plugin.Config.Save();
-                }
+                });
                 theme.HoverHandIfItem();
                 ImGui.EndGroup();
 
@@ -206,11 +186,11 @@ public class EmoteLogTab
             {
                 ImGui.BeginGroup();
                 var includeSelf = plugin.Config.EmoteLog.IncludeSelf;
-                if (ImGui.Checkbox("Include Self", ref includeSelf))
+                theme.ConfigCheckbox("Include Self", ref includeSelf, () =>
                 {
                     plugin.Config.EmoteLog.IncludeSelf = includeSelf;
                     plugin.Config.Save();
-                }
+                });
                 theme.HoverHandIfItem();
                 ImGui.EndGroup();
 
@@ -219,11 +199,11 @@ public class EmoteLogTab
 
                 ImGui.BeginGroup();
                 var collapse = plugin.Config.EmoteLog.CollapseDuplicates;
-                if (ImGui.Checkbox("Collapse Duplicates", ref collapse))
+                theme.ConfigCheckbox("Collapse Duplicates", ref collapse, () =>
                 {
                     plugin.Config.EmoteLog.CollapseDuplicates = collapse;
                     plugin.Config.Save();
-                }
+                });
                 theme.HoverHandIfItem();
                 ImGui.EndGroup();
             }
@@ -298,11 +278,11 @@ public class EmoteLogTab
 
                             ImGui.TableNextColumn();
                             bool noDiscord = entry.DisableDiscord;
-                            if (ImGui.Checkbox($"##emoteBlDiscord{i}", ref noDiscord))
+                            theme.ConfigCheckbox($"##emoteBlDiscord{i}", ref noDiscord, () =>
                             {
                                 entry.DisableDiscord = noDiscord;
                                 plugin.Config.Save();
-                            }
+                            });
 
                             ImGui.TableNextColumn();
                             if (ImGui.Button($"Remove##remEmoteBl{i}", new Vector2(-1, 0)))
@@ -320,20 +300,4 @@ public class EmoteLogTab
         );
     }
 
-    private void RefreshChannelCache()
-    {
-        _lastChannelFetch = DateTime.Now;
-        var allChannels = plugin.Discord.Client?.Guilds.Values
-            .SelectMany(g => g.Channels.Values)
-            .ToList();
-
-        if (allChannels == null)
-        {
-            _cachedTextChannels.Clear();
-        }
-        else
-        {
-            _cachedTextChannels = allChannels.Where(c => c.Type == ChannelType.Text).ToList();
-        }
-    }
 }
