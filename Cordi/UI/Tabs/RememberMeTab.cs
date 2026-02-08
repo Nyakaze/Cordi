@@ -28,6 +28,9 @@ public class RememberMeTab
     private string viewingGlamourPlayer = string.Empty;
     private PlayerGlamour? viewingGlamour = null;
 
+    private bool showRememberedPlayers = true;
+    private bool showExaminedPlayers = false;
+
     public RememberMeTab(CordiPlugin plugin, UiTheme theme)
     {
         this.plugin = plugin;
@@ -50,13 +53,13 @@ public class RememberMeTab
         ImGui.Separator();
         theme.SpacerY(1f);
 
-        DrawPlayersCard(ref enabled);
+        DrawPlayersCard();
 
         theme.SpacerY(1f);
         ImGui.Separator();
         theme.SpacerY(1f);
 
-        DrawExaminedCard(ref enabled);
+        DrawExaminedCard();
 
         if (!string.IsNullOrEmpty(viewingGlamourPlayer) && viewingGlamour != null)
         {
@@ -81,6 +84,7 @@ public class RememberMeTab
                     plugin.Config.Save();
                 }
                 theme.HoverHandIfItem();
+                ImGui.TextDisabled("Automatically track party members and display notes in notifications.");
 
                 bool examineEnabled = plugin.Config.RememberMe.EnableExamineFeature;
                 if (ImGui.Checkbox("Enable Examine Feature", ref examineEnabled))
@@ -89,12 +93,10 @@ public class RememberMeTab
                     plugin.Config.Save();
                 }
                 theme.HoverHandIfItem();
-                ImGui.TextDisabled("Automatically track party members and display notes in notifications.");
+                ImGui.SameLine();
+                ImGui.TextColored(UiTheme.ColorDangerText, " (WIP)");
 
                 theme.SpacerY(0.5f);
-
-                var playerCount = plugin.Config.RememberMe.RememberedPlayers.Count;
-                ImGui.Text($"Remembered players: {playerCount}");
             }
         );
     }
@@ -163,256 +165,134 @@ public class RememberMeTab
         );
     }
 
-    private void DrawPlayersCard(ref bool cardEnabled)
+    private void DrawPlayersCard()
     {
-        theme.DrawPluginCardAuto(
-            id: "rememberme-players",
-            title: "Remembered Players",
-            enabled: ref cardEnabled,
-            drawContent: (avail) =>
+
+
+        if (showAddNew)
+        {
+            theme.SpacerY(0.5f);
+            ImGui.Separator();
+            theme.SpacerY(0.5f);
+
+            DrawAddNewForm(ImGui.GetContentRegionAvail().X);
+
+            theme.SpacerY(0.5f);
+            ImGui.Separator();
+            theme.SpacerY(0.5f);
+        }
+
+        theme.SpacerY(0.5f);
+
+        var players = string.IsNullOrWhiteSpace(searchText)
+            ? plugin.RememberMe.GetAllPlayers()
+            : plugin.RememberMe.SearchPlayers(searchText);
+
+        Action<RememberedPlayerEntry> onDelete = (player) =>
+        {
+            plugin.RememberMe.RemovePlayer(player.Name, player.World);
+        };
+
+        Action<RememberedPlayerEntry, string> onSaveNote = (player, note) =>
+        {
+            plugin.RememberMe.UpdateNotes(player.Name, player.World, note);
+        };
+
+        Action<string, string> onAdd = (nameWorld, note) =>
+        {
+            var parts = nameWorld.Split(new[] { '@', ' ' }, StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length >= 2)
             {
-                ImGui.SetNextItemWidth(avail * 0.6f);
-                if (ImGui.InputTextWithHint("##search", "Search by name, world, or notes...", ref searchText, 256))
+                string name = parts[0] + " " + parts[1];
+                string world = parts.Length > 2 ? parts[2] : parts[1]; // Handle "First Last World" vs "First Last" (ambiguous without world)
+                // Actually user probably types "First Last@World" or "First Last World".
+                // If "First Last", world is missing.
+                // If "First Last World", standard format.
+                // Let's assume input is "Name World" or "Name@World".
+                // If input "First Last", we might need world.
+                // If input "First Last@World", split by @ gives "First Last" and "World".
+            }
+
+            // Better parsing logic:
+            string pName = nameWorld;
+            string pWorld = "";
+            if (nameWorld.Contains("@"))
+            {
+                var s = nameWorld.Split('@');
+                pName = s[0].Trim();
+                if (s.Length > 1) pWorld = s[1].Trim();
+            }
+            else
+            {
+                // Try to find world at end? Or just require @ for explicit world.
+                // Or split by spaces.
+                var s = nameWorld.Split(' ');
+                if (s.Length >= 3)
                 {
+                    pWorld = s.Last();
+                    pName = string.Join(" ", s.Take(s.Length - 1));
                 }
-                theme.HoverHandIfItem();
-
-                ImGui.SameLine();
-                if (ImGui.Button(showAddNew ? "Cancel" : "Add New"))
+                else
                 {
-                    showAddNew = !showAddNew;
-                    if (!showAddNew)
-                    {
-                        newPlayerName = string.Empty;
-                        newPlayerWorld = string.Empty;
-                        newPlayerNotes = string.Empty;
-                    }
-                }
-                theme.HoverHandIfItem();
-
-                if (showAddNew)
-                {
-                    theme.SpacerY(0.5f);
-                    ImGui.Separator();
-                    theme.SpacerY(0.5f);
-
-                    DrawAddNewForm(avail);
-
-                    theme.SpacerY(0.5f);
-                    ImGui.Separator();
-                    theme.SpacerY(0.5f);
-                }
-
-                var players = string.IsNullOrWhiteSpace(searchText)
-                    ? plugin.RememberMe.GetAllPlayers()
-                    : plugin.RememberMe.SearchPlayers(searchText);
-
-                if (players.Count == 0)
-                {
-                    theme.SpacerY(1f);
-                    ImGui.TextDisabled(string.IsNullOrWhiteSpace(searchText)
-                        ? "No remembered players yet. Party members will be tracked automatically."
-                        : "No players found matching your search.");
-                    return;
-                }
-
-                theme.SpacerY(0.5f);
-
-                if (ImGui.BeginTable("##playersTable", 4, ImGuiTableFlags.NoBordersInBody | ImGuiTableFlags.RowBg | ImGuiTableFlags.ScrollY))
-                {
-                    ImGui.TableSetupColumn("Player", ImGuiTableColumnFlags.WidthFixed, 180f);
-                    ImGui.TableSetupColumn("Last Seen", ImGuiTableColumnFlags.WidthFixed, 120f);
-                    ImGui.TableSetupColumn("Notes", ImGuiTableColumnFlags.WidthStretch);
-                    ImGui.TableSetupColumn("Actions", ImGuiTableColumnFlags.WidthFixed, 80f);
-                    ImGui.TableSetupScrollFreeze(0, 1);
-                    ImGui.TableHeadersRow();
-
-                    foreach (var player in players)
-                    {
-                        ImGui.TableNextRow();
-
-                        ImGui.TableSetColumnIndex(0);
-                        ImGui.Text(player.FullName);
-
-                        ImGui.TableSetColumnIndex(1);
-                        ImGui.TextDisabled(player.GetLastSeenRelative());
-
-                        ImGui.TableSetColumnIndex(2);
-                        var playerKey = $"{player.Name}@{player.World}";
-
-                        if (editingPlayerKey == playerKey)
-                        {
-                            ImGui.SetNextItemWidth(-1);
-                            if (ImGui.InputTextMultiline($"##editNotes_{playerKey}", ref editingNotes, 1000, new Vector2(-1, 60)))
-                            {
-                            }
-                            theme.HoverHandIfItem();
-                        }
-                        else
-                        {
-                            if (string.IsNullOrWhiteSpace(player.Notes))
-                            {
-                                ImGui.TextDisabled("(No notes)");
-                            }
-                            else
-                            {
-                                ImGui.TextWrapped(player.Notes);
-                            }
-                        }
-
-                        ImGui.TableSetColumnIndex(3);
-
-                        if (editingPlayerKey == playerKey)
-                        {
-                            if (ImGuiComponents.IconButton($"##save_{playerKey}", FontAwesomeIcon.Check))
-                            {
-                                plugin.RememberMe.UpdateNotes(player.Name, player.World, editingNotes);
-                                editingPlayerKey = string.Empty;
-                                editingNotes = string.Empty;
-                            }
-                            theme.HoverHandIfItem();
-                            if (ImGui.IsItemHovered())
-                            {
-                                ImGui.SetTooltip("Save");
-                            }
-
-                            ImGui.SameLine();
-                            if (ImGuiComponents.IconButton($"##cancel_{playerKey}", FontAwesomeIcon.Times))
-                            {
-                                editingPlayerKey = string.Empty;
-                                editingNotes = string.Empty;
-                            }
-                            theme.HoverHandIfItem();
-                            if (ImGui.IsItemHovered())
-                            {
-                                ImGui.SetTooltip("Cancel");
-                            }
-                        }
-                        else
-                        {
-                            if (ImGuiComponents.IconButton($"##edit_{playerKey}", FontAwesomeIcon.Edit))
-                            {
-                                editingPlayerKey = playerKey;
-                                editingNotes = player.Notes;
-                            }
-                            theme.HoverHandIfItem();
-                            if (ImGui.IsItemHovered())
-                            {
-                                ImGui.SetTooltip("Edit notes");
-                            }
-
-                            ImGui.SameLine();
-
-                            // Removed Glamour button from Remembered Players card as requested.
-
-                            if (ImGuiComponents.IconButton($"##delete_{playerKey}", FontAwesomeIcon.Trash))
-                            {
-                                plugin.RememberMe.RemovePlayer(player.Name, player.World);
-                            }
-                            theme.HoverHandIfItem();
-                            if (ImGui.IsItemHovered())
-                            {
-                                ImGui.SetTooltip("Delete");
-                            }
-                        }
-                    }
-
-                    ImGui.EndTable();
+                    // Fallback or error?
+                    // Verify if world is valid?
+                    // For now, let's just try to add.
+                    pName = nameWorld; // And world empty?
                 }
             }
+
+            if (!string.IsNullOrWhiteSpace(pName) && !string.IsNullOrWhiteSpace(pWorld))
+            {
+                plugin.RememberMe.AddOrUpdatePlayer(pName, pWorld, null, note);
+            }
+        };
+
+        theme.DrawPlayerTable(
+            "rememberme-players",
+            "Remembered Players",
+            ref showRememberedPlayers,
+            players,
+            onDelete,
+            onSaveNote,
+            null, // No glamour button for remembered list
+            null, // No Footer, built-in
+            searchText,
+            (val) => searchText = val,
+            onAdd
         );
     }
 
-    private void DrawExaminedCard(ref bool cardEnabled)
+    private void DrawExaminedCard()
     {
-        theme.DrawPluginCardAuto(
-            id: "rememberme-examined",
-            title: "Examined Players",
-            enabled: ref cardEnabled,
-            drawContent: (avail) =>
-            {
-                ImGui.SetNextItemWidth(avail);
-                if (ImGui.InputTextWithHint("##searchExamined", "Search examined players...", ref searchExaminedText, 256))
-                {
-                }
-                theme.HoverHandIfItem();
+        var players = plugin.RememberMe.GetAllExaminedPlayers();
 
-                var players = plugin.RememberMe.GetAllExaminedPlayers();
+        if (!string.IsNullOrWhiteSpace(searchExaminedText))
+        {
+            players = plugin.RememberMe.SearchExaminedPlayers(searchExaminedText);
+        }
 
-                if (!string.IsNullOrWhiteSpace(searchExaminedText))
-                {
-                    players = plugin.RememberMe.SearchExaminedPlayers(searchExaminedText);
-                }
+        Action<RememberedPlayerEntry> onDelete = (player) =>
+        {
+            plugin.RememberMe.RemoveExaminedPlayer(player.Name, player.World);
+        };
 
-                // Debug UI state
-                // Service.Log.Debug($"[RememberMe] UI Players List Count: {players.Count} | Search: '{searchExaminedText}'");
+        Action<RememberedPlayerEntry> onShowGlamour = (player) =>
+        {
+            viewingGlamourPlayer = player.FullName;
+            viewingGlamour = player.Glamour;
+        };
 
-                if (players.Count == 0)
-                {
-                    theme.SpacerY(1f);
-                    ImGui.TextDisabled(string.IsNullOrWhiteSpace(searchExaminedText)
-                        ? "No examined players yet. Inspect players in-game to track them."
-                        : "No players found matching your search.");
-                    return;
-                }
-
-                theme.SpacerY(0.5f);
-
-                if (ImGui.BeginTable("##examinedTable", 4, ImGuiTableFlags.NoBordersInBody | ImGuiTableFlags.RowBg))
-                {
-                    ImGui.TableSetupColumn("Player", ImGuiTableColumnFlags.WidthFixed, 180f);
-                    ImGui.TableSetupColumn("Captured", ImGuiTableColumnFlags.WidthFixed, 120f);
-                    ImGui.TableSetupColumn("Info", ImGuiTableColumnFlags.WidthStretch);
-                    ImGui.TableSetupColumn("Actions", ImGuiTableColumnFlags.WidthFixed, 80f);
-                    ImGui.TableHeadersRow();
-
-                    foreach (var player in players)
-                    {
-                        ImGui.TableNextRow();
-
-                        ImGui.TableSetColumnIndex(0);
-                        ImGui.Text(player.FullName);
-
-                        ImGui.TableSetColumnIndex(1);
-                        ImGui.TextDisabled(player.GetLastSeenRelative());
-
-                        ImGui.TableSetColumnIndex(2);
-                        if (player.Glamour != null)
-                            ImGui.TextDisabled("Has Glamour");
-                        else
-                            ImGui.TextDisabled("-");
-
-                        ImGui.TableSetColumnIndex(3);
-
-                        if (player.Glamour != null)
-                        {
-                            if (ImGuiComponents.IconButton($"##ex_glamour_{player.Name}", FontAwesomeIcon.Tshirt))
-                            {
-                                viewingGlamourPlayer = player.FullName;
-                                viewingGlamour = player.Glamour;
-                            }
-                            theme.HoverHandIfItem();
-                            if (ImGui.IsItemHovered())
-                            {
-                                ImGui.SetTooltip("Show Glamour");
-                            }
-                            ImGui.SameLine();
-                        }
-
-                        if (ImGuiComponents.IconButton($"##ex_delete_{player.Name}", FontAwesomeIcon.Trash))
-                        {
-                            plugin.RememberMe.RemoveExaminedPlayer(player.Name, player.World);
-                        }
-                        theme.HoverHandIfItem();
-                        if (ImGui.IsItemHovered())
-                        {
-                            ImGui.SetTooltip("Delete");
-                        }
-                    }
-
-                    ImGui.EndTable();
-                }
-            }
+        theme.DrawPlayerTable(
+            "rememberme-examined",
+            "Examined Players",
+            ref showExaminedPlayers,
+            players,
+            onDelete,
+            null, // No note editing
+            onShowGlamour,
+            null, // No footer
+            searchExaminedText,
+            (val) => searchExaminedText = val
         );
     }
 

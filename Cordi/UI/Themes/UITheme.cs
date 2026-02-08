@@ -12,6 +12,9 @@ using System.Linq;
 namespace Cordi.UI.Themes;
 
 
+using Cordi.Configuration;
+using Dalamud.Interface.Components;
+
 public readonly struct UiCardResult
 {
     public bool Clicked { get; init; }
@@ -953,7 +956,9 @@ public sealed class UiTheme
         int? explicitCount = null,
         Action? setupColumns = null,
         bool showHeaders = false,
-        Action? drawFooter = null)
+        Action<float>? drawFooter = null,
+        Action? drawTopContent = null,
+        Action? extraRows = null)
     {
         int count = explicitCount ?? collection.Count();
         title = showCount ? $"{title}: {count}" : title;
@@ -997,7 +1002,13 @@ public sealed class UiTheme
 
         if (expanded)
         {
-            ImGui.SetCursorScreenPos(new Vector2(startPos.X + padX, startPos.Y + headerHeight + Gap(0.2f)));
+            // Calculate 95% width and centering offset
+            float targetWidth = availW * 0.95f;
+            float xOffset = (availW - targetWidth) / 2.0f;
+            float effectiveStartX = startPos.X + xOffset;
+
+            // Start content Y below header
+            ImGui.SetCursorScreenPos(new Vector2(effectiveStartX, startPos.Y + headerHeight + Gap(0.2f)));
 
             if (count == 0 && drawFooter == null)
             {
@@ -1005,13 +1016,25 @@ public sealed class UiTheme
             }
             else
             {
-                if (count > 0)
-                    DrawTable(id, collection, drawRow, headers, setupColumns, showHeaders);
+                if (drawTopContent != null)
+                {
+                    ImGui.SetCursorScreenPos(new Vector2(effectiveStartX, ImGui.GetCursorScreenPos().Y));
+                    ImGui.SetNextItemWidth(targetWidth);
+                    drawTopContent();
+                    SpacerY(0.5f);
+                }
+
+                if (count > 0 || extraRows != null)
+                {
+                    ImGui.SetCursorScreenPos(new Vector2(effectiveStartX, ImGui.GetCursorScreenPos().Y));
+                    DrawTable(id, collection, drawRow, headers, setupColumns, showHeaders, new Vector2(targetWidth, 0), extraRows);
+                }
 
                 if (drawFooter != null)
                 {
                     SpacerY(0.5f);
-                    drawFooter();
+                    ImGui.SetCursorScreenPos(new Vector2(effectiveStartX, ImGui.GetCursorScreenPos().Y));
+                    drawFooter(targetWidth);
                 }
             }
 
@@ -1052,11 +1075,13 @@ public sealed class UiTheme
         Action<T, int> drawRow,
         string[]? headers = null,
         Action? setupColumns = null,
-        bool showHeaders = false)
+        bool showHeaders = false,
+        Vector2? outerSize = null,
+        Action? extraRows = null)
     {
         int columns = headers?.Length ?? 1;
 
-        if (ImGui.BeginTable($"##table_{id}", columns, ImGuiTableFlags.BordersInnerH | ImGuiTableFlags.SizingStretchProp))
+        if (ImGui.BeginTable($"##table_{id}", columns, ImGuiTableFlags.BordersInnerH | ImGuiTableFlags.SizingStretchProp, outerSize ?? Vector2.Zero))
         {
             if (setupColumns != null)
             {
@@ -1084,6 +1109,7 @@ public sealed class UiTheme
                 ImGui.TableNextColumn();
                 drawRow(item, idx++);
             }
+            extraRows?.Invoke();
             ImGui.EndTable();
         }
     }
@@ -1245,7 +1271,7 @@ public sealed class UiTheme
             drawRow,
             headers,
             setupColumns: setupCols,
-            drawFooter: allowAdd ? drawFooter : null
+            drawFooter: allowAdd ? (w) => drawFooter() : null
         );
 
         foreach (var action in postDrawActions) action();
@@ -1266,7 +1292,7 @@ public sealed class UiTheme
         Action? setupColumns = null,
         Func<string, string, string>? getDisplayValue = null,
         DrawDictionaryEditUI? drawEditUI = null,
-        Action? drawFooter = null,
+        Action<float>? drawFooter = null,
         bool allowAdd = false)
     {
         var list = dictionary.ToList();
@@ -1377,14 +1403,14 @@ public sealed class UiTheme
             }
         };
 
-        Action? internalFooter = drawFooter;
+        Action<float>? internalFooter = drawFooter;
 
         if (allowAdd)
         {
-            internalFooter = () =>
+            internalFooter = (totalWidth) =>
             {
-                if (drawFooter != null) drawFooter();
-                float avail = ImGui.GetContentRegionAvail().X;
+                if (drawFooter != null) drawFooter(totalWidth);
+                float avail = totalWidth;
 
                 if (_dictAddStates.TryGetValue(id, out var addState))
                 {
@@ -1460,5 +1486,294 @@ public sealed class UiTheme
         );
 
         foreach (var action in postDrawActions) action();
+    }
+
+    public bool ConfigCheckbox(string label, ref bool configValue, Action saveAction)
+    {
+        bool changed = ImGui.Checkbox(label, ref configValue);
+        if (changed)
+        {
+            saveAction();
+        }
+        HoverHandIfItem();
+        return changed;
+    }
+
+    public void ChannelPicker(
+        string id,
+        string currentId,
+        IReadOnlyList<DSharpPlus.Entities.DiscordChannel>? channels,
+        Action<string> onWaitSelection,
+        string defaultLabel = "None",
+        bool showLabel = true)
+    {
+        if (showLabel)
+        {
+            ImGui.TextColored(MutedText, "Discord Channel:");
+        }
+
+        string preview = defaultLabel;
+        if (!string.IsNullOrEmpty(currentId) && channels != null)
+        {
+            var ch = channels.FirstOrDefault(c => c.Id.ToString() == currentId);
+            if (ch != null) preview = $"#{ch.Name}";
+            else preview = currentId;
+        }
+
+        ImGui.SetNextItemWidth(ImGui.GetContentRegionAvail().X);
+        if (ImGui.BeginCombo($"##{id}", preview))
+        {
+            if (ImGui.Selectable(defaultLabel, string.IsNullOrEmpty(currentId)))
+            {
+                onWaitSelection(string.Empty);
+            }
+
+            if (channels != null)
+            {
+                foreach (var channel in channels)
+                {
+                    bool isSelected = channel.Id.ToString() == currentId;
+                    if (ImGui.Selectable($"#{channel.Name}", isSelected))
+                    {
+                        onWaitSelection(channel.Id.ToString());
+                    }
+                    ImGui.EndCombo();
+                }
+                HoverHandIfItem();
+            }
+            ImGui.EndCombo();
+        }
+    }
+
+    private Dictionary<string, (string Key, string Value)> _playerNoteEditStates = new();
+    private Dictionary<string, (string NameWorld, string Note)> _playerAddStates = new();
+
+    public void DrawPlayerTable(
+        string id,
+        string title,
+        ref bool expanded,
+        IEnumerable<RememberedPlayerEntry> players,
+        Action<RememberedPlayerEntry> onDelete,
+        Action<RememberedPlayerEntry, string>? onSaveNote = null,
+        Action<RememberedPlayerEntry>? onShowGlamour = null,
+        Action<float>? drawFooter = null,
+        string search = "",
+        Action<string>? onSearch = null,
+        Action<string, string>? onAdd = null,
+        string emptyText = "No players found.")
+    {
+        var headers = new[] { "Player", "Last Seen", "Info", "Actions" };
+
+        Action setupColumns = () =>
+        {
+            ImGui.TableSetupColumn("Player", ImGuiTableColumnFlags.WidthFixed, 180f * ImGuiHelpers.GlobalScale);
+            ImGui.TableSetupColumn("Last Seen", ImGuiTableColumnFlags.WidthFixed, 120f * ImGuiHelpers.GlobalScale);
+            ImGui.TableSetupColumn("Info", ImGuiTableColumnFlags.WidthStretch);
+            ImGui.TableSetupColumn("Actions", ImGuiTableColumnFlags.WidthFixed, 80f * ImGuiHelpers.GlobalScale);
+        };
+
+        Action<RememberedPlayerEntry, int> drawRow = (player, idx) =>
+        {
+            // Column 1: Player Name
+            ImGui.TableSetColumnIndex(0);
+            ImGui.Text(player.FullName);
+
+            // Column 2: Last Seen
+            ImGui.TableSetColumnIndex(1);
+            ImGui.TextDisabled(player.GetLastSeenRelative());
+
+            // Column 3: Info (Notes or Glamour Status)
+            ImGui.TableSetColumnIndex(2);
+
+            string editKey = $"{id}_{player.FullName}";
+            bool isEditing = _playerNoteEditStates.TryGetValue(editKey, out var state);
+
+            if (isEditing)
+            {
+                float inputWidth = ImGui.GetContentRegionAvail().X;
+                ImGui.SetNextItemWidth(inputWidth);
+                string currentNote = state.Value;
+                if (ImGui.InputTextMultiline($"##editNote_{editKey}", ref currentNote, 1000, new Vector2(-1, 60)))
+                {
+                    _playerNoteEditStates[editKey] = (state.Key, currentNote);
+                }
+                HoverHandIfItem();
+            }
+            else
+            {
+                if (onShowGlamour != null)
+                {
+                    if (player.Glamour != null)
+                        ImGui.TextDisabled("Has Glamour");
+                    else
+                        ImGui.TextDisabled("-");
+                }
+                else
+                {
+                    if (string.IsNullOrWhiteSpace(player.Notes))
+                    {
+                        ImGui.TextDisabled("(No notes)");
+                    }
+                    else
+                    {
+                        ImGui.TextWrapped(player.Notes);
+                    }
+                }
+            }
+
+            // Column 4: Actions
+            ImGui.TableSetColumnIndex(3);
+
+            if (isEditing)
+            {
+                if (ImGuiComponents.IconButton($"##save_{editKey}", FontAwesomeIcon.Check))
+                {
+                    onSaveNote?.Invoke(player, state.Value);
+                    _playerNoteEditStates.Remove(editKey);
+                }
+                HoverHandIfItem();
+                if (ImGui.IsItemHovered()) ImGui.SetTooltip("Save");
+
+                ImGui.SameLine();
+                if (ImGuiComponents.IconButton($"##cancel_{editKey}", FontAwesomeIcon.Times))
+                {
+                    _playerNoteEditStates.Remove(editKey);
+                }
+                HoverHandIfItem();
+                if (ImGui.IsItemHovered()) ImGui.SetTooltip("Cancel");
+            }
+            else
+            {
+                bool shownAction = false;
+
+                if (onSaveNote != null)
+                {
+                    if (ImGuiComponents.IconButton($"##edit_{editKey}", FontAwesomeIcon.Edit))
+                    {
+                        _playerNoteEditStates[editKey] = (player.FullName, player.Notes);
+                    }
+                    HoverHandIfItem();
+                    if (ImGui.IsItemHovered()) ImGui.SetTooltip("Edit Note");
+                    shownAction = true;
+                }
+                else if (onShowGlamour != null && player.Glamour != null)
+                {
+                    if (ImGuiComponents.IconButton($"##glamour_{editKey}", FontAwesomeIcon.Tshirt))
+                    {
+                        onShowGlamour(player);
+                    }
+                    HoverHandIfItem();
+                    if (ImGui.IsItemHovered()) ImGui.SetTooltip("Show Glamour");
+                    shownAction = true;
+                }
+
+                if (shownAction) ImGui.SameLine();
+
+                ImGui.PushStyleColor(ImGuiCol.Button, new Vector4(0.56f, 0f, 0f, 1f));
+                ImGui.PushStyleColor(ImGuiCol.ButtonHovered, new Vector4(0.7f, 0.1f, 0.1f, 1f));
+                ImGui.PushStyleColor(ImGuiCol.ButtonActive, new Vector4(0.4f, 0f, 0f, 1f));
+                if (ImGuiComponents.IconButton($"##del_{editKey}", FontAwesomeIcon.Trash))
+                {
+                    onDelete(player);
+                    if (isEditing) _playerNoteEditStates.Remove(editKey);
+                }
+                ImGui.PopStyleColor(3);
+                HoverHandIfItem();
+                if (ImGui.IsItemHovered()) ImGui.SetTooltip("Delete");
+            }
+        };
+
+        Action? extraRows = null;
+        bool isAdding = _playerAddStates.ContainsKey(id);
+
+        if (isAdding)
+        {
+            extraRows = () =>
+            {
+                var s = _playerAddStates[id];
+                string newNameWorld = s.NameWorld;
+                string newNote = s.Note;
+
+                ImGui.TableNextRow();
+                ImGui.TableSetColumnIndex(0);
+                ImGui.SetNextItemWidth(ImGui.GetContentRegionAvail().X);
+                if (ImGui.InputTextWithHint($"##addName_{id}", "Name@World", ref newNameWorld, 100))
+                {
+                    _playerAddStates[id] = (newNameWorld, newNote);
+                }
+
+                ImGui.TableSetColumnIndex(1);
+                ImGui.TextDisabled("Now");
+
+                ImGui.TableSetColumnIndex(2);
+                ImGui.SetNextItemWidth(ImGui.GetContentRegionAvail().X);
+                if (ImGui.InputTextWithHint($"##addNote_{id}", "Notes...", ref newNote, 1000))
+                {
+                    _playerAddStates[id] = (newNameWorld, newNote);
+                }
+
+                ImGui.TableSetColumnIndex(3);
+                if (ImGuiComponents.IconButton($"##saveAdd_{id}", FontAwesomeIcon.Check))
+                {
+                    if (!string.IsNullOrWhiteSpace(newNameWorld))
+                    {
+                        onAdd?.Invoke(newNameWorld, newNote);
+                        _playerAddStates.Remove(id);
+                    }
+                }
+                HoverHandIfItem();
+                if (ImGui.IsItemHovered()) ImGui.SetTooltip("Add Player");
+
+                ImGui.SameLine();
+                if (ImGuiComponents.IconButton($"##cancelAdd_{id}", FontAwesomeIcon.Times))
+                {
+                    _playerAddStates.Remove(id);
+                }
+                HoverHandIfItem();
+                if (ImGui.IsItemHovered()) ImGui.SetTooltip("Cancel");
+            };
+        }
+
+        Action<float>? internalFooter = drawFooter;
+        if (onAdd != null)
+        {
+            internalFooter = (w) =>
+            {
+                drawFooter?.Invoke(w);
+                if (!isAdding)
+                {
+                    if (ImGui.Button("Add New Player", new Vector2(w, 0)))
+                    {
+                        _playerAddStates[id] = ("", "");
+                    }
+                    HoverHandIfItem();
+                }
+            };
+        }
+
+        Action drawSearch = () =>
+        {
+            string tempSearch = search;
+            if (ImGui.InputTextWithHint($"##search_{id}", "Search...", ref tempSearch, 256))
+            {
+                onSearch?.Invoke(tempSearch);
+            }
+        };
+
+        DrawCollapsableCardWithTable(
+            id,
+            title,
+            ref expanded,
+            players,
+            drawRow,
+            headers,
+            true, // showCount
+            null,
+            setupColumns,
+            true, // showHeaders
+            internalFooter,
+            drawSearch,
+            extraRows
+        );
     }
 }

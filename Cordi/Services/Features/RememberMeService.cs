@@ -232,22 +232,24 @@ public class RememberMeService : IDisposable
         AddOrUpdateExaminedPlayer(name, world, glamour);
     }
 
+    // Shared helper for finding players in a list
+    private RememberedPlayerEntry? FindInList(List<RememberedPlayerEntry> list, string name, string world)
+    {
+        return list.FirstOrDefault(p =>
+            p.Name.Equals(name, StringComparison.OrdinalIgnoreCase) &&
+            p.World.Equals(world, StringComparison.OrdinalIgnoreCase));
+    }
+
     public RememberedPlayerEntry? FindPlayer(string name, string world)
     {
         if (!plugin.Config.RememberMe.Enabled) return null;
-
-        return plugin.Config.RememberMe.RememberedPlayers
-        .FirstOrDefault(p => p.Name.Equals(name, StringComparison.OrdinalIgnoreCase)
-                      && p.World.Equals(world, StringComparison.OrdinalIgnoreCase));
+        return FindInList(plugin.Config.RememberMe.RememberedPlayers, name, world);
     }
 
     public RememberedPlayerEntry? FindExaminedPlayer(string name, string world)
     {
         if (!plugin.Config.RememberMe.Enabled) return null;
-
-        return plugin.Config.RememberMe.ExaminedPlayers
-        .FirstOrDefault(p => p.Name.Equals(name, StringComparison.OrdinalIgnoreCase)
-                      && p.World.Equals(world, StringComparison.OrdinalIgnoreCase));
+        return FindInList(plugin.Config.RememberMe.ExaminedPlayers, name, world);
     }
 
     public RememberedPlayerEntry? FindPlayerByLodestoneId(string lodestoneId)
@@ -347,75 +349,71 @@ public class RememberMeService : IDisposable
         }
     }
 
+    // Shared helper for removing players from a list
+    private void RemoveFromList(List<RememberedPlayerEntry> list, string name, string world)
+    {
+        var player = FindInList(list, name, world);
+        if (player != null)
+        {
+            list.Remove(player);
+            plugin.Config.Save();
+        }
+    }
+
     public void RemovePlayer(string name, string world)
     {
         if (!plugin.Config.RememberMe.Enabled) return;
-
-        var player = FindPlayer(name, world);
-        if (player != null)
-        {
-            plugin.Config.RememberMe.RememberedPlayers.Remove(player);
-            plugin.Config.Save();
-        }
+        RemoveFromList(plugin.Config.RememberMe.RememberedPlayers, name, world);
     }
 
     public void RemoveExaminedPlayer(string name, string world)
     {
         if (!plugin.Config.RememberMe.Enabled) return;
+        RemoveFromList(plugin.Config.RememberMe.ExaminedPlayers, name, world);
+    }
 
-        var player = FindExaminedPlayer(name, world);
-        if (player != null)
-        {
-            plugin.Config.RememberMe.ExaminedPlayers.Remove(player);
-            plugin.Config.Save();
-        }
+    // Shared helper for getting all players
+    private List<RememberedPlayerEntry> GetAllFromList(List<RememberedPlayerEntry> list)
+    {
+        return list.OrderByDescending(p => p.LastSeen).ToList();
     }
 
     public List<RememberedPlayerEntry> GetAllPlayers()
     {
-        if (!plugin.Config.RememberMe.Enabled)
-            return new List<RememberedPlayerEntry>();
-
-        return plugin.Config.RememberMe.RememberedPlayers
-        .OrderByDescending(p => p.LastSeen)
-        .ToList();
+        if (!plugin.Config.RememberMe.Enabled) return new List<RememberedPlayerEntry>();
+        return GetAllFromList(plugin.Config.RememberMe.RememberedPlayers);
     }
 
     public List<RememberedPlayerEntry> GetAllExaminedPlayers()
     {
-        if (!plugin.Config.RememberMe.Enabled)
-            return new List<RememberedPlayerEntry>();
+        if (!plugin.Config.RememberMe.Enabled) return new List<RememberedPlayerEntry>();
+        return GetAllFromList(plugin.Config.RememberMe.ExaminedPlayers);
+    }
 
-        return plugin.Config.RememberMe.ExaminedPlayers
-        .OrderByDescending(p => p.LastSeen)
-        .ToList();
+    // Shared helper for searching players
+    private List<RememberedPlayerEntry> SearchInList(List<RememberedPlayerEntry> list, string searchText)
+    {
+        var search = searchText.ToLower();
+        return list
+            .Where(p => p.Name.ToLower().Contains(search)
+                     || p.World.ToLower().Contains(search)
+                     || (p.Notes?.ToLower().Contains(search) ?? false))
+            .OrderByDescending(p => p.LastSeen)
+            .ToList();
     }
 
     public List<RememberedPlayerEntry> SearchPlayers(string searchText)
     {
         if (!plugin.Config.RememberMe.Enabled || string.IsNullOrWhiteSpace(searchText))
             return GetAllPlayers();
-
-        var search = searchText.ToLower();
-        return plugin.Config.RememberMe.RememberedPlayers
-        .Where(p => p.Name.ToLower().Contains(search)
-             || p.World.ToLower().Contains(search)
-             || p.Notes.ToLower().Contains(search))
-        .OrderByDescending(p => p.LastSeen)
-        .ToList();
+        return SearchInList(plugin.Config.RememberMe.RememberedPlayers, searchText);
     }
 
     public List<RememberedPlayerEntry> SearchExaminedPlayers(string searchText)
     {
         if (!plugin.Config.RememberMe.Enabled || string.IsNullOrWhiteSpace(searchText))
             return GetAllExaminedPlayers();
-
-        var search = searchText.ToLower();
-        return plugin.Config.RememberMe.ExaminedPlayers
-        .Where(p => p.Name.ToLower().Contains(search)
-             || p.World.ToLower().Contains(search))
-        .OrderByDescending(p => p.LastSeen)
-        .ToList();
+        return SearchInList(plugin.Config.RememberMe.ExaminedPlayers, searchText);
     }
 
     public void Dispose()
