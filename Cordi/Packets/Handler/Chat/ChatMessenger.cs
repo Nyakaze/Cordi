@@ -101,18 +101,7 @@ public class ChatMessenger : IAsyncDisposable
             {
                 try
                 {
-                    if (_sendMessageMI != null)
-                    {
-
-
-                        _chat.PrintError($"Test1 {full}", "Cordi");
-                    }
-                    else
-                    {
-
-
-                        ECommons.Automation.Chat.SendMessage(full);
-                    }
+                    ECommons.Automation.Chat.SendMessage(full);
                     tcs.SetResult();
                 }
                 catch (Exception ex)

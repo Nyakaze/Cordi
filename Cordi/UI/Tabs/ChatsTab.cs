@@ -14,6 +14,7 @@ using Cordi.Services;
 using Cordi.Core;
 using Cordi.UI.Themes;
 using Cordi.Configuration;
+using Dalamud.Interface.Components;
 
 namespace Cordi.UI.Tabs;
 
@@ -21,21 +22,12 @@ public class ChatsTab
 {
     private readonly CordiPlugin plugin;
     private readonly UiTheme theme;
-
-
-
     private bool _activeTellsExpanded = false;
-
-
     private bool _existingAvatarsExpanded = false;
-
-
-
-
-
-
-
     private Dictionary<ulong, string> _cachedAvailableThreads = new();
+    private readonly Services.Features.ExtraChatService extraChatService;
+
+
 
 
     private readonly XivChatType[] supportedChatTypes = new[]
@@ -49,6 +41,7 @@ public class ChatsTab
     {
         this.plugin = plugin;
         this.theme = theme;
+        extraChatService = new Cordi.Services.Features.ExtraChatService(plugin);
     }
 
     public void Draw()
@@ -57,7 +50,6 @@ public class ChatsTab
         bool enabled = true;
 
 
-        plugin.ChannelCache.RefreshIfNeeded();
         RefreshThreadCache();
 
         var textChannels = plugin.ChannelCache.TextChannels;
@@ -86,8 +78,15 @@ public class ChatsTab
         DrawChatMappingsCard(textChannels, forumChannels, ref enabled);
 
 
+        if (extraChatService.IsExtraChatInstalled())
+        {
 
-        theme.SpacerY(2f);
+            theme.SpacerY(2f);
+            ImGui.Separator();
+            theme.SpacerY(2f);
+
+            DrawExtraChatMappingsCard(textChannels, ref enabled, extraChatService);
+        }
     }
 
     private void RefreshThreadCache()
@@ -142,6 +141,142 @@ public class ChatsTab
                     }
                 }
                 theme.HoverHandIfItem();
+            }
+        );
+    }
+
+    private void DrawExtraChatMappingsCard(IReadOnlyList<DiscordChannel>? textChannels, ref bool enabled, Services.Features.ExtraChatService extraChatService)
+    {
+
+
+        theme.DrawPluginCardAuto(
+           id: "extrachat-mappings-card",
+           enabled: ref enabled,
+           showCheckbox: false,
+           title: "ExtraChat",
+           drawContent: (avail) =>
+           {
+               ImGui.TextColored(theme.MutedText, "Map ExtraChat Channels (like 'ECLS1') to specific channels.");
+               theme.SpacerY(1f);
+
+               if (theme.SecondaryButton("Sync from ExtraChat", new Vector2(avail, 28)))
+               {
+                   int count = extraChatService.SyncFromExtraChat();
+
+                   plugin.NotificationManager.Add("ExtraChat Sync", $"Synced {count} channels from ExtraChat config.", CordiNotificationType.Success);
+               }
+               if (ImGui.IsItemHovered()) ImGui.SetTooltip("Import settings from ExtraChat plugin configuration.");
+
+               theme.SpacerY(1f);
+
+               if (ImGui.BeginTable("##extraChatMappingsTable", 4, ImGuiTableFlags.BordersInnerH | ImGuiTableFlags.SizingStretchProp))
+               {
+                   ImGui.TableSetupColumn("Label (e.g. ECLS1)", ImGuiTableColumnFlags.WidthFixed, 150f);
+                   ImGui.TableSetupColumn("Channel", ImGuiTableColumnFlags.WidthFixed, 70f);
+                   ImGui.TableSetupColumn("Discord Channel", ImGuiTableColumnFlags.WidthStretch);
+                   ImGui.TableSetupColumn("", ImGuiTableColumnFlags.WidthFixed, 40f);
+                   ImGui.TableHeadersRow();
+
+                   var mappings = plugin.Config.Chat.ExtraChatMappings;
+                   foreach (var key in mappings.Keys.ToList())
+                   {
+                       var connection = mappings[key];
+                       if (connection == null) continue;
+
+                       ImGui.TableNextRow();
+                       ImGui.TableNextColumn();
+
+                       string tempKey = key;
+                       ImGui.SetNextItemWidth(-1);
+                       bool changed = ImGui.InputText($"##label-{key}", ref tempKey, 64);
+                       if (ImGui.IsItemDeactivatedAfterEdit() && tempKey != key)
+                       {
+                           if (!string.IsNullOrWhiteSpace(tempKey) && !mappings.ContainsKey(tempKey))
+                           {
+                               mappings.Remove(key);
+                               mappings[tempKey] = connection;
+                               plugin.Config.Save();
+                           }
+                       }
+                       if (ImGui.IsItemHovered()) ImGui.SetTooltip("Edit the ExtraChat Label (e.g. ECLS1)");
+
+                       ImGui.TableNextColumn();
+                       int num = connection.ExtraChatNumber;
+                       ImGui.SetNextItemWidth(60f);
+                       if (ImGui.InputInt($"##num-{key}", ref num, 0))
+                       {
+                           if (num < 0) num = 0;
+                           if (num > 8) num = 8;
+                           connection.ExtraChatNumber = num;
+                           plugin.Config.Save();
+                       }
+
+                       ImGui.TableNextColumn();
+                       string currentId = connection.DiscordChannelId ?? "";
+                       theme.ChannelPicker(
+                           $"extra-combo-{key}",
+                           currentId,
+                           textChannels ?? new List<DSharpPlus.Entities.DiscordChannel>(),
+                           (newId) =>
+                           {
+                               connection.DiscordChannelId = newId;
+                               plugin.Config.Save();
+                           },
+                           showLabel: false
+                       );
+
+                       ImGui.TableNextColumn();
+
+                       ImGui.PushFont(Dalamud.Interface.UiBuilder.IconFont);
+                       ImGui.PushStyleColor(ImGuiCol.Button, new Vector4(0.56f, 0f, 0f, 1f));
+                       ImGui.PushStyleColor(ImGuiCol.ButtonHovered, new Vector4(0.7f, 0.1f, 0.1f, 1f));
+                       ImGui.PushStyleColor(ImGuiCol.ButtonActive, new Vector4(0.4f, 0f, 0f, 1f));
+                       if (theme.Button($"{FontAwesomeIcon.Trash.ToIconString()}##del-{key}"))
+                       {
+                           mappings.Remove(key);
+                           plugin.Config.Save();
+                       }
+                       ImGui.PopStyleColor(3);
+                       ImGui.PopFont();
+                       if (ImGui.IsItemHovered()) ImGui.SetTooltip("Remove Mapping");
+                   }
+
+                   ImGui.EndTable();
+
+                   float availW = ImGui.GetContentRegionAvail().X;
+                   float btnW = availW * 0.95f;
+                   float pad = (availW - btnW) * 0.3f;
+
+                   ImGui.SetCursorPosX(ImGui.GetCursorPosX() + pad);
+                   if (theme.Button(" + Add ExtraChat Mapping ", new Vector2(btnW, 0)))
+                   {
+                       string baseName = "New Chat";
+                       string newName = baseName;
+                       int i = 1;
+                       while (mappings.ContainsKey(newName))
+                       {
+                           newName = $"{baseName} {i++}";
+                       }
+
+                       mappings[newName] = new ExtraChatConnection();
+                       plugin.Config.Save();
+                   }
+               }
+           },
+            drawHeaderRight: () =>
+            {
+                ImGui.TextDisabled("(?)");
+                if (ImGui.IsItemHovered())
+                {
+                    string tip = "Info:\n";
+                    tip += "- Chats get automatically added once a message is sent in that chat.\n";
+                    tip += "- You can manually add chats by using the Add button.\n";
+                    tip += "\n";
+                    tip += "- Labels are the Names in game chat, for example: [ECLS1]\n";
+                    tip += "- As Label you would write ECLS1 in this case.\n";
+                    tip += "- The Number is the Channel number, for example /ecl1 (1 is the Channel)\n";
+                    ImGui.SetTooltip(tip);
+                }
             }
         );
     }

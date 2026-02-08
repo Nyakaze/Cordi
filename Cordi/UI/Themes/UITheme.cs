@@ -1533,11 +1533,12 @@ public sealed class UiTheme
                 foreach (var channel in channels)
                 {
                     bool isSelected = channel.Id.ToString() == currentId;
-                    if (ImGui.Selectable($"#{channel.Name}", isSelected))
+                    // Use ID in label to prevent ImGui ID collisions with identical channel names
+                    if (ImGui.Selectable($"#{channel.Name}##{channel.Id}", isSelected))
                     {
                         onWaitSelection(channel.Id.ToString());
                     }
-                    ImGui.EndCombo();
+                    if (isSelected) ImGui.SetItemDefaultFocus();
                 }
                 HoverHandIfItem();
             }

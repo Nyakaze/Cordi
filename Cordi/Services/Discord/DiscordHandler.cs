@@ -28,6 +28,7 @@ public class DiscordHandler : IDisposable
 {
     static readonly IPluginLog Logger = Service.Log;
     private readonly CordiPlugin _plugin;
+    private readonly Guid _instanceId = Guid.NewGuid();
 
     private DiscordClient _client;
     private DiscordIntents _intent;
@@ -47,6 +48,7 @@ public class DiscordHandler : IDisposable
 
     private readonly ConcurrentDictionary<string, List<(string Content, DateTime Timestamp, ulong MessageId)>> _messageBuffer = new();
     private readonly ConcurrentDictionary<string, DateTime> _penaltyBox = new();
+    private readonly ConcurrentDictionary<ulong, DateTime> _processedMessages = new();
 
     public async Task Start()
     {
@@ -77,6 +79,10 @@ public class DiscordHandler : IDisposable
                 Intents = _intent,
                 MinimumLogLevel = LogLevel.Debug,
             });
+
+            // Bind Cache
+            _plugin.ChannelCache.Bind(_client);
+
             _client.Ready += OnReady;
             _client.MessageCreated += MessageCreatedHandler;
             _client.MessageReactionAdded += MessageReactionAddedHandler;
@@ -123,46 +129,97 @@ public class DiscordHandler : IDisposable
 
     async Task MessageCreatedHandler(DiscordClient sender, MessageCreateEventArgs message)
     {
-        if (message.Author.IsBot || message.Message.WebhookMessage) return;
+        if (sender != _client) return;
+        if (message.Author.IsBot || message.Message.WebhookMessage || (sender.CurrentUser != null && message.Author.Id == sender.CurrentUser.Id)) return;
+
+        // Deduplication
+        if (!_processedMessages.TryAdd(message.Message.Id, DateTime.UtcNow))
+        {
+            Logger.Debug($"[DiscordHandler {_instanceId}] Ignored duplicate message ID: {message.Message.Id}");
+            return;
+        }
+
+        Logger.Info($"[DiscordHandler {_instanceId}] Processing message {message.Message.Id} from {message.Author.Username} in {message.Channel.Name} ({message.Channel.Id})");
+
+        // Simple periodic cleanup of deduplication cache
+        if (_processedMessages.Count > 1000)
+        {
+            var old = DateTime.UtcNow.AddMinutes(-10);
+            foreach (var key in _processedMessages.Keys.ToList())
+            {
+                if (_processedMessages.TryGetValue(key, out var ts) && ts < old)
+                    _processedMessages.TryRemove(key, out _);
+            }
+        }
 
         _plugin.Config.Stats.IncrementTotal();
 
         _ = ProcessDiscordCommand(message.Message.Content, message.Channel.Id);
 
-        foreach (var mapping in _plugin.Config.Chat.Mappings)
+        var extraChatMapping = _plugin.Config.Chat.ExtraChatMappings.FirstOrDefault(x => x.Value.DiscordChannelId == message.Channel.Id.ToString());
+        bool handled = false;
+
+        if (!string.IsNullOrEmpty(extraChatMapping.Key))
         {
-            if (mapping.DiscordChannelId == message.Channel.Id.ToString())
+            var label = extraChatMapping.Key;
+            var connection = extraChatMapping.Value;
+
+            if (connection.ExtraChatNumber > 0)
+            {
+                string contentToSend = message.Message.Content;
+
+                try
+                {
+                    string command = $"/ecl{connection.ExtraChatNumber} {contentToSend}";
+                    Logger.Info($"[DiscordHandler] Routing to ExtraChat (Key: {label}, Channel: {connection.ExtraChatNumber}) for Msg {message.Message.Id}: {command}");
+
+                    await Service.Framework.RunOnFrameworkThread(() =>
+                    {
+                        _plugin._chat.SendMessage(command);
+                    });
+
+                    handled = true;
+                    try { await message.Message.DeleteAsync(); } catch { }
+                }
+                catch (Exception ex)
+                {
+                    Logger.Error(ex, $"Failed to send ExtraChat command for {label}");
+                }
+            }
+            else
+            {
+                Logger.Warning($"[DiscordHandler] ExtraChat mapping found for {label} but 'Channel #' is not configured (0). Msg not sent.");
+            }
+        }
+
+        if (!handled)
+        {
+            // Standard Mappings
+            var mapping = _plugin.Config.Chat.Mappings.FirstOrDefault(m => m.DiscordChannelId == message.Channel.Id.ToString());
+            if (mapping != null)
             {
                 _ = _plugin._chat.SendAsync(mapping.GameChatType, message.Message.Content);
                 Logger.Info($"Forwarding message: {message.Message.Content} to {mapping.GameChatType}");
+                handled = true;
             }
-        }
 
-
-        var tellTarget = _plugin.Config.Chat.TellThreadMappings.FirstOrDefault(x => x.Value == message.Channel.Id.ToString()).Key;
-        if (!string.IsNullOrEmpty(tellTarget))
-        {
-            _ = _plugin._chat.SendTellAsync(tellTarget, message.Message.Content);
-            Logger.Info($"Forwarding Tell reply: {message.Message.Content} to {tellTarget}");
-        }
-
-
-        bool isMapped = _plugin.Config.Chat.Mappings.Any(m => m.DiscordChannelId == message.Channel.Id.ToString()) ||
-                        _plugin.Config.Chat.TellThreadMappings.ContainsValue(message.Channel.Id.ToString());
-
-        if (isMapped)
-        {
-            try
+            if (!handled)
             {
-
-                await message.Message.DeleteAsync();
+                // Tell Thread Mappings
+                var tellTarget = _plugin.Config.Chat.TellThreadMappings.FirstOrDefault(x => x.Value == message.Channel.Id.ToString()).Key;
+                if (!string.IsNullOrEmpty(tellTarget))
+                {
+                    _ = _plugin._chat.SendTellAsync(tellTarget, message.Message.Content);
+                    Logger.Info($"Forwarding Tell reply: {message.Message.Content} to {tellTarget}");
+                    handled = true;
+                }
             }
-            catch (Exception ex)
+
+            if (handled)
             {
-                Logger.Error($"Failed to delete original message: {ex.Message}");
+                try { await message.Message.DeleteAsync(); } catch { }
             }
         }
-
 
         if (message.Message.Content == "STOP BOT") await Stop();
 
@@ -193,25 +250,40 @@ public class DiscordHandler : IDisposable
     {
         if (_client == null) return;
 
-        string targetChannelId = _plugin.Config.Discord.DefaultChannelId;
-
-
-        if (_plugin.Config.MappingCache.TryGetValue(chatType, out var mappedId))
+        if (channel == null)
         {
-            targetChannelId = mappedId;
+            string targetChannelId = "";
+
+            if (chatType != XivChatType.Debug)
+            {
+                targetChannelId = _plugin.Config.Discord.DefaultChannelId;
+            }
+
+            if (_plugin.Config.MappingCache.TryGetValue(chatType, out var mappedId))
+            {
+                targetChannelId = mappedId;
+            }
+
+            if (string.IsNullOrEmpty(targetChannelId)) return;
+
+            if (ulong.TryParse(targetChannelId, out ulong id))
+            {
+                try
+                {
+                    channel = await _client.GetChannelAsync(id);
+                }
+                catch (Exception ex)
+                {
+                    Logger.Error(ex, $"Failed to get channel {id}");
+                    return;
+                }
+            }
         }
 
-        if (string.IsNullOrEmpty(targetChannelId))
-        {
-
-            return;
-        }
-
-        if (ulong.TryParse(targetChannelId, out ulong id))
+        if (channel != null)
         {
             try
             {
-                channel = await _client.GetChannelAsync(id);
                 DiscordChannel webhookChannel = channel;
 
                 if (channel.Type == ChannelType.GuildForum && !string.IsNullOrEmpty(correspondentName))
@@ -252,10 +324,8 @@ public class DiscordHandler : IDisposable
 
                 var finalAvatarUrl = avatarUrl ?? await _plugin.Lodestone.GetAvatarUrlAsync(senderName, senderWorld);
 
-                // Sanitize content to convert FFXIV special characters to Discord-compatible text
                 var sanitizedContent = DiscordTextSanitizer.Sanitize(content);
 
-                // Check if advertisement filter is enabled for this channel
                 bool channelFilterEnabled = true;
                 var mapping = _plugin.Config.Chat.Mappings.FirstOrDefault(m => m.GameChatType == chatType);
                 if (mapping != null)
@@ -375,9 +445,11 @@ public class DiscordHandler : IDisposable
                 Logger.Error(ex, "Failed to send discord message");
             }
         }
-        else
+        if (channel == null)
         {
-            Logger.Error($"Invalid Channel ID: {targetChannelId}");
+            // If we reached here, targetChannelId might not even be defined in this scope if the logic above failed
+            // But actually, we only need to log if channel is null
+            Logger.Error("Invalid Channel (Null) or ID Resolution Failed");
         }
     }
 
@@ -539,8 +611,12 @@ public class DiscordHandler : IDisposable
 
     public async Task Stop()
     {
-        if (IsBusy) return;
-        IsBusy = true;
+        // Don't return if busy, we must stop!
+        // But we want to avoid re-entry of Stop itself.
+        // We generally shouldn't call Stop concurrently.
+        // If we are "Busy" (Starting), we might interrupt it.
+
+        IsBusy = true; // Mark busy to prevent new Starts
         try
         {
             await StopInternal();
@@ -554,7 +630,10 @@ public class DiscordHandler : IDisposable
     private async Task StopInternal()
     {
         if (_client == null) return;
-        Logger.Info("Disconnecting Discord client...");
+        Logger.Info($"[{_instanceId}] Disconnecting Discord client...");
+
+        _plugin.ChannelCache.Unbind();
+
         await _client.DisconnectAsync();
         _client.MessageCreated -= MessageCreatedHandler;
         _client.Ready -= OnReady;
@@ -563,6 +642,7 @@ public class DiscordHandler : IDisposable
         _webhooks.ClearCache();
         _messageBuffer.Clear();
         _penaltyBox.Clear();
+        _processedMessages.Clear();
         Logger.Info("Discord client disconnected.");
         _plugin.Config.Discord.BotStarted = false;
         _plugin.Config.Save();
