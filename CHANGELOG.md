@@ -1,3 +1,8 @@
+## [1.1.6](https://github.com/Nyakaze/Cordi/compare/1.1.5...1.1.6) (08-02-2026)
+
+### Chat
+ - **Added:** ExtraChat Plugin Support.
+
 ## [1.1.5](https://github.com/Nyakaze/Cordi/compare/1.1.4...1.1.5) (08-02-2026)
 
 ### Discord
