@@ -1,3 +1,22 @@
+## [1.2.0](https://github.com/Nyakaze/Cordi/compare/1.1.6...1.2.0) (09-02-2026)
+
+### Remember Me
+ - **Fixed:** Item Icons not showing up in the Examine Tab.
+ - **Updated:** Examine Glamour window to look nicer.
+ - **Added:** Colors for Glamour Slots
+ - **Added:** Try On feature
+### Peeper
+ - **Added:** Better default sound when a player is peeping.
+ - **Added:** Option to disable Notifications in Combat.
+ - **Added:** Option to disable Sounds in Combat.
+ - **Fixed:** A bug where the Discord Notification didnt update if the peeper looked away to fast.
+### Chats
+ - **Added:** Option to get notified in a different Channel when u get a tell.
+### Party
+ - **Fixed:** A bug where an Error was thrown, when a player had no Logs.
+
+
+
 ## [1.1.6](https://github.com/Nyakaze/Cordi/compare/1.1.5...1.1.6) (08-02-2026)
 
 ### Chat
