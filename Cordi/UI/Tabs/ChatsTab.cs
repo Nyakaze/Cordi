@@ -420,13 +420,15 @@ public class ChatsTab
                        plugin.Config.Chat.EnableTellNotification = tellNotif;
                        plugin.Config.Save();
                    }))
-                   { }
+                   {
+                   }
 
                    if (tellNotif)
                    {
-                       theme.SpacerY(0.5f);
                        ImGui.Indent();
 
+                       ImGui.TextDisabled("This will send a notification to the selected channel when you receive a tell.");
+                       theme.SpacerY(0.5f);
                        ImGui.Text("Notification Channel:");
                        string currentNotifId = plugin.Config.Chat.TellNotificationChannelId;
                        theme.ChannelPicker(
