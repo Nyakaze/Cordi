@@ -10,6 +10,7 @@ using Dalamud.Game.ClientState.Objects.Types;
 using Dalamud.Plugin.Services;
 using DSharpPlus.Entities;
 using Lumina.Excel.Sheets;
+using Dalamud.Game.ClientState.Conditions;
 
 namespace Cordi.Services.Features;
 
@@ -37,6 +38,9 @@ public class PartyService : IDisposable
         }
 
         if (DateTime.Now - _lastPartyCheck < _partyCheckInterval)
+            return;
+
+        if (Service.Condition[ConditionFlag.BetweenAreas])
             return;
 
         _lastPartyCheck = DateTime.Now;
@@ -166,10 +170,10 @@ public class PartyService : IDisposable
 
                             if (raidActivity.Encounters.Count > 0)
                             {
-                                updatedMessage += "\n\n**Raid Progress:**";
+                                updatedMessage += "\n\n**Savage Progress:**";
                                 notificationMessage += "\n\nSavage Progress:";
 
-                                foreach (var encounter in raidActivity.Encounters.Take(4))
+                                foreach (var encounter in raidActivity.Encounters.OrderByDescending(e => e.RaidName).Take(4))
                                 {
                                     // Show clears if any exist, otherwise show parse percent
                                     if (encounter.ClearCount > 0)
@@ -189,6 +193,11 @@ public class PartyService : IDisposable
                                         notificationMessage += $"\n• {encounterText}";
                                     }
                                 }
+                            }
+                            else
+                            {
+                                updatedMessage += "\n\n**Savage Progress:**\n• No Raid Data";
+                                notificationMessage += "\n\nSavage Progress:\n• No Raid Data";
                             }
                         }
                     }

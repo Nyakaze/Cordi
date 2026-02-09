@@ -22,6 +22,9 @@ public class CordiPeepConfig
     public bool LogAlliance { get; set; } = true;
     public bool LogCombat { get; set; } = true;
 
+    public bool DisableSoundInCombat { get; set; } = false;
+    public bool DisableDiscordInCombat { get; set; } = false;
+
 
     public bool SoundEnabled { get; set; } = true;
     public float SoundVolume { get; set; } = 1.0f;

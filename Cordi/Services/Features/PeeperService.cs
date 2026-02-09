@@ -238,6 +238,11 @@ public class CordiPeepService : IDisposable
         }
 
         if (!plugin.Config.CordiPeep.DiscordEnabled) return;
+
+        if (plugin.Config.CordiPeep.DisableDiscordInCombat &&
+            Service.ObjectTable.LocalPlayer != null &&
+            (Service.ObjectTable.LocalPlayer.StatusFlags & Dalamud.Game.ClientState.Objects.Enums.StatusFlags.InCombat) != 0)
+            return;
         if (blacklistEntry?.DisableDiscord == true) return;
 
         var channelIdStr = plugin.Config.CordiPeep.DiscordChannelId;
@@ -323,6 +328,11 @@ public class CordiPeepService : IDisposable
     private void PlaySound()
     {
         if (!plugin.Config.CordiPeep.SoundEnabled) return;
+
+        if (plugin.Config.CordiPeep.DisableSoundInCombat &&
+            Service.ObjectTable.LocalPlayer != null &&
+            (Service.ObjectTable.LocalPlayer.StatusFlags & Dalamud.Game.ClientState.Objects.Enums.StatusFlags.InCombat) != 0)
+            return;
         if ((DateTime.Now - _lastSoundPlayTime) < _minAlertInterval) return;
 
         bool windowOpen = plugin.CordiPeepWindow != null && plugin.CordiPeepWindow.IsOpen;

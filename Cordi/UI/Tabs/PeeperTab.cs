@@ -84,6 +84,14 @@ public class CordiPeepTab
                 })) { }
                 theme.HoverHandIfItem();
 
+                bool dDisableCombat = plugin.Config.CordiPeep.DisableDiscordInCombat;
+                if (theme.ConfigCheckbox("Disable Notifications in Combat##btn-disable-discord-in-combat", ref dDisableCombat, () =>
+                {
+                    plugin.Config.CordiPeep.DisableDiscordInCombat = dDisableCombat;
+                    plugin.Config.Save();
+                })) { }
+                theme.HoverHandIfItem();
+
                 theme.SpacerY(0.5f);
 
 
@@ -253,6 +261,14 @@ public class CordiPeepTab
                     plugin.Config.CordiPeep.SoundEnabled = sEnabled;
                     plugin.Config.Save();
                 });
+                theme.HoverHandIfItem();
+
+                bool sDisableCombat = plugin.Config.CordiPeep.DisableSoundInCombat;
+                if (theme.ConfigCheckbox("Disable in Combat##btn-disable-sound-in-combat", ref sDisableCombat, () =>
+                {
+                    plugin.Config.CordiPeep.DisableSoundInCombat = sDisableCombat;
+                    plugin.Config.Save();
+                })) { }
                 theme.HoverHandIfItem();
 
                 theme.SpacerY(0.5f);
