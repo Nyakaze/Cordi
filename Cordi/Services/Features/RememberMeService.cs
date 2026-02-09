@@ -17,6 +17,7 @@ public class RememberMeService : IDisposable
     private bool _isCapturePending = true;
     private uint _lastTargetId = 0;
     private bool _wasAddonVisible = false;
+    private DateTime _lastCaptureTime;
 
     public RememberMeService(CordiPlugin plugin)
     {
@@ -110,12 +111,14 @@ public class RememberMeService : IDisposable
                     Service.Log.Debug($"[RememberMe] Inspecting new target: {target.Name} (ID: {target.EntityId}).");
                     _lastTargetId = target.EntityId;
                     _isCapturePending = true;
+                    _lastCaptureTime = DateTime.Now; // Using this as the 'start waiting' time
                 }
 
                 if (_isCapturePending)
                 {
-                    // Debounce/Delay? The window might take a few frames to populate data?
-                    // But we are reading from the ObjectTable character which is instant.
+                    // Delay capture to allow server data to populate
+                    if ((DateTime.Now - _lastCaptureTime).TotalMilliseconds < 500) return;
+
                     Service.Log.Debug($"[RememberMe] Capturing data for {target.Name}...");
                     CaptureAndSaveGlamour(target);
                     _isCapturePending = false;
@@ -155,33 +158,26 @@ public class RememberMeService : IDisposable
                             var item = container->GetInventorySlot(slotIndex);
                             if (item == null) return new PlayerGlamour.GearItem(0, 0);
 
-                            // Inspecto Logic:
-                            // ItemId is the base item.
-                            // GlamourId is the appearance.
-                            // If GlamourId != 0, that is the visual look. 
-                            // But usually users want to know "What is that item looking like?".
-                            // The `PlayerGlamour.GearItem` struct in my project might only store one ID.
-                            // Let's check `PlayerGlamour.cs`.
-                            // Constructor: GearItem(uint itemId, uint stainId) (assumed).
-
-                            // For linking purposes, if we want to link the "Glamour", we should ideally use GlamourId if present.
-                            // BUT, a link to the "Glamour" item is useful. A link to the "Stats" item is also useful.
-                            // Usually "Examine" shows the stats item, but visually shows the glamour.
-                            // Let's match in-game Examine: "The item you are looking at".
-                            // If we want "What is this visual?", use GlamourId.
-                            // If we want "What stats?", use ItemId.
-                            // RememberMe usually tracks "Visuals".
-                            // Let's use GlamourId if available, else ItemId.
-
-                            // Fix field access for InventoryItem
-                            // If 'Stain' is missing, it might be 'Stain0' or 'Stain1' in newer structs.
-                            // For safety and build fix, we will just use 0 if we can't find it, or try to cast if it was just a type issue.
-                            // The previous error "does not contain definition for Stain" implies it's not there by that name.
-                            // We will ignore stain for now to ensure we get the ItemID fix working.
                             byte stain = 0;
-
-                            // Also casting arguments properly for GearItem constructor (uint, byte)
+                            // Initial guess: GlamourId if present, else ItemId
                             uint idToUse = item->GlamourId != 0 ? item->GlamourId : item->ItemId;
+
+                            // Validation: Ensure the ID corresponds to valid equipment.
+                            // Sometimes GlamourId might hold a ModelId or garbage, leading to non-equipment items (e.g. Potions).
+                            if (idToUse != 0)
+                            {
+                                var sheet = Service.DataManager.GetExcelSheet<Lumina.Excel.Sheets.Item>();
+                                var row = sheet?.GetRow(idToUse);
+
+                                // EquipSlotCategory 0 means not equippable (e.g. consumables, materials).
+                                // Valid gear should have a category != 0.
+                                // Use pattern matching to safely unwrap nullable/struct row.
+                                if (row is not { } validRow || validRow.EquipSlotCategory.Value.RowId == 0)
+                                {
+                                    // Fallback to base ItemId if GlamourId seems invalid
+                                    idToUse = item->ItemId;
+                                }
+                            }
 
                             return new PlayerGlamour.GearItem(idToUse, stain);
                         }

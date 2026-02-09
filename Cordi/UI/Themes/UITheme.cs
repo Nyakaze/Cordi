@@ -958,7 +958,8 @@ public sealed class UiTheme
         bool showHeaders = false,
         Action<float>? drawFooter = null,
         Action? drawTopContent = null,
-        Action? extraRows = null)
+        Action? extraRows = null,
+        float maxTableHeight = 0)
     {
         int count = explicitCount ?? collection.Count();
         title = showCount ? $"{title}: {count}" : title;
@@ -1027,7 +1028,7 @@ public sealed class UiTheme
                 if (count > 0 || extraRows != null)
                 {
                     ImGui.SetCursorScreenPos(new Vector2(effectiveStartX, ImGui.GetCursorScreenPos().Y));
-                    DrawTable(id, collection, drawRow, headers, setupColumns, showHeaders, new Vector2(targetWidth, 0), extraRows);
+                    DrawTable(id, collection, drawRow, headers, setupColumns, showHeaders, new Vector2(targetWidth, maxTableHeight), extraRows);
                 }
 
                 if (drawFooter != null)
@@ -1080,8 +1081,10 @@ public sealed class UiTheme
         Action? extraRows = null)
     {
         int columns = headers?.Length ?? 1;
+        var flags = ImGuiTableFlags.BordersInnerH | ImGuiTableFlags.SizingStretchProp;
+        if (outerSize != null && outerSize.Value.Y > 0) flags |= ImGuiTableFlags.ScrollY;
 
-        if (ImGui.BeginTable($"##table_{id}", columns, ImGuiTableFlags.BordersInnerH | ImGuiTableFlags.SizingStretchProp, outerSize ?? Vector2.Zero))
+        if (ImGui.BeginTable($"##table_{id}", columns, flags, outerSize ?? Vector2.Zero))
         {
             if (setupColumns != null)
             {
@@ -1142,6 +1145,7 @@ public sealed class UiTheme
         bool allowAdd = true,
         string itemName = "Item")
     {
+
         var headers = new[] { itemName, "Actions" };
         Action setupCols = () =>
         {
@@ -1547,7 +1551,7 @@ public sealed class UiTheme
     }
 
     private Dictionary<string, (string Key, string Value)> _playerNoteEditStates = new();
-    private Dictionary<string, (string NameWorld, string Note)> _playerAddStates = new();
+    private Dictionary<string, (string NameWorld, string Note, bool FirstFrame)> _playerAddStates = new();
 
     public void DrawPlayerTable(
         string id,
@@ -1561,39 +1565,33 @@ public sealed class UiTheme
         string search = "",
         Action<string>? onSearch = null,
         Action<string, string>? onAdd = null,
-        string emptyText = "No players found.")
+        string emptyText = "No players found.",
+        float maxTableHeight = 350)
     {
-        var headers = new[] { "Player", "Last Seen", "Info", "Actions" };
+        var headers = new[] { "Player", "Last Seen", "Actions" };
 
         Action setupColumns = () =>
         {
-            ImGui.TableSetupColumn("Player", ImGuiTableColumnFlags.WidthFixed, 180f * ImGuiHelpers.GlobalScale);
-            ImGui.TableSetupColumn("Last Seen", ImGuiTableColumnFlags.WidthFixed, 120f * ImGuiHelpers.GlobalScale);
-            ImGui.TableSetupColumn("Info", ImGuiTableColumnFlags.WidthStretch);
+            ImGui.TableSetupColumn("Player", ImGuiTableColumnFlags.WidthStretch);
+            ImGui.TableSetupColumn("Last Seen", ImGuiTableColumnFlags.WidthFixed, 220f * ImGuiHelpers.GlobalScale);
             ImGui.TableSetupColumn("Actions", ImGuiTableColumnFlags.WidthFixed, 80f * ImGuiHelpers.GlobalScale);
         };
 
         Action<RememberedPlayerEntry, int> drawRow = (player, idx) =>
         {
-            // Column 1: Player Name
+            // Column 1: Player Name & Notes/Info
             ImGui.TableSetColumnIndex(0);
             ImGui.Text(player.FullName);
-
-            // Column 2: Last Seen
-            ImGui.TableSetColumnIndex(1);
-            ImGui.TextDisabled(player.GetLastSeenRelative());
-
-            // Column 3: Info (Notes or Glamour Status)
-            ImGui.TableSetColumnIndex(2);
 
             string editKey = $"{id}_{player.FullName}";
             bool isEditing = _playerNoteEditStates.TryGetValue(editKey, out var state);
 
             if (isEditing)
             {
+                // Edit Note Input
                 float inputWidth = ImGui.GetContentRegionAvail().X;
-                ImGui.SetNextItemWidth(inputWidth);
                 string currentNote = state.Value;
+                ImGui.SetNextItemWidth(inputWidth);
                 if (ImGui.InputTextMultiline($"##editNote_{editKey}", ref currentNote, 1000, new Vector2(-1, 60)))
                 {
                     _playerNoteEditStates[editKey] = (state.Key, currentNote);
@@ -1602,28 +1600,21 @@ public sealed class UiTheme
             }
             else
             {
-                if (onShowGlamour != null)
+                // Display Note if present
+                if (onSaveNote != null && !string.IsNullOrWhiteSpace(player.Notes))
                 {
-                    if (player.Glamour != null)
-                        ImGui.TextDisabled("Has Glamour");
-                    else
-                        ImGui.TextDisabled("-");
-                }
-                else
-                {
-                    if (string.IsNullOrWhiteSpace(player.Notes))
-                    {
-                        ImGui.TextDisabled("(No notes)");
-                    }
-                    else
-                    {
-                        ImGui.TextWrapped(player.Notes);
-                    }
+                    ImGui.TextDisabled("Notes: ");
+                    ImGui.SameLine();
+                    ImGui.TextDisabled(player.Notes);
                 }
             }
 
-            // Column 4: Actions
-            ImGui.TableSetColumnIndex(3);
+            // Column 2: Last Seen
+            ImGui.TableSetColumnIndex(1);
+            ImGui.TextDisabled(player.GetLastSeenRelative());
+
+            // Column 3: Actions
+            ImGui.TableSetColumnIndex(2);
 
             if (isEditing)
             {
@@ -1696,24 +1687,35 @@ public sealed class UiTheme
                 string newNote = s.Note;
 
                 ImGui.TableNextRow();
+
+                // Column 0: Name and Note Input
                 ImGui.TableSetColumnIndex(0);
                 ImGui.SetNextItemWidth(ImGui.GetContentRegionAvail().X);
-                if (ImGui.InputTextWithHint($"##addName_{id}", "Name@World", ref newNameWorld, 100))
+
+                if (s.FirstFrame)
                 {
-                    _playerAddStates[id] = (newNameWorld, newNote);
+                    ImGui.SetKeyboardFocusHere();
+                    ImGui.SetScrollHereY(1.0f);
+                    _playerAddStates[id] = (newNameWorld, newNote, false);
                 }
 
+                if (ImGui.InputTextWithHint($"##addName_{id}", "Name@World", ref newNameWorld, 100))
+                {
+                    _playerAddStates[id] = (newNameWorld, newNote, false);
+                }
+
+                ImGui.SetNextItemWidth(ImGui.GetContentRegionAvail().X);
+                if (ImGui.InputTextWithHint($"##addNote_{id}", "Notes (Optional)...", ref newNote, 1000))
+                {
+                    _playerAddStates[id] = (newNameWorld, newNote, false);
+                }
+
+                // Column 1: Last Seen ("Now")
                 ImGui.TableSetColumnIndex(1);
                 ImGui.TextDisabled("Now");
 
+                // Column 2: Actions (Save/Cancel)
                 ImGui.TableSetColumnIndex(2);
-                ImGui.SetNextItemWidth(ImGui.GetContentRegionAvail().X);
-                if (ImGui.InputTextWithHint($"##addNote_{id}", "Notes...", ref newNote, 1000))
-                {
-                    _playerAddStates[id] = (newNameWorld, newNote);
-                }
-
-                ImGui.TableSetColumnIndex(3);
                 if (ImGuiComponents.IconButton($"##saveAdd_{id}", FontAwesomeIcon.Check))
                 {
                     if (!string.IsNullOrWhiteSpace(newNameWorld))
@@ -1745,7 +1747,7 @@ public sealed class UiTheme
                 {
                     if (ImGui.Button("Add New Player", new Vector2(w, 0)))
                     {
-                        _playerAddStates[id] = ("", "");
+                        _playerAddStates[id] = ("", "", true);
                     }
                     HoverHandIfItem();
                 }
@@ -1774,7 +1776,8 @@ public sealed class UiTheme
             true, // showHeaders
             internalFooter,
             drawSearch,
-            extraRows
+            extraRows,
+            maxTableHeight
         );
     }
 }

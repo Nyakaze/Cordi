@@ -299,7 +299,7 @@ public class RememberMeTab
     private void DrawGlamourWindow()
     {
         bool open = true;
-        ImGui.SetNextWindowSize(new Vector2(300, 400), ImGuiCond.FirstUseEver);
+        ImGui.SetNextWindowSize(new Vector2(500, 550), ImGuiCond.FirstUseEver);
         if (ImGui.Begin($"Glamour: {viewingGlamourPlayer}###glamour_window", ref open))
         {
             if (!open)
@@ -309,40 +309,54 @@ public class RememberMeTab
             }
             else
             {
-                if (ImGui.Button("Close"))
-                {
-                    viewingGlamourPlayer = string.Empty;
-                    viewingGlamour = null;
-                    ImGui.End();
-                    return;
-                }
-
-                ImGui.Separator();
-
                 if (viewingGlamour != null)
                 {
                     ImGui.Text($"Captured: {viewingGlamour.CapturedAt}");
                     theme.SpacerY(0.5f);
 
-                    DrawGlamourItem("Main Hand", viewingGlamour.MainHand);
-                    DrawGlamourItem("Off Hand", viewingGlamour.OffHand);
-                    DrawGlamourItem("Head", viewingGlamour.Head);
-                    DrawGlamourItem("Body", viewingGlamour.Body);
-                    DrawGlamourItem("Hands", viewingGlamour.Hands);
-                    DrawGlamourItem("Legs", viewingGlamour.Legs);
-                    DrawGlamourItem("Feet", viewingGlamour.Feet);
-                    DrawGlamourItem("Ears", viewingGlamour.Ears);
-                    DrawGlamourItem("Neck", viewingGlamour.Neck);
-                    DrawGlamourItem("Wrists", viewingGlamour.Wrists);
-                    DrawGlamourItem("Left Ring", viewingGlamour.LeftRing);
-                    DrawGlamourItem("Right Ring", viewingGlamour.RightRing);
+                    if (ImGui.BeginTable("glamour_table", 2, ImGuiTableFlags.BordersInnerV | ImGuiTableFlags.SizingStretchProp))
+                    {
+                        ImGui.TableSetupColumn("Left", ImGuiTableColumnFlags.WidthStretch);
+                        ImGui.TableSetupColumn("Right", ImGuiTableColumnFlags.WidthStretch);
+
+                        // Row 1: Main / Off
+                        ImGui.TableNextRow();
+                        ImGui.TableNextColumn(); DrawGlamourItem("Main Hand", viewingGlamour.MainHand);
+                        ImGui.TableNextColumn(); DrawGlamourItem("Off Hand", viewingGlamour.OffHand);
+
+                        // Row 2: Head / Ears
+                        ImGui.TableNextRow();
+                        ImGui.TableNextColumn(); DrawGlamourItem("Head", viewingGlamour.Head);
+                        ImGui.TableNextColumn(); DrawGlamourItem("Earrings", viewingGlamour.Ears);
+
+                        // Row 3: Body / Neck
+                        ImGui.TableNextRow();
+                        ImGui.TableNextColumn(); DrawGlamourItem("Body", viewingGlamour.Body);
+                        ImGui.TableNextColumn(); DrawGlamourItem("Necklace", viewingGlamour.Neck);
+
+                        // Row 4: Hands / Wrists
+                        ImGui.TableNextRow();
+                        ImGui.TableNextColumn(); DrawGlamourItem("Hands", viewingGlamour.Hands);
+                        ImGui.TableNextColumn(); DrawGlamourItem("Bracelets", viewingGlamour.Wrists);
+
+                        // Row 5: Legs / Right Ring
+                        ImGui.TableNextRow();
+                        ImGui.TableNextColumn(); DrawGlamourItem("Legs", viewingGlamour.Legs);
+                        ImGui.TableNextColumn(); DrawGlamourItem("Right Ring", viewingGlamour.RightRing);
+
+                        // Row 6: Feet / Left Ring
+                        ImGui.TableNextRow();
+                        ImGui.TableNextColumn(); DrawGlamourItem("Feet", viewingGlamour.Feet);
+                        ImGui.TableNextColumn(); DrawGlamourItem("Left Ring", viewingGlamour.LeftRing);
+
+                        ImGui.EndTable();
+                    }
                 }
             }
             ImGui.End();
         }
         else
         {
-            // If Begin returns false but open is true, it means collapsed, just end.
             ImGui.End();
             if (!open)
             {
@@ -356,31 +370,88 @@ public class RememberMeTab
     {
         if (item.ItemId == 0) return;
 
+        ImGui.BeginGroup();
+        // Slot name in muted text
         ImGui.TextColored(new Vector4(0.7f, 0.7f, 0.7f, 1f), slotName);
-        ImGui.SameLine();
 
         var itemSheet = Service.DataManager.GetExcelSheet<Lumina.Excel.Sheets.Item>();
         var itemData = itemSheet?.GetRow(item.ItemId);
-        // If name exists use it, otherwise show Item #ID
         string itemName = itemData?.Name.ToString() ?? "";
+        ushort iconId = itemData?.Icon ?? 0;
+        byte rarity = itemData?.Rarity ?? 1;
+        ushort ilvl = (ushort)(itemData?.LevelItem.Value.RowId ?? 0);
+
+        Vector4 rarityColor = GetRarityColor(rarity);
+
         bool isValidItem = !string.IsNullOrWhiteSpace(itemName);
 
         if (isValidItem)
         {
-            if (ImGui.Button($"{itemName}##{slotName}_{item.ItemId}"))
+            bool iconDrawn = false;
+            // Draw Icon with border
+            if (iconId > 0)
             {
                 try
                 {
-                    var payload = new Dalamud.Game.Text.SeStringHandling.Payloads.ItemPayload(item.ItemId, item.IsHq);
-                    var text = new Dalamud.Game.Text.SeStringHandling.Payloads.TextPayload($"{itemName}");
-                    var seString = new Dalamud.Game.Text.SeStringHandling.SeString(payload, text, Dalamud.Game.Text.SeStringHandling.Payloads.RawPayload.LinkTerminator);
-                    Service.Chat.Print(seString);
+                    var tex = Service.TextureProvider.GetFromGameIcon(new Dalamud.Interface.Textures.GameIconLookup(iconId));
+                    var wrap = tex.GetWrapOrEmpty();
+
+                    if (wrap != null && wrap.Handle != IntPtr.Zero)
+                    {
+                        ImGui.PushID($"btn_{slotName}_{item.ItemId}");
+                        // Transparent background for button, providing our own border
+                        ImGui.PushStyleColor(ImGuiCol.Button, Vector4.Zero);
+                        ImGui.PushStyleColor(ImGuiCol.ButtonActive, Vector4.Zero);
+                        ImGui.PushStyleColor(ImGuiCol.ButtonHovered, Vector4.Zero);
+
+                        // Icon size
+                        Vector2 iconSize = new Vector2(40, 40);
+
+                        // Draw border manually
+                        var p = ImGui.GetCursorScreenPos();
+                        var drawList = ImGui.GetWindowDrawList();
+
+                        if (ImGui.ImageButton(wrap.Handle, iconSize))
+                        {
+                            PrintItemLink(item, itemName);
+                        }
+
+                        // Draw rarity border
+                        drawList.AddRect(p, p + iconSize + new Vector2(ImGui.GetStyle().FramePadding.X * 2, ImGui.GetStyle().FramePadding.Y * 2), ImGui.GetColorU32(rarityColor), 4f, ImDrawFlags.None, 2f);
+
+                        ImGui.PopStyleColor(3);
+                        ImGui.PopID();
+
+                        if (ImGui.IsItemHovered())
+                        {
+                            ImGui.SetTooltip($"{itemName}\nItem Level: {ilvl}\nClick to print item link. (ID: {item.ItemId})");
+                            theme.HoverHandIfItem();
+                        }
+
+                        ImGui.SameLine();
+
+                        // Item Details Column
+                        ImGui.BeginGroup();
+                        ImGui.TextColored(rarityColor, itemName);
+                        ImGui.TextDisabled($"iLvl {ilvl}");
+                        ImGui.EndGroup();
+
+                        iconDrawn = true;
+                    }
                 }
                 catch { }
             }
-            if (ImGui.IsItemHovered())
+
+            if (!iconDrawn)
             {
-                ImGui.SetTooltip($"Click to print item link. (ID: {item.ItemId})");
+                if (ImGui.Button($"{itemName}##{slotName}_{item.ItemId}"))
+                {
+                    PrintItemLink(item, itemName);
+                }
+                if (ImGui.IsItemHovered())
+                {
+                    ImGui.SetTooltip($"Click to print item link. (ID: {item.ItemId})");
+                }
             }
         }
         else
@@ -389,6 +460,37 @@ public class RememberMeTab
             if (ImGui.IsItemHovered())
                 ImGui.SetTooltip("Could not resolve Item ID to Name. Might be a Model ID.");
         }
+        ImGui.EndGroup();
+    }
+
+    private Vector4 GetRarityColor(byte rarity)
+    {
+        return rarity switch
+        {
+            1 => new Vector4(1f, 1f, 1f, 1f),       // Common (White)
+            2 => new Vector4(0.7f, 1f, 0.7f, 1f),   // Uncomon (Green)
+            3 => new Vector4(0.4f, 0.6f, 1f, 1f),   // Rare (Blue)
+            4 => new Vector4(0.8f, 0.5f, 1f, 1f),   // Relic (Purple)
+            7 => new Vector4(1f, 0.5f, 0.8f, 1f),   // Aetherial (Pink)
+            _ => new Vector4(1f, 1f, 1f, 1f)
+        };
+    }
+
+    private void PrintItemLink(PlayerGlamour.GearItem item, string itemName)
+    {
+        try
+        {
+            var payload = new Dalamud.Game.Text.SeStringHandling.Payloads.ItemPayload(item.ItemId, item.IsHq);
+            var text = new Dalamud.Game.Text.SeStringHandling.Payloads.TextPayload($"{itemName}");
+            // Add a link terminator to properly close the item link
+            var seString = new Dalamud.Game.Text.SeStringHandling.SeString(
+                payload,
+                text,
+                Dalamud.Game.Text.SeStringHandling.Payloads.RawPayload.LinkTerminator
+            );
+            Service.Chat.Print(seString);
+        }
+        catch { }
     }
 
     private void DrawAddNewForm(float avail)
