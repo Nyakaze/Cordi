@@ -409,6 +409,52 @@ public class ChatsTab
                    }
 
                    ImGui.EndTable();
+
+                   theme.SpacerY(1f);
+                   ImGui.Separator();
+                   theme.SpacerY(1f);
+
+                   bool tellNotif = plugin.Config.Chat.EnableTellNotification;
+                   if (theme.ConfigCheckbox("Send Tell notification to other channel", ref tellNotif, () =>
+                   {
+                       plugin.Config.Chat.EnableTellNotification = tellNotif;
+                       plugin.Config.Save();
+                   }))
+                   { }
+
+                   if (tellNotif)
+                   {
+                       theme.SpacerY(0.5f);
+                       ImGui.Indent();
+
+                       ImGui.Text("Notification Channel:");
+                       string currentNotifId = plugin.Config.Chat.TellNotificationChannelId;
+                       theme.ChannelPicker(
+                           "tell-notif-channel",
+                           currentNotifId,
+                           textChannels,
+                           (newId) =>
+                           {
+                               plugin.Config.Chat.TellNotificationChannelId = newId;
+                               plugin.Config.Save();
+                           },
+                           defaultLabel: "Select a Channel..."
+                       );
+
+                       theme.SpacerY(0.5f);
+                       int cooldown = plugin.Config.Chat.TellNotificationCooldownSeconds;
+                       ImGui.SetNextItemWidth(100f);
+                       if (ImGui.InputInt("Conversation Cooldown (seconds)", ref cooldown))
+                       {
+                           if (cooldown < 0) cooldown = 0;
+                           plugin.Config.Chat.TellNotificationCooldownSeconds = cooldown;
+                           plugin.Config.Save();
+                       }
+                       if (ImGui.IsItemHovered())
+                           ImGui.SetTooltip("Time in seconds to wait before sending another notification for the same active conversation.");
+
+                       ImGui.Unindent();
+                   }
                }
            },
             drawHeaderRight: () =>

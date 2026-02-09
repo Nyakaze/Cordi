@@ -318,6 +318,8 @@ public class DiscordHandler : IDisposable
                             Logger.Error(ex, $"Failed to re-fetch thread {thread.Id}. Using original object.");
                         }
                     }
+
+
                     Logger.Info($"[DiscordHandler] Sending to thread: {thread.Name} (ID: {thread.Id}, ParentID: {thread.ParentId})");
                     channel = thread;
                 }
@@ -325,6 +327,19 @@ public class DiscordHandler : IDisposable
                 var finalAvatarUrl = avatarUrl ?? await _plugin.Lodestone.GetAvatarUrlAsync(senderName, senderWorld);
 
                 var sanitizedContent = DiscordTextSanitizer.Sanitize(content);
+
+                // Validation to prevent 400 Bad Request
+                if (string.IsNullOrWhiteSpace(sanitizedContent))
+                {
+                    Logger.Warning($"[DiscordHandler] Sanitized content is empty. Original: '{content}'. Skipping webhook execution.");
+                    return;
+                }
+
+                if (!string.IsNullOrEmpty(finalAvatarUrl) && !Uri.IsWellFormedUriString(finalAvatarUrl, UriKind.Absolute))
+                {
+                    Logger.Warning($"[DiscordHandler] Invalid Avatar URL: '{finalAvatarUrl}'. clear url to prevent error.");
+                    finalAvatarUrl = null;
+                }
 
                 bool channelFilterEnabled = true;
                 var mapping = _plugin.Config.Chat.Mappings.FirstOrDefault(m => m.GameChatType == chatType);
@@ -418,10 +433,13 @@ public class DiscordHandler : IDisposable
 
                 var hookMessage = new DiscordWebhookBuilder()
                     .WithContent(sanitizedContent)
-                    .WithUsername($"{senderName}@{senderWorld}")
-                    .WithAvatarUrl(finalAvatarUrl);
+                    .WithUsername($"{senderName}@{senderWorld}");
 
-                Logger.Info($"[DiscordHandler] Executing webhook for channel {channel.Id}...");
+                if (!string.IsNullOrEmpty(finalAvatarUrl))
+                {
+                    hookMessage.WithAvatarUrl(finalAvatarUrl);
+                }
+
                 ulong sentMessageId = await _webhooks.ExecuteWebhookAsync(channel, hookMessage);
                 Logger.Info($"{chatType} | Sent via webhook: {sanitizedContent} (ID: {sentMessageId})");
 
@@ -468,6 +486,36 @@ public class DiscordHandler : IDisposable
                 Logger.Error(ex, $"Failed to send message to channel {channelId}");
             }
         });
+    }
+
+    public async Task<ulong> SendWebhookMessage(ulong channelId, string content, string senderName, string senderWorld)
+    {
+        if (_client == null) return 0;
+        try
+        {
+            var channel = await _client.GetChannelAsync(channelId);
+
+            var sanitizedContent = DiscordTextSanitizer.Sanitize(content);
+            if (string.IsNullOrWhiteSpace(sanitizedContent)) return 0;
+
+            var avatarUrl = await _plugin.Lodestone.GetAvatarUrlAsync(senderName, senderWorld);
+            if (!string.IsNullOrEmpty(avatarUrl) && !Uri.IsWellFormedUriString(avatarUrl, UriKind.Absolute)) avatarUrl = null;
+
+            var username = $"{senderName}@{senderWorld}";
+
+            var builder = new DiscordWebhookBuilder()
+                .WithUsername(username)
+                .WithContent(sanitizedContent);
+
+            if (!string.IsNullOrEmpty(avatarUrl)) builder.WithAvatarUrl(avatarUrl);
+
+            return await _webhooks.ExecuteWebhookAsync(channel, builder);
+        }
+        catch (Exception ex)
+        {
+            Logger.Error(ex, "Failed to send webhook message.");
+            return 0;
+        }
     }
 
     public async Task<ulong> SendWebhookMessage(ulong channelId, DiscordEmbed embed, string senderName, string senderWorld)
