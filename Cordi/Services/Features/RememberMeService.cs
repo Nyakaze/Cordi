@@ -158,7 +158,9 @@ public class RememberMeService : IDisposable
                             var item = container->GetInventorySlot(slotIndex);
                             if (item == null) return new PlayerGlamour.GearItem(0, 0);
 
-                            byte stain = 0;
+                            // Accessing internal _stains[0] at offset 0x37, _stains[1] at 0x38
+                            byte stain = ((byte*)item)[0x37];
+                            byte stain2 = ((byte*)item)[0x38];
                             // Initial guess: GlamourId if present, else ItemId
                             uint idToUse = item->GlamourId != 0 ? item->GlamourId : item->ItemId;
 
@@ -179,7 +181,8 @@ public class RememberMeService : IDisposable
                                 }
                             }
 
-                            return new PlayerGlamour.GearItem(idToUse, stain);
+                            // TODO: check IsHq from item->Flags
+                            return new PlayerGlamour.GearItem(idToUse, stain, stain2);
                         }
 
                         // Slot mapping (Standard inventory order for Examine container)

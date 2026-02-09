@@ -1,6 +1,7 @@
 using System;
 using System.Linq;
 using System.Numerics;
+using FFXIVClientStructs.FFXIV.Client.UI.Agent;
 using Cordi.Configuration;
 using Cordi.Core;
 using Cordi.UI.Themes;
@@ -93,8 +94,6 @@ public class RememberMeTab
                     plugin.Config.Save();
                 }
                 theme.HoverHandIfItem();
-                ImGui.SameLine();
-                ImGui.TextColored(UiTheme.ColorDangerText, " (WIP)");
 
                 theme.SpacerY(0.5f);
             }
@@ -413,6 +412,10 @@ public class RememberMeTab
 
                         if (ImGui.ImageButton(wrap.Handle, iconSize))
                         {
+                            TryOnItem(item, slotName);
+                        }
+                        if (ImGui.IsItemClicked(ImGuiMouseButton.Right))
+                        {
                             PrintItemLink(item, itemName);
                         }
 
@@ -424,7 +427,7 @@ public class RememberMeTab
 
                         if (ImGui.IsItemHovered())
                         {
-                            ImGui.SetTooltip($"{itemName}\nItem Level: {ilvl}\nClick to print item link. (ID: {item.ItemId})");
+                            ImGui.SetTooltip($"{itemName}\nItem Level: {ilvl}\nL-Click: Try On\nR-Click: Link Chat");
                             theme.HoverHandIfItem();
                         }
 
@@ -434,6 +437,55 @@ public class RememberMeTab
                         ImGui.BeginGroup();
                         ImGui.TextColored(rarityColor, itemName);
                         ImGui.TextDisabled($"iLvl {ilvl}");
+
+                        // Stain / Dye 1
+                        if (item.StainId > 0)
+                        {
+                            var stainSheet = Service.DataManager.GetExcelSheet<Lumina.Excel.Sheets.Stain>();
+                            var stainData = stainSheet?.GetRow(item.StainId);
+                            if (stainData != null)
+                            {
+                                string stainName = stainData.Value.Name.ToString();
+                                uint stainColorInt = stainData.Value.Color;
+                                stainColorInt |= 0xFF000000;
+                                float r = ((stainColorInt >> 16) & 0xFF) / 255f;
+                                float g = ((stainColorInt >> 8) & 0xFF) / 255f;
+                                float b = (stainColorInt & 0xFF) / 255f;
+                                Vector4 stainColorVec = new Vector4(r, g, b, 1f);
+
+                                ImGui.SameLine();
+                                ImGui.ColorButton($"##stain1_{item.ItemId}", stainColorVec, ImGuiColorEditFlags.NoTooltip | ImGuiColorEditFlags.NoDragDrop | ImGuiColorEditFlags.NoPicker, new Vector2(10, 10));
+                                if (ImGui.IsItemHovered())
+                                {
+                                    ImGui.SetTooltip($"Dye 1: {stainName}");
+                                }
+                            }
+                        }
+
+                        // Stain / Dye 2
+                        if (item.StainId2 > 0)
+                        {
+                            var stainSheet = Service.DataManager.GetExcelSheet<Lumina.Excel.Sheets.Stain>();
+                            var stainData = stainSheet?.GetRow(item.StainId2);
+                            if (stainData != null)
+                            {
+                                string stainName = stainData.Value.Name.ToString();
+                                uint stainColorInt = stainData.Value.Color;
+                                stainColorInt |= 0xFF000000;
+                                float r = ((stainColorInt >> 16) & 0xFF) / 255f;
+                                float g = ((stainColorInt >> 8) & 0xFF) / 255f;
+                                float b = (stainColorInt & 0xFF) / 255f;
+                                Vector4 stainColorVec = new Vector4(r, g, b, 1f);
+
+                                ImGui.SameLine();
+                                ImGui.ColorButton($"##stain2_{item.ItemId}", stainColorVec, ImGuiColorEditFlags.NoTooltip | ImGuiColorEditFlags.NoDragDrop | ImGuiColorEditFlags.NoPicker, new Vector2(10, 10));
+                                if (ImGui.IsItemHovered())
+                                {
+                                    ImGui.SetTooltip($"Dye 2: {stainName}");
+                                }
+                            }
+                        }
+
                         ImGui.EndGroup();
 
                         iconDrawn = true;
@@ -446,11 +498,11 @@ public class RememberMeTab
             {
                 if (ImGui.Button($"{itemName}##{slotName}_{item.ItemId}"))
                 {
-                    PrintItemLink(item, itemName);
+                    TryOnItem(item, slotName);
                 }
-                if (ImGui.IsItemHovered())
+                if (ImGui.IsItemClicked(ImGuiMouseButton.Right))
                 {
-                    ImGui.SetTooltip($"Click to print item link. (ID: {item.ItemId})");
+                    PrintItemLink(item, itemName);
                 }
             }
         }
@@ -474,6 +526,30 @@ public class RememberMeTab
             7 => new Vector4(1f, 0.5f, 0.8f, 1f),   // Aetherial (Pink)
             _ => new Vector4(1f, 1f, 1f, 1f)
         };
+    }
+
+    private unsafe void TryOnItem(PlayerGlamour.GearItem item, string slotName)
+    {
+        try
+        {
+            var itemSheet = Service.DataManager.GetExcelSheet<Lumina.Excel.Sheets.Item>();
+            var itemData = itemSheet?.GetRow(item.ItemId);
+
+            if (itemData == null) return;
+
+            // EquipSlotCategory.Row seems to match the slot ID expected by TryOn
+            var equipSlotCategory = itemData.Value.EquipSlotCategory.RowId;
+
+            // AgentTryon.TryOn(itemId, stainId, equipSlot, 0, 0, isHq)
+            // Using EquipSlotCategory as 3rd arg
+            Service.Log.Debug($"[Cordi] TryOnItem: ID={item.ItemId} Stain={item.StainId} Slot={equipSlotCategory} (Category)");
+            AgentTryon.TryOn(0xFF, item.ItemId, item.StainId, 0, 0);
+            // AgentTryon.TryOn(item.ItemId, item.StainId, (byte)equipSlotCategory, 0, 0, item.IsHq);
+        }
+        catch (Exception ex)
+        {
+            Service.Log.Error(ex, "Failed to try on item.");
+        }
     }
 
     private void PrintItemLink(PlayerGlamour.GearItem item, string itemName)

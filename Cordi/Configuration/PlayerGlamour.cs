@@ -25,14 +25,16 @@ public class PlayerGlamour
     {
         public uint ItemId { get; set; }
         public byte StainId { get; set; }
+        public byte StainId2 { get; set; }
         public bool IsHq { get; set; }
 
         public GearItem() { }
 
-        public GearItem(uint itemId, byte stainId, bool isHq = false)
+        public GearItem(uint itemId, byte stainId, byte stainId2 = 0, bool isHq = false)
         {
             ItemId = itemId;
             StainId = stainId;
+            StainId2 = stainId2;
             IsHq = isHq;
         }
     }
