@@ -175,10 +175,10 @@ public class TomestoneService : IDisposable
             using var document = JsonDocument.Parse(json);
             var root = document.RootElement;
 
-            if (root.TryGetProperty("profile", out var profile))
+            if (root.TryGetProperty("profile", out var profile) && profile.ValueKind != JsonValueKind.Null)
             {
                 // If classJob specified, look in gearSetList
-                if (!string.IsNullOrEmpty(classJob) && profile.TryGetProperty("gearSetList", out var gearSetList))
+                if (!string.IsNullOrEmpty(classJob) && profile.TryGetProperty("gearSetList", out var gearSetList) && gearSetList.ValueKind == JsonValueKind.Array)
                 {
                     // Convert abbreviation to full name (e.g., DRK → DarkKnight)
                     var classJobFullName = ClassJobMapping.TryGetValue(classJob, out var fullName)
@@ -189,6 +189,8 @@ public class TomestoneService : IDisposable
 
                     foreach (var gearSet in gearSetList.EnumerateArray())
                     {
+                        if (gearSet.ValueKind == JsonValueKind.Null) continue;
+
                         if (gearSet.TryGetProperty("id", out var id) &&
                             id.GetString()?.Equals(classJobFullName, StringComparison.OrdinalIgnoreCase) == true)
                         {
@@ -218,9 +220,9 @@ public class TomestoneService : IDisposable
                 }
 
                 // Fallback to currently equipped gear if no class specified
-                if (profile.TryGetProperty("gearSetAndAttributes", out var gearSetAndAttributes))
+                if (profile.TryGetProperty("gearSetAndAttributes", out var gearSetAndAttributes) && gearSetAndAttributes.ValueKind != JsonValueKind.Null)
                 {
-                    if (gearSetAndAttributes.TryGetProperty("gearSet", out var gearSet))
+                    if (gearSetAndAttributes.TryGetProperty("gearSet", out var gearSet) && gearSet.ValueKind != JsonValueKind.Null)
                     {
                         if (gearSet.TryGetProperty("itemLevel", out var itemLevel))
                         {
@@ -292,11 +294,11 @@ public class TomestoneService : IDisposable
                 var root = document.RootElement;
 
                 // Navigate to the data array: activities.activities.activities.paginator.data
-                if (!root.TryGetProperty("activities", out var activities1) ||
-                    !activities1.TryGetProperty("activities", out var activities2) ||
-                    !activities2.TryGetProperty("activities", out var activities3) ||
-                    !activities3.TryGetProperty("paginator", out var paginator) ||
-                    !paginator.TryGetProperty("data", out var data) ||
+                if (!root.TryGetProperty("activities", out var activities1) || activities1.ValueKind == JsonValueKind.Null ||
+                    !activities1.TryGetProperty("activities", out var activities2) || activities2.ValueKind == JsonValueKind.Null ||
+                    !activities2.TryGetProperty("activities", out var activities3) || activities3.ValueKind == JsonValueKind.Null ||
+                    !activities3.TryGetProperty("paginator", out var paginator) || paginator.ValueKind == JsonValueKind.Null ||
+                    !paginator.TryGetProperty("data", out var data) || data.ValueKind != JsonValueKind.Array ||
                     data.GetArrayLength() == 0)
                 {
                     Logger.Debug($"[Tomestone] No more data on page {currentPage}, stopping pagination");
@@ -306,12 +308,12 @@ public class TomestoneService : IDisposable
                 // Process each activity
                 foreach (var item in data.EnumerateArray())
                 {
-                    if (!item.TryGetProperty("activity", out var activityData))
+                    if (!item.TryGetProperty("activity", out var activityData) || activityData.ValueKind == JsonValueKind.Null)
                         continue;
 
                     // Get raid name from encounter.instanceContentLocalizedName
-                    if (!activityData.TryGetProperty("encounter", out var encounter) ||
-                        !encounter.TryGetProperty("instanceContentLocalizedName", out var raidNameProp))
+                    if (!activityData.TryGetProperty("encounter", out var encounter) || encounter.ValueKind == JsonValueKind.Null ||
+                        !encounter.TryGetProperty("instanceContentLocalizedName", out var raidNameProp) || raidNameProp.ValueKind == JsonValueKind.Null)
                         continue;
 
                     var raidName = raidNameProp.GetString();
