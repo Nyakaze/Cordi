@@ -34,7 +34,6 @@ namespace Cordi.Services.Features
                 var targetPath = Path.Combine(parentDir, "ExtraChat.json");
                 if (File.Exists(targetPath)) return targetPath;
             }
-            // Fallback: Check if configDir IS pluginConfigs (if not moved yet or structure differs)
             var directPath = Path.Combine(configDir, "ExtraChat.json");
             if (File.Exists(directPath)) return directPath;
 
@@ -43,11 +42,12 @@ namespace Cordi.Services.Features
 
         public bool IsExtraChatInstalled()
         {
-            // Check if the plugin is actually loaded in Dalamud
+#if DEBUG
+            var isLoaded = true;
+#else
             var isLoaded = CordiPlugin.PluginInterface.InstalledPlugins
                 .Any(p => p.InternalName == "ExtraChat" && p.IsLoaded);
-
-            // Also verify config exists for safety
+#endif
             return isLoaded && !string.IsNullOrEmpty(GetExtraChatConfigPath());
         }
 
@@ -59,32 +59,20 @@ namespace Cordi.Services.Features
             try
             {
                 var json = File.ReadAllText(path);
-                // ExtraChat uses "$type" metadata which JSON.NET handles automatically if TypeNameHandling is Auto,
-                // but we defined custom POCOs for mapping, so default deserialization should ignore unknown properties.
-                // However, the root object structure in the user sample is:
-                // { "$type": ..., "Configs": { ... } }
-
-                // We need to be careful with type handling if the types in JSON don't match our assembly.
-                // Safer to use JObject or robust settings.
                 var settings = new JsonSerializerSettings
                 {
-                    TypeNameHandling = TypeNameHandling.None, // Ignore $type metadata to use our POCOs source
+                    TypeNameHandling = TypeNameHandling.None,
                     NullValueHandling = NullValueHandling.Ignore
                 };
-
-                // The root object has "Configs" property which is a Dictionary<ulong, ConfigInfo>
-                // We'll deserialize to JObject first to navigate easier or try direct mapping.
 
                 var root = JsonConvert.DeserializeObject<ExtraChatRoot>(json, settings);
                 if (root?.Configs == null) return 0;
 
-                // Find current character config
                 ulong contentId = CordiPlugin.ClientState.LocalContentId;
                 if (contentId == 0) return 0; // Not logged in
 
                 if (!root.Configs.TryGetValue(contentId, out var charConfig))
                 {
-                    // Fallback: Check if there's a default or match by name? Usually CID based.
                     return 0;
                 }
 

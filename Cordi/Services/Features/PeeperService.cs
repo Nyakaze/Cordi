@@ -325,9 +325,7 @@ public class CordiPeepService : IDisposable
 
         if (string.IsNullOrWhiteSpace(path))
         {
-            SystemSounds.Beep.Play();
-            _lastSoundPlayTime = DateTime.Now;
-            return;
+            path = Path.Join(Service.PluginInterface.AssemblyLocation.Directory!.FullName, "target.wav");
         }
 
         if (!File.Exists(path)) return;
