@@ -281,7 +281,13 @@ public class CordiPeepService : IDisposable
 
                 if (!state.IsLooking)
                 {
-                    await UpdateAlertStopped(state, GetLocalPlayerTargetName());
+                    string finalTargetName = "None";
+                    await Service.Framework.RunOnFrameworkThread(() =>
+                    {
+                        finalTargetName = GetLocalPlayerTargetName();
+                    });
+
+                    await UpdateAlertStopped(state, finalTargetName);
                 }
             }
         }
