@@ -12,6 +12,7 @@ public class PartyConfig
     public bool NotifyJoin { get; set; } = true;
     public bool NotifyLeave { get; set; } = true;
     public bool NotifyFull { get; set; } = false;
+    public bool AutoSendSummary { get; set; } = false;
     public bool ShowGearLevel { get; set; } = false;
     public bool ExcludeAlliance { get; set; } = false;
 

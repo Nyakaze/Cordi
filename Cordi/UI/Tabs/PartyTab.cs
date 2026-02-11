@@ -131,6 +131,14 @@ public class PartyTab
                     },
                     defaultLabel: "Select a channel..."
                 );
+
+                theme.SpacerY(1f);
+
+                if (theme.SecondaryButton("Send Party Summary to Discord", new Vector2(avail, 0)))
+                {
+                    _ = plugin.PartyService.SendPartySummary(true);
+                }
+                ImGui.TextDisabled("Manually sends a summary of the current party to Discord.");
             }
         );
     }
@@ -160,9 +168,17 @@ public class PartyTab
                 theme.HoverHandIfItem();
 
                 bool notifyFull = plugin.Config.Party.NotifyFull;
-                theme.ConfigCheckbox("Notify when Party Fills (8/8)", ref notifyFull, () =>
+                theme.ConfigCheckbox("Notify when Party Fills (Simple)", ref notifyFull, () =>
                 {
                     plugin.Config.Party.NotifyFull = notifyFull;
+                    plugin.Config.Save();
+                });
+                theme.HoverHandIfItem();
+
+                bool autoSummary = plugin.Config.Party.AutoSendSummary;
+                theme.ConfigCheckbox("Auto-send Party Summary when full (8/8)", ref autoSummary, () =>
+                {
+                    plugin.Config.Party.AutoSendSummary = autoSummary;
                     plugin.Config.Save();
                 });
                 theme.HoverHandIfItem();

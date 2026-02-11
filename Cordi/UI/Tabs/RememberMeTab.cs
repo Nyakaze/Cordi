@@ -108,15 +108,15 @@ public class RememberMeTab
             enabled: ref cardEnabled,
             drawContent: (avail) =>
             {
-                var partyList = Service.PartyList;
+                var partyList = plugin.PartyService.PartyMembers;
 
-                if (partyList == null || partyList.Length == 0)
+                if (partyList == null || partyList.Count == 0)
                 {
                     ImGui.TextDisabled("Not in a party.");
                     return;
                 }
 
-                ImGui.Text($"Party size: {partyList.Length}/8");
+                ImGui.Text($"Party size: {partyList.Count}/8");
                 theme.SpacerY(0.5f);
 
                 if (ImGui.BeginTable("##currentPartyTable", 3, ImGuiTableFlags.NoBordersInBody | ImGuiTableFlags.RowBg))
@@ -126,13 +126,13 @@ public class RememberMeTab
                     ImGui.TableSetupColumn("Notes", ImGuiTableColumnFlags.WidthStretch);
                     ImGui.TableHeadersRow();
 
-                    for (int i = 0; i < partyList.Length; i++)
+                    for (int i = 0; i < partyList.Count; i++)
                     {
                         var member = partyList[i];
                         if (member == null) continue;
 
-                        var name = member.Name.ToString();
-                        var world = member.World.Value.Name.ToString();
+                        var name = member.Name;
+                        var world = member.World;
 
                         ImGui.TableNextRow();
 
@@ -140,7 +140,7 @@ public class RememberMeTab
                         ImGui.Text($"{name}@{world}");
 
                         ImGui.TableSetColumnIndex(1);
-                        var classJobId = member.ClassJob.RowId;
+                        var classJobId = member.JobId;
                         var classJobSheet = Service.DataManager.GetExcelSheet<Lumina.Excel.Sheets.ClassJob>();
                         var classJob = classJobSheet?.GetRow(classJobId);
                         var classJobAbbr = classJob?.Abbreviation.ToString() ?? "?";
