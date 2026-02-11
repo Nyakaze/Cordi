@@ -1,3 +1,9 @@
+## [1.2.1](https://github.com/Nyakaze/Cordi/compare/1.2.0...1.2.1) (11-02-2026)
+
+### Party
+ - **Fixed:** A bug where Cross Realm Parties were not working in Party Track Feature.
+ - **Added:** A Summary of the Party when the Party fills.
+
 ## [1.2.0](https://github.com/Nyakaze/Cordi/compare/1.1.6...1.2.0) (09-02-2026)
 
 ### Remember Me
