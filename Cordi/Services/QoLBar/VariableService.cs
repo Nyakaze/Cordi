@@ -76,6 +76,12 @@ public class VariableService : IDisposable
         Save();
     }
 
+    /// <summary>Sets a variable without saving to disk. Used for high-frequency dynamic updates.</summary>
+    public void SetVariableInternal(string name, string value)
+    {
+        variables[name] = value;
+    }
+
     public string GetVariable(string name)
     {
         return variables.TryGetValue(name, out var val) ? val : string.Empty;

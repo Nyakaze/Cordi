@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Numerics;
 using System.Collections.Generic;
 using Cordi.Configuration.QoLBar;
@@ -90,15 +91,20 @@ public class QoLBarTab
         float availW = ImGui.GetContentRegionAvail().X;
         float scale = ImGuiHelpers.GlobalScale;
 
+        // ── Toolbar ──────────────────────────────────────────────────────────
         if (theme.PrimaryButton("+ New Bar", new Vector2(140 * scale, 0)))
-        {
             overlay.AddBar(new BarCfg { Name = $"Bar {config.Bars.Count + 1}", Editing = true });
+
+        ImGui.SameLine();
+        if (theme.SecondaryButton("+ Collection", new Vector2(130 * scale, 0)))
+        {
+            config.Collections.Add(new BarCollectionCfg { Name = $"Collection {config.Collections.Count + 1}" });
+            config.Save();
         }
+
         ImGui.SameLine();
         if (theme.SecondaryButton("Import", new Vector2(100 * scale, 0)))
-        {
             ImGui.OpenPopup("##ImportBarPopup");
-        }
 
         if (ImGui.BeginPopup("##ImportBarPopup"))
         {
@@ -128,15 +134,45 @@ public class QoLBarTab
 
         theme.SpacerY(1f);
 
+        // ── Collections ───────────────────────────────────────────────────────
+        for (int ci = 0; ci < config.Collections.Count; ci++)
+        {
+            var col = config.Collections[ci];
+            ImGui.PushID($"col_{ci}");
+
+            DrawCollectionHeader(config, col, ci);
+            theme.SpacerY(0.3f);
+
+            if (!col.Collapsed)
+            {
+                // Indent the bar cards inside this collection
+                ImGui.Indent(16 * scale);
+                for (int bi = 0; bi < config.Bars.Count; bi++)
+                {
+                    if (config.Bars[bi].CollectionId != col.Id) continue;
+                    ImGui.PushID($"bar_c{ci}_{bi}");
+                    DrawBarCard(config, bi);
+                    ImGui.PopID();
+                    theme.SpacerY(0.5f);
+                }
+                ImGui.Unindent(16 * scale);
+            }
+
+            ImGui.PopID();
+            theme.SpacerY(0.5f);
+        }
+
+        // ── Uncollected bars (shown after collections) ────────────────────────
         for (int i = 0; i < config.Bars.Count; i++)
         {
-            ImGui.PushID(i);
+            if (!string.IsNullOrEmpty(config.Bars[i].CollectionId)) continue;
+            ImGui.PushID($"bar_unc_{i}");
             DrawBarCard(config, i);
             ImGui.PopID();
             theme.SpacerY(0.5f);
         }
 
-        if (config.Bars.Count == 0)
+        if (config.Bars.Count == 0 && config.Collections.Count == 0)
         {
             theme.SpacerY(2f);
             var text = "No bars configured. Click '+ New Bar' to create one.";
@@ -145,6 +181,155 @@ public class QoLBarTab
             ImGui.TextColored(theme.MutedText, text);
         }
     }
+
+    private void DrawCollectionHeader(QoLBarConfig config, BarCollectionCfg col, int ci)
+    {
+        float scale = ImGuiHelpers.GlobalScale;
+        float availW = ImGui.GetContentRegionAvail().X;
+        float padX = theme.PadX(0.7f);
+        float padY = theme.PadY(0.6f);
+        float radius = theme.Radius(1.0f);
+
+        var draw = ImGui.GetWindowDrawList();
+        var startPos = ImGui.GetCursorScreenPos();
+
+        draw.ChannelsSplit(2);
+        draw.ChannelsSetCurrent(1);
+
+        ImGui.BeginGroup();
+        ImGui.Dummy(new Vector2(0, padY));
+        ImGui.SetCursorPosX(ImGui.GetCursorPosX() + padX);
+
+        // Collapse toggle (chevron icon)
+        ImGui.PushFont(UiBuilder.IconFont);
+        var chevron = col.Collapsed ? FontAwesomeIcon.ChevronRight.ToIconString() : FontAwesomeIcon.ChevronDown.ToIconString();
+        ImGui.PushStyleColor(ImGuiCol.Button, Vector4.Zero);
+        ImGui.PushStyleColor(ImGuiCol.ButtonHovered, new Vector4(1, 1, 1, 0.08f));
+        ImGui.PushStyleColor(ImGuiCol.ButtonActive, new Vector4(1, 1, 1, 0.15f));
+        if (ImGui.Button($"{chevron}##toggle", new Vector2(22 * scale, 0)))
+        {
+            col.Collapsed = !col.Collapsed;
+            config.Save();
+        }
+        ImGui.PopStyleColor(3);
+        ImGui.PopFont();
+
+        ImGui.SameLine(0, theme.Gap(0.4f));
+
+        // Folder icon
+        ImGui.PushFont(UiBuilder.IconFont);
+        ImGui.PushStyleColor(ImGuiCol.Text, theme.Accent);
+        ImGui.TextUnformatted(FontAwesomeIcon.Folder.ToIconString());
+        ImGui.PopStyleColor();
+        ImGui.PopFont();
+
+        ImGui.SameLine(0, theme.Gap(0.4f));
+
+        // Editable name
+        ImGui.PushStyleColor(ImGuiCol.Text, theme.Text);
+        ImGui.SetNextItemWidth(180 * scale);
+        theme.PushInputScope();
+        var colName = col.Name;
+        if (ImGui.InputText("##colName", ref colName, 64))
+        {
+            col.Name = colName;
+            config.Save();
+        }
+        theme.PopInputScope();
+        ImGui.PopStyleColor();
+
+        // Bar count badge
+        int barCount = config.Bars.Count(b => b.CollectionId == col.Id);
+        ImGui.SameLine(0, theme.Gap(0.5f));
+        ImGui.PushStyleColor(ImGuiCol.Text, theme.MutedText);
+        ImGui.TextUnformatted($"{barCount} bar{(barCount != 1 ? "s" : "")}");
+        ImGui.PopStyleColor();
+
+        // Right-side action buttons
+        float rightEdge = startPos.X + availW - padX;
+        float btnW = 24 * scale;
+        float btnH = 24 * scale;
+        float btnGap = theme.Gap(0.3f);
+        float totalBtnWidth = (btnW * 3) + (btnGap * 2);
+
+        // Position at top-right, aligned with the text baseline (padY offset)
+        ImGui.SetCursorScreenPos(new Vector2(rightEdge - totalBtnWidth, startPos.Y + padY));
+
+        ImGui.PushStyleVar(ImGuiStyleVar.FrameRounding, theme.Radius(0.6f));
+        ImGui.PushStyleVar(ImGuiStyleVar.FramePadding, Vector2.Zero);
+        ImGui.PushFont(UiBuilder.IconFont);
+
+        // 1. Move Up (Left)
+        if (ci > 0)
+        {
+            if (ImGui.Button(FontAwesomeIcon.ArrowUp.ToIconString(), new Vector2(btnW, btnH)))
+            {
+                config.Collections.RemoveAt(ci);
+                config.Collections.Insert(ci - 1, col);
+                config.Save();
+            }
+            theme.HoverHandIfItem();
+        }
+        else
+            ImGui.Dummy(new Vector2(btnW, btnH));
+
+        ImGui.SameLine(0, btnGap);
+
+        // 2. Move Down (Middle)
+        if (ci < config.Collections.Count - 1)
+        {
+            if (ImGui.Button(FontAwesomeIcon.ArrowDown.ToIconString(), new Vector2(btnW, btnH)))
+            {
+                config.Collections.RemoveAt(ci);
+                config.Collections.Insert(ci + 1, col);
+                config.Save();
+            }
+            theme.HoverHandIfItem();
+        }
+        else
+            ImGui.Dummy(new Vector2(btnW, btnH));
+
+        ImGui.SameLine(0, btnGap);
+
+        // 3. Delete (Right/Corner)
+        ImGui.PushStyleColor(ImGuiCol.Button, UiTheme.ColorDanger);
+        ImGui.PushStyleColor(ImGuiCol.ButtonHovered, new Vector4(0.7f, 0.1f, 0.1f, 1f));
+        if (ImGui.Button(FontAwesomeIcon.Trash.ToIconString(), new Vector2(btnW, btnH)))
+        {
+            foreach (var b in config.Bars)
+                if (b.CollectionId == col.Id)
+                    b.CollectionId = null;
+            config.Collections.RemoveAt(ci);
+            config.Save();
+            ImGui.PopStyleColor(2);
+            ImGui.PopFont();
+            ImGui.PopStyleVar(2);
+            ImGui.Dummy(new Vector2(0, padY));
+            ImGui.EndGroup();
+            draw.ChannelsMerge();
+            return;
+        }
+        ImGui.PopStyleColor(2);
+        if (ImGui.IsItemHovered()) { ImGui.PopFont(); ImGui.SetTooltip("Delete collection (bars are kept)"); ImGui.PushFont(UiBuilder.IconFont); }
+
+        ImGui.PopFont();
+        ImGui.PopStyleVar(2);
+
+        ImGui.Dummy(new Vector2(0, padY));
+        ImGui.EndGroup();
+
+        var itemMax = ImGui.GetItemRectMax();
+        var endPos = new Vector2(startPos.X + availW, itemMax.Y);
+
+        var headerBg = new Vector4(theme.Accent.X, theme.Accent.Y, theme.Accent.Z, 0.10f);
+        draw.ChannelsSetCurrent(0);
+        draw.AddRectFilled(startPos, endPos, ImGui.GetColorU32(headerBg), radius);
+        draw.AddRect(startPos, endPos, ImGui.GetColorU32(theme.Accent with { W = 0.3f }), radius);
+
+        draw.ChannelsMerge();
+        ImGui.SetCursorScreenPos(new Vector2(startPos.X, endPos.Y));
+    }
+
 
     private void DrawBarCard(QoLBarConfig config, int i)
     {
@@ -200,13 +385,14 @@ public class QoLBarTab
         ImGui.SetCursorScreenPos(new Vector2(rightEdge - totalBtns, ImGui.GetCursorScreenPos().Y));
 
         ImGui.PushStyleVar(ImGuiStyleVar.FrameRounding, theme.Radius(0.6f));
+        ImGui.PushFont(Dalamud.Interface.UiBuilder.IconFont);
 
         if (ImGui.Button(bar.Hidden ? FontAwesomeIcon.Eye.ToIconString() : FontAwesomeIcon.EyeSlash.ToIconString(), new Vector2(btnWidth, 0)))
         {
             overlay.SetBarHidden(i, true);
         }
         theme.HoverHandIfItem();
-        if (ImGui.IsItemHovered()) ImGui.SetTooltip(bar.Hidden ? "Show" : "Hide");
+        if (ImGui.IsItemHovered()) { ImGui.PopFont(); ImGui.SetTooltip(bar.Hidden ? "Show" : "Hide"); ImGui.PushFont(Dalamud.Interface.UiBuilder.IconFont); }
 
         ImGui.SameLine(0, btnGap);
         if (ImGui.Button(FontAwesomeIcon.ArrowUp.ToIconString(), new Vector2(btnWidth, 0)))
@@ -224,7 +410,7 @@ public class QoLBarTab
             ImGui.SetClipboardText(importExport.ExportBar(bar, false));
         }
         theme.HoverHandIfItem();
-        if (ImGui.IsItemHovered()) ImGui.SetTooltip("Export to clipboard");
+        if (ImGui.IsItemHovered()) { ImGui.PopFont(); ImGui.SetTooltip("Export to clipboard"); ImGui.PushFont(Dalamud.Interface.UiBuilder.IconFont); }
 
         ImGui.SameLine(0, btnGap);
         ImGui.PushStyleColor(ImGuiCol.Button, UiTheme.ColorDanger);
@@ -237,8 +423,9 @@ public class QoLBarTab
         }
         ImGui.PopStyleColor(2);
         theme.HoverHandIfItem();
-        if (ImGui.IsItemHovered()) ImGui.SetTooltip("Delete bar");
+        if (ImGui.IsItemHovered()) { ImGui.PopFont(); ImGui.SetTooltip("Delete bar"); ImGui.PushFont(Dalamud.Interface.UiBuilder.IconFont); }
 
+        ImGui.PopFont();
         ImGui.PopStyleVar();
 
         theme.SpacerY(0.3f);
@@ -356,6 +543,28 @@ public class QoLBarTab
         }
         if (ImGui.IsItemHovered()) ImGui.SetTooltip("Scale (multiplies width and height)");
 
+        ImGui.SameLine();
+
+        ImGui.SetNextItemWidth(smallW);
+        var spX = bar.Spacing[0];
+        if (ImGui.DragFloat("SpX", ref spX, 0.1f, 0f, 100f, "%.0f"))
+        {
+            bar.Spacing[0] = spX;
+            plugin.QoLBarConfig.Save();
+        }
+        if (ImGui.IsItemHovered()) ImGui.SetTooltip("Horizontal Spacing");
+
+        ImGui.SameLine();
+
+        ImGui.SetNextItemWidth(smallW);
+        var spY = bar.Spacing[1];
+        if (ImGui.DragFloat("SpY", ref spY, 0.1f, 0f, 100f, "%.0f"))
+        {
+            bar.Spacing[1] = spY;
+            plugin.QoLBarConfig.Save();
+        }
+        if (ImGui.IsItemHovered()) ImGui.SetTooltip("Vertical Spacing");
+
         // Row 3: Checkboxes
         ImGui.SetCursorPosX(ImGui.GetCursorPosX() + theme.PadX(0.9f));
 
@@ -384,6 +593,16 @@ public class QoLBarTab
             plugin.QoLBarConfig.Save();
         }
 
+        ImGui.SameLine();
+
+        var clickThrough = bar.ClickThrough;
+        if (ImGui.Checkbox("Click-through", ref clickThrough))
+        {
+            bar.ClickThrough = clickThrough;
+            plugin.QoLBarConfig.Save();
+        }
+        if (ImGui.IsItemHovered()) ImGui.SetTooltip("Makes the bar ignore all mouse input");
+
         if (!bar.NoBackground)
         {
             ImGui.SameLine();
@@ -395,6 +614,35 @@ public class QoLBarTab
                 plugin.QoLBarConfig.Save();
             }
             if (ImGui.IsItemHovered()) ImGui.SetTooltip("Background Opacity");
+        }
+
+        // Collection assignment row (only shown when collections exist)
+        if (config.Collections.Count > 0)
+        {
+            ImGui.SetCursorPosX(ImGui.GetCursorPosX() + theme.PadX(0.9f));
+            ImGui.PushStyleColor(ImGuiCol.Text, theme.MutedText);
+            ImGui.TextUnformatted("Collection:");
+            ImGui.PopStyleColor();
+            ImGui.SameLine();
+
+            int currentColIdx = 0;
+            for (int ci = 0; ci < config.Collections.Count; ci++)
+            {
+                if (config.Collections[ci].Id == bar.CollectionId)
+                { currentColIdx = ci + 1; break; }
+            }
+
+            var colItems = new List<string> { "  None" };
+            colItems.AddRange(config.Collections.Select(c => $"  {c.Name}"));
+            var colArr = colItems.ToArray();
+
+            ImGui.SetNextItemWidth(160 * scale);
+            if (ImGui.Combo("##barCol", ref currentColIdx, colArr, colArr.Length))
+            {
+                bar.CollectionId = currentColIdx == 0 ? null : config.Collections[currentColIdx - 1].Id;
+                config.Save();
+            }
+            if (ImGui.IsItemHovered()) ImGui.SetTooltip("Assign this bar to a collection group");
         }
 
         theme.PopInputScope();
@@ -503,26 +751,20 @@ public class QoLBarTab
                                 ImGui.OpenPopup("EditCaseOverridePopup");
                             }
 
+                            ImGui.PushStyleColor(ImGuiCol.PopupBg, theme.WindowBg);
                             if (ImGui.BeginPopup("EditCaseOverridePopup"))
                             {
-                                // We need to access DrawConfigEditor from QoLBarTab? 
-                                // DrawConfigEditor is in ShortcutRenderer. 
-                                // We might need to duplicate it or move it to a shared place?
-                                // QoLBarTab doesn't have access to ShortcutRenderer instance methods easily.
-                                // But Wait, QoLBarTab manages the high level config.
-                                // Inspecting QoLBarTab.cs might reveal if it has similar methods.
-                                // If not, we definitely need to move DrawConfigEditor to a shared static helper or service.
-
                                 ImGui.TextColored(theme.Accent, "Override Settings");
                                 ImGui.Separator();
 
-                                ShortcutRenderer.DrawConfigEditor(c.Override, true);
+                                ShortcutRenderer.DrawConfigEditor(c.Override, true, theme);
 
                                 theme.SpacerY(0.5f);
                                 if (theme.Button("Close")) ImGui.CloseCurrentPopup();
 
                                 ImGui.EndPopup();
                             }
+                            ImGui.PopStyleColor();
 
                             ImGui.TableNextColumn();
                             if (ImGuiComponents.IconButton(FontAwesomeIcon.Trash))

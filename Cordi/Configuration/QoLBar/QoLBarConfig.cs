@@ -10,11 +10,17 @@ public class QoLBarConfig
     [JsonProperty("bars")]
     public List<BarCfg> Bars { get; set; } = new();
 
+    [JsonProperty("collections")]
+    public List<BarCollectionCfg> Collections { get; set; } = new();
+
     [JsonProperty("cndSets")]
     public List<CndSetCfg> ConditionSets { get; set; } = new();
 
     [JsonProperty("cndDefs")]
     public List<ShConditionDefinition> ConditionDefinitions { get; set; } = new();
+
+    [JsonProperty("dynVars")]
+    public List<DynamicVarEntry> DynamicVariables { get; set; } = new();
 
     [JsonProperty("exportOnDelete")]
     public bool ExportOnDelete { get; set; } = true;

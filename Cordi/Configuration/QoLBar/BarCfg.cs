@@ -94,6 +94,18 @@ public class BarCfg
     [JsonProperty("revealAreaScale")]
     public float RevealAreaScale { get; set; } = 1.0f;
 
+    [JsonProperty("collectionId")]
+    public string? CollectionId { get; set; } = null;
+
+    [JsonProperty("dynVisEnabled")]
+    public bool DynVisEnabled { get; set; } = false;
+
+    [JsonProperty("dynVisVar")]
+    public string DynVisVar { get; set; } = string.Empty;
+
+    [JsonProperty("dynVisVal")]
+    public string DynVisVal { get; set; } = string.Empty;
+
     [JsonProperty("shortcuts")]
     public List<ShCfg> ShortcutList { get; set; } = new();
 }

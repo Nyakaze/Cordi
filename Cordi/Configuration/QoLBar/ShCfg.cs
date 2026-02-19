@@ -59,6 +59,18 @@ public class ShCfg
     [JsonProperty("opacity")]
     public float Opacity { get; set; } = 1.0f;
 
+    [JsonProperty("spacing")]
+    public float[] Spacing { get; set; } = { 0, 0 };
+
+    [JsonProperty("useFrame")]
+    public bool UseFrame { get; set; } = false;
+
+    [JsonProperty("clickThrough")]
+    public bool ClickThrough { get; set; } = false;
+
+    [JsonProperty("tooltip")]
+    public string Tooltip { get; set; } = string.Empty;
+
     [JsonProperty("cornerRadius")]
     public float CornerRadius { get; set; } = 0.0f;
 
@@ -85,6 +97,9 @@ public class ShCfg
 
     [JsonProperty("hotkey")]
     public int Hotkey { get; set; } = 0;
+
+    [JsonProperty("hotkeyPassToGame")]
+    public bool HotkeyPassToGame { get; set; } = false;
 
     [JsonProperty("categoryNoBackground")]
     public bool CategoryNoBackground { get; set; } = false;

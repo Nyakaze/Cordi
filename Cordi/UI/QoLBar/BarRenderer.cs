@@ -278,8 +278,8 @@ public class BarRenderer : IDisposable
 
             ImGui.End();
 
-            if (!Config.NoBackground || Config.NoBackground) // Always pop WindowBg as we always pushed it
-                ImGui.PopStyleColor();
+            // Pop both colors: Button (always) + WindowBg (always, one of the two branches)
+            ImGui.PopStyleColor(2);
 
             ImGui.PopStyleVar(3);
         }

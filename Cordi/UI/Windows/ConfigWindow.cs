@@ -17,6 +17,7 @@ using Cordi.Core;
 
 using Cordi.UI.Tabs;
 using Cordi.UI.Themes;
+using Cordi.Services.QoLBar;
 
 namespace Cordi.UI.Windows;
 
@@ -38,6 +39,7 @@ public sealed class ConfigWindow : Window, IDisposable
     private DiscordActivityTab discordActivityTab;
     private PartyTab partyTab;
     private RememberMeTab rememberMeTab;
+    private QoLBarTab qolBarTab;
 
     private int selectedTab = 0;
 
@@ -57,6 +59,7 @@ public sealed class ConfigWindow : Window, IDisposable
         this.discordActivityTab = new DiscordActivityTab(plugin, theme);
         this.partyTab = new PartyTab(plugin, theme);
         this.rememberMeTab = new RememberMeTab(plugin, theme);
+        this.qolBarTab = new QoLBarTab(plugin, theme, plugin.BarImportExport, plugin.QoLBarOverlay);
 
         SizeConstraints = new WindowSizeConstraints
         {
@@ -179,6 +182,13 @@ public sealed class ConfigWindow : Window, IDisposable
         ImGui.Spacing();
 
 
+        PushBtnColor(selectedTab == 8);
+        if (ImGui.Button("QoL Bar", buttonSize)) selectedTab = 8;
+        theme.HoverHandIfItem();
+        ImGui.PopStyleColor(3);
+        ImGui.Spacing();
+
+
 #if DEBUG
         PushBtnColor(selectedTab == 3);
         if (ImGui.Button("Debug", buttonSize)) selectedTab = 3;
@@ -234,6 +244,10 @@ public sealed class ConfigWindow : Window, IDisposable
 
             case 7:
                 rememberMeTab.Draw();
+                break;
+
+            case 8:
+                qolBarTab.Draw();
                 break;
         }
         ImGui.EndChild();
