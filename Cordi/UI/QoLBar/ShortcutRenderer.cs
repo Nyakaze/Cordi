@@ -225,8 +225,8 @@ public class ShortcutRenderer : IDisposable
 
         // Element-level spacing: add margin on all 4 sides using BeginGroup + Dummy spacers.
         // This correctly expands the outer bounding box so ImGui layout (SameLine, MaxWidth) works.
-        var spX = sh.Spacing[0];
-        var spY = sh.Spacing[1];
+        var spX = sh.Spacing != null && sh.Spacing.Length > 0 ? sh.Spacing[0] : 0;
+        var spY = sh.Spacing != null && sh.Spacing.Length > 1 ? sh.Spacing[1] : 0;
         var hasElementSpacing = spX > 0 || spY > 0;
 
         if (hasElementSpacing)
@@ -373,12 +373,12 @@ public class ShortcutRenderer : IDisposable
         if (ovr.Opacity != 1.0f) target.Opacity = ovr.Opacity;
         if (ovr.IconZoom != 1.0f) target.IconZoom = ovr.IconZoom;
         if (ovr.IconRotation != 0) target.IconRotation = ovr.IconRotation;
-        if (ovr.IconOffset[0] != 0 || ovr.IconOffset[1] != 0) target.IconOffset = (float[])ovr.IconOffset.Clone();
+        if (ovr.IconOffset != null && (ovr.IconOffset[0] != 0 || ovr.IconOffset[1] != 0)) target.IconOffset = (float[])ovr.IconOffset.Clone();
 
         if (ovr.Tooltip != null) target.Tooltip = ovr.Tooltip;
         if (ovr.UseFrame) target.UseFrame = true;
         if (ovr.ClickThrough) target.ClickThrough = true;
-        if (ovr.Spacing[0] != 0 || ovr.Spacing[1] != 0) target.Spacing = (float[])ovr.Spacing.Clone();
+        if (ovr.Spacing != null && (ovr.Spacing[0] != 0 || ovr.Spacing[1] != 0)) target.Spacing = (float[])ovr.Spacing.Clone();
         if (ovr.CornerRadius > 0) target.CornerRadius = ovr.CornerRadius;
         if (ovr.HotkeyPassToGame) target.HotkeyPassToGame = true;
         if (ovr.ColorAnimation != 0) target.ColorAnimation = ovr.ColorAnimation;
@@ -476,7 +476,9 @@ public class ShortcutRenderer : IDisposable
             float zoom = sh.IconZoom > 0 ? sh.IconZoom : 1.0f;
             if (sh.IconOnly) zoom = 1.0f;
 
-            var offset = new Vector2(sh.IconOffset[0], sh.IconOffset[1]) * ImGuiHelpers.GlobalScale;
+            var offset = new Vector2(
+                sh.IconOffset != null && sh.IconOffset.Length > 0 ? sh.IconOffset[0] : 0,
+                sh.IconOffset != null && sh.IconOffset.Length > 1 ? sh.IconOffset[1] : 0) * ImGuiHelpers.GlobalScale;
 
             var size = new Vector2(iconSize) * zoom;
             var cos = MathF.Cos(rotation);
@@ -524,33 +526,40 @@ public class ShortcutRenderer : IDisposable
     {
         var theme = new UiTheme();
         ImGui.PushStyleColor(ImGuiCol.PopupBg, theme.WindowBg);
-        if (ImGui.BeginPopup($"ShortcutConfig##{_guid}"))
+        try
         {
-            var effective = GetEffectiveConfig();
-            DrawConfigEditor(Config, false, theme, effective);
-
-            if (Parent == null)
+            if (ImGui.BeginPopup($"ShortcutConfig##{_guid}"))
             {
-                ImGui.Separator();
-                var barChildren = ParentBar.Children;
-                var idx = barChildren.IndexOf(this);
-                if (idx > 0 && ImGui.MenuItem("Move Up"))
-                    ParentBar.ShiftShortcut(idx, false);
-                if (idx < barChildren.Count - 1 && ImGui.MenuItem("Move Down"))
-                    ParentBar.ShiftShortcut(idx, true);
-            }
+                var effective = GetEffectiveConfig();
+                DrawConfigEditor(Config, false, theme, effective);
 
-            if (ImGui.MenuItem("Delete"))
-            {
                 if (Parent == null)
                 {
-                    var idx = ParentBar.Children.IndexOf(this);
-                    if (idx >= 0)
-                        ParentBar.RemoveShortcut(idx);
+                    ImGui.Separator();
+                    var barChildren = ParentBar.Children;
+                    var idx = barChildren.IndexOf(this);
+                    if (idx > 0 && ImGui.MenuItem("Move Up"))
+                        ParentBar.ShiftShortcut(idx, false);
+                    if (idx < barChildren.Count - 1 && ImGui.MenuItem("Move Down"))
+                        ParentBar.ShiftShortcut(idx, true);
                 }
-            }
 
-            ImGui.EndPopup();
+                if (ImGui.MenuItem("Delete"))
+                {
+                    if (Parent == null)
+                    {
+                        var idx = ParentBar.Children.IndexOf(this);
+                        if (idx >= 0)
+                            ParentBar.RemoveShortcut(idx);
+                    }
+                }
+
+                ImGui.EndPopup();
+            }
+        }
+        catch (Exception ex)
+        {
+            Service.Log.Error(ex, "[Cordi] Exception in DrawShortcutConfig — caught to protect ImGui style stack");
         }
         ImGui.PopStyleColor();
     }
@@ -600,11 +609,9 @@ public class ShortcutRenderer : IDisposable
 
             if (!isOverride)
             {
-                if (theme.BeginTabItem("Conditions"))
+                if (theme.BeginTabItem("Overrides"))
                 {
-                    theme.PushInputScope();
                     DrawConditionsTab(cfg, theme);
-                    theme.PopInputScope();
                     theme.EndTabItem();
                 }
             }
@@ -892,80 +899,207 @@ public class ShortcutRenderer : IDisposable
     */
     private static void DrawConditionsTab(ShCfg cfg, UiTheme theme)
     {
-        var defs = CordiPlugin.Plugin.QoLBarConfig.ConditionDefinitions;
-        if (defs.Count == 0)
+        try
         {
-            ImGui.TextColored(new Vector4(1, 0.5f, 0.5f, 1), "No Conditions defined in QoL Bar tab.");
-            return;
+            var defs = CordiPlugin.Plugin.QoLBarConfig.ConditionDefinitions;
+            if (defs.Count == 0)
+            {
+                ImGui.TextColored(new Vector4(1, 0.5f, 0.5f, 1), "No Variable Contexts defined in QoL Bar tab.");
+                return;
+            }
+
+            var defNames = defs.Select(d => d.Name ?? "Unnamed").ToArray();
+            var defIds = defs.Select(d => d.ID ?? string.Empty).ToArray();
+            float scale = ImGuiHelpers.GlobalScale;
+
+            if (cfg.Conditions == null) cfg.Conditions = new();
+
+            for (int i = 0; i < cfg.Conditions.Count; i++)
+            {
+                var cond = cfg.Conditions[i];
+                if (cond.Cases == null) cond.Cases = new();
+                ImGui.PushID(i);
+
+                var currentIdx = Array.IndexOf(defIds, cond.ConditionID);
+                // Fallback for transition
+                if (currentIdx == -1 && !string.IsNullOrEmpty(cond.ConditionID))
+                {
+                    currentIdx = Array.IndexOf(defNames, cond.ConditionID);
+                    if (currentIdx != -1)
+                    {
+                        cond.ConditionID = defIds[currentIdx];
+                        CordiPlugin.Plugin.QoLBarConfig.Save();
+                    }
+                }
+                if (currentIdx == -1) currentIdx = 0;
+
+                ImGui.SetNextItemWidth(150 * scale);
+                theme.PushInputScope();
+                if (ImGui.Combo("##condSelect", ref currentIdx, defNames, defNames.Length))
+                {
+                    cond.ConditionID = defIds[currentIdx];
+                    CordiPlugin.Plugin.QoLBarConfig.Save();
+                }
+                theme.PopInputScope();
+
+                ImGui.SameLine();
+                if (theme.SecondaryButton($"Cases ({cond.Cases.Count})"))
+                {
+                    ImGui.OpenPopup("EditConditionCasesPopup");
+                }
+
+                ImGui.SameLine();
+                if (ImGuiComponents.IconButton(FontAwesomeIcon.Trash))
+                {
+                    cfg.Conditions.RemoveAt(i);
+                    CordiPlugin.Plugin.QoLBarConfig.Save();
+                    i--;
+                }
+
+                ImGui.SetNextWindowSizeConstraints(new Vector2(600, 400) * scale, new Vector2(float.MaxValue, float.MaxValue));
+                if (ImGui.BeginPopup("EditConditionCasesPopup", ImGuiWindowFlags.None))
+                {
+                    ImGui.TextColored(theme.Accent, $"Cases for '{defNames[currentIdx]}'");
+                    theme.SpacerY(0.5f);
+
+                    var tableFlags = ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.Resizable | ImGuiTableFlags.ScrollY;
+                    var availY = ImGui.GetContentRegionAvail().Y - 40 * scale;
+                    if (ImGui.BeginTable("##casesTable", 4, tableFlags, new Vector2(0, availY)))
+                    {
+                        ImGui.TableSetupColumn("Operator", ImGuiTableColumnFlags.WidthFixed, 100 * scale);
+                        ImGui.TableSetupColumn("Value", ImGuiTableColumnFlags.WidthStretch);
+                        ImGui.TableSetupColumn("Override", ImGuiTableColumnFlags.WidthFixed, 60 * scale);
+                        ImGui.TableSetupColumn("##del", ImGuiTableColumnFlags.WidthFixed, 40 * scale);
+                        ImGui.TableHeadersRow();
+
+                        for (int k = 0; k < cond.Cases.Count; k++)
+                        {
+                            var c = cond.Cases[k];
+                            if (c.Override == null) c.Override = new();
+                            ImGui.PushID($"case{k}");
+                            ImGui.TableNextRow();
+
+                            ImGui.TableNextColumn();
+                            ImGui.SetNextItemWidth(-1);
+                            var op = (int)c.Operator;
+                            if (ImGui.Combo("##op", ref op, "==\0!=\0>\0<\0Contains\0"))
+                            {
+                                c.Operator = (ConditionOperator)op;
+                                CordiPlugin.Plugin.QoLBarConfig.Save();
+                            }
+
+                            ImGui.TableNextColumn();
+                            ImGui.SetNextItemWidth(-1);
+                            var val = c.Value;
+                            if (ImGui.InputText("##val", ref val, 128))
+                            {
+                                c.Value = val;
+                                CordiPlugin.Plugin.QoLBarConfig.Save();
+                            }
+
+                            ImGui.TableNextColumn();
+                            if (ImGuiComponents.IconButton(FontAwesomeIcon.Cog))
+                            {
+                                ImGui.OpenPopup("EditCaseOverridePopup");
+                            }
+                            if (ImGui.IsItemHovered()) ImGui.SetTooltip("Configure visual override");
+
+                            ImGui.PushStyleColor(ImGuiCol.PopupBg, theme.WindowBg);
+                            if (ImGui.BeginPopup("EditCaseOverridePopup"))
+                            {
+                                ImGui.TextColored(theme.Accent, "Override Settings");
+                                ImGui.Separator();
+
+                                DrawConfigEditor(c.Override, true, theme);
+
+                                theme.SpacerY(0.5f);
+                                if (theme.Button("Close")) ImGui.CloseCurrentPopup();
+
+                                ImGui.EndPopup();
+                            }
+                            ImGui.PopStyleColor();
+
+                            ImGui.TableNextColumn();
+                            if (ImGuiComponents.IconButton(FontAwesomeIcon.Trash))
+                            {
+                                cond.Cases.RemoveAt(k);
+                                CordiPlugin.Plugin.QoLBarConfig.Save();
+                                k--;
+                            }
+
+                            ImGui.PopID();
+                        }
+                        ImGui.EndTable();
+                    }
+
+                    theme.SpacerY(0.5f);
+                    if (theme.PrimaryButton("+ Add Case", new Vector2(-1, 0)))
+                    {
+                        cond.Cases.Add(new ShConditionCase());
+                        CordiPlugin.Plugin.QoLBarConfig.Save();
+                    }
+
+                    ImGui.EndPopup();
+                }
+
+                ImGui.PopID();
+            }
+
+            theme.SpacerY(0.5f);
+            if (theme.SecondaryButton("Add Override Group"))
+            {
+                if (defs.Count > 0)
+                {
+                    cfg.Conditions.Add(new ShCondition { ConditionID = defs[0].ID });
+                    CordiPlugin.Plugin.QoLBarConfig.Save();
+                }
+            }
         }
-
-        var defNames = defs.Select(d => d.Name).ToArray();
-
-        for (int i = 0; i < cfg.Conditions.Count; i++)
+        catch (Exception ex)
         {
-            var cond = cfg.Conditions[i];
-            ImGui.PushID(i);
-
-            var currentIdx = Array.IndexOf(defNames, cond.ConditionName);
-            if (currentIdx == -1) currentIdx = 0;
-
-            ImGui.SetNextItemWidth(150);
-            theme.PushInputScope();
-            if (ImGui.Combo("##condSelect", ref currentIdx, defNames, defNames.Length))
-            {
-                cond.ConditionName = defNames[currentIdx];
-                CordiPlugin.Plugin.QoLBarConfig.Save();
-            }
-            theme.PopInputScope();
-
-            ImGui.SameLine();
-            if (ImGuiComponents.IconButton(FontAwesomeIcon.Trash))
-            {
-                cfg.Conditions.RemoveAt(i);
-                CordiPlugin.Plugin.QoLBarConfig.Save();
-                i--;
-            }
-
-            ImGui.PopID();
-        }
-
-        theme.SpacerY(0.5f);
-        if (theme.SecondaryButton("Add Condition Assignment"))
-        {
-            if (defs.Count > 0)
-            {
-                cfg.Conditions.Add(new ShCondition { ConditionName = defs[0].Name });
-                CordiPlugin.Plugin.QoLBarConfig.Save();
-            }
+            Service.Log.Error(ex, "[Cordi] Exception in DrawConditionsTab");
         }
     }
 
     private ShCfg GetEffectiveConfig()
     {
-        var cfg = Config.Clone();
-        if (Config.Conditions.Count == 0) return cfg;
-
-        var variableService = CordiPlugin.Plugin.VariableService;
-        var defs = CordiPlugin.Plugin.QoLBarConfig.ConditionDefinitions;
-
-        foreach (var condRef in Config.Conditions)
+        try
         {
-            var def = defs.FirstOrDefault(d => d.Name == condRef.ConditionName);
-            if (def == null) continue;
+            var cfg = Config.Clone();
+            if (Config.Conditions == null || Config.Conditions.Count == 0) return cfg;
 
-            var val = variableService.GetVariable(def.Variable);
-            if (val == null) val = string.Empty;
+            var variableService = CordiPlugin.Plugin.VariableService;
+            var defs = CordiPlugin.Plugin.QoLBarConfig.ConditionDefinitions;
 
-            foreach (var c in def.Cases)
+            foreach (var condRef in Config.Conditions)
             {
-                if (CheckCondition(val, c.Operator, c.Value))
+                var def = defs.FirstOrDefault(d => d != null && d.ID == condRef.ConditionID);
+                if (def == null && !string.IsNullOrEmpty(condRef.ConditionID))
+                    def = defs.FirstOrDefault(d => d != null && d.Name == condRef.ConditionID);
+
+                if (def == null || condRef.Cases == null) continue;
+
+                var varName = def.Variable ?? string.Empty;
+                var val = variableService.GetVariable(varName) ?? string.Empty;
+
+                foreach (var c in condRef.Cases)
                 {
-                    ApplyOverride(cfg, c.Override);
+                    if (c == null) continue;
+                    if (c.Override == null) c.Override = new();
+                    if (CheckCondition(val, c.Operator, c.Value))
+                    {
+                        ApplyOverride(cfg, c.Override);
+                    }
                 }
             }
-        }
 
-        return cfg;
+            return cfg;
+        }
+        catch (Exception ex)
+        {
+            Service.Log.Error(ex, "[Cordi] Exception in GetEffectiveConfig — returning base config");
+            return Config.Clone();
+        }
     }
 
     private bool CheckCondition(string val, ConditionOperator op, string target)

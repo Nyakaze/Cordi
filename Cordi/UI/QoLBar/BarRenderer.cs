@@ -269,19 +269,26 @@ public class BarRenderer : IDisposable
             ImGui.SetNextWindowSize(barSize);
             ImGui.Begin($"CordiBar##{ID}", flags);
 
-            if ((_mouseRevealed || Config.Editing || HasPopupOpen) && ImGui.IsWindowHovered(ImGuiHoveredFlags.AllowWhenBlockedByPopup | ImGuiHoveredFlags.AllowWhenBlockedByActiveItem))
-                Reveal();
+            try
+            {
+                if ((_mouseRevealed || Config.Editing || HasPopupOpen) && ImGui.IsWindowHovered(ImGuiHoveredFlags.AllowWhenBlockedByPopup | ImGuiHoveredFlags.AllowWhenBlockedByActiveItem))
+                    Reveal();
 
-            IsHovered = ImGui.IsWindowHovered();
+                IsHovered = ImGui.IsWindowHovered();
 
-            DrawShortcuts();
-            DrawAdd();
-            CheckDrag();
-            SetupSize();
+                DrawShortcuts();
+                DrawAdd();
+                CheckDrag();
+                SetupSize();
 
-            // Re-check popup state after drawing children (they set HasPopupOpen)
-            if (HasPopupOpen)
-                Reveal();
+                // Re-check popup state after drawing children (they set HasPopupOpen)
+                if (HasPopupOpen)
+                    Reveal();
+            }
+            catch (Exception ex)
+            {
+                Service.Log.Error(ex, "[Cordi] Exception in BarRenderer Draw — caught to protect ImGui style stack");
+            }
 
             ImGui.End();
 

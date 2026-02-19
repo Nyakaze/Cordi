@@ -693,11 +693,12 @@ public class QoLBarTab
     {
         float scale = ImGuiHelpers.GlobalScale;
 
-        ImGui.TextDisabled("Variable Conditions (New)");
+        ImGui.TextDisabled("Variable Context Defs (New)");
 
-        if (theme.PrimaryButton("+ New Variable Condition", new Vector2(200 * scale, 0)))
+        if (theme.PrimaryButton("+ New Variable Context", new Vector2(250 * scale, 0)))
         {
-            config.ConditionDefinitions.Add(new ShConditionDefinition { Name = $"New Condition {config.ConditionDefinitions.Count + 1}" });
+            var newDef = new ShConditionDefinition { Name = $"New Context {config.ConditionDefinitions.Count + 1}", Variable = "job" };
+            config.ConditionDefinitions.Add(newDef);
             plugin.QoLBarConfig.Save();
         }
 
@@ -706,8 +707,8 @@ public class QoLBarTab
         if (theme.BeginTable("##varCondTable", 3))
         {
             ImGui.TableSetupColumn("Name", ImGuiTableColumnFlags.WidthStretch);
-            ImGui.TableSetupColumn("Variable", ImGuiTableColumnFlags.WidthFixed, 180 * scale);
-            ImGui.TableSetupColumn("Actions", ImGuiTableColumnFlags.WidthFixed, 180 * scale);
+            ImGui.TableSetupColumn("Target Variable Context", ImGuiTableColumnFlags.WidthFixed, 200 * scale);
+            ImGui.TableSetupColumn("Actions", ImGuiTableColumnFlags.WidthFixed, 60 * scale);
             ImGui.TableHeadersRow();
 
             for (int i = 0; i < config.ConditionDefinitions.Count; i++)
@@ -736,12 +737,6 @@ public class QoLBarTab
                 }
 
                 ImGui.TableNextColumn();
-                if (theme.SecondaryButton($"Cases ({def.Cases.Count})"))
-                {
-                    ImGui.OpenPopup($"EditCasesPopup");
-                }
-
-                ImGui.SameLine();
                 if (ImGuiComponents.IconButton(FontAwesomeIcon.Trash))
                 {
                     config.ConditionDefinitions.RemoveAt(i);
@@ -749,97 +744,10 @@ public class QoLBarTab
                     i--;
                 }
 
-                ImGui.SetNextWindowSizeConstraints(new Vector2(600, 400) * scale, new Vector2(float.MaxValue, float.MaxValue));
-                if (ImGui.BeginPopup($"EditCasesPopup", ImGuiWindowFlags.None))
-                {
-                    ImGui.TextColored(theme.Accent, $"Cases for '{def.Name}'");
-                    theme.SpacerY(0.5f);
-
-                    var tableFlags = ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.Resizable | ImGuiTableFlags.ScrollY;
-                    var availY = ImGui.GetContentRegionAvail().Y - 40 * scale;
-                    if (ImGui.BeginTable("##casesTable", 4, tableFlags, new Vector2(0, availY)))
-                    {
-                        ImGui.TableSetupColumn("Operator", ImGuiTableColumnFlags.WidthFixed, 100 * scale);
-                        ImGui.TableSetupColumn("Value", ImGuiTableColumnFlags.WidthStretch);
-                        ImGui.TableSetupColumn("Override", ImGuiTableColumnFlags.WidthFixed, 60 * scale);
-                        ImGui.TableSetupColumn("##del", ImGuiTableColumnFlags.WidthFixed, 40 * scale);
-                        ImGui.TableHeadersRow();
-
-                        for (int k = 0; k < def.Cases.Count; k++)
-                        {
-                            var c = def.Cases[k];
-                            ImGui.PushID($"case{k}");
-                            ImGui.TableNextRow();
-
-                            ImGui.TableNextColumn();
-                            ImGui.SetNextItemWidth(-1);
-                            var op = (int)c.Operator;
-                            if (ImGui.Combo("##op", ref op, "==\0!=\0>\0<\0Contains\0"))
-                            {
-                                c.Operator = (ConditionOperator)op;
-                                plugin.QoLBarConfig.Save();
-                            }
-
-                            ImGui.TableNextColumn();
-                            ImGui.SetNextItemWidth(-1);
-                            var val = c.Value;
-                            if (ImGui.InputText("##val", ref val, 128))
-                            {
-                                c.Value = val;
-                                plugin.QoLBarConfig.Save();
-                            }
-
-                            ImGui.TableNextColumn();
-                            if (ImGuiComponents.IconButton(FontAwesomeIcon.Cog))
-                            {
-                                ImGui.OpenPopup("EditCaseOverridePopup");
-                            }
-                            if (ImGui.IsItemHovered()) ImGui.SetTooltip("Configure Overrides");
-
-                            ImGui.PushStyleColor(ImGuiCol.PopupBg, theme.WindowBg);
-                            if (ImGui.BeginPopup("EditCaseOverridePopup"))
-                            {
-                                ImGui.TextColored(theme.Accent, "Override Settings");
-                                ImGui.Separator();
-
-                                ShortcutRenderer.DrawConfigEditor(c.Override, true, theme);
-
-                                theme.SpacerY(0.5f);
-                                if (theme.Button("Close")) ImGui.CloseCurrentPopup();
-
-                                ImGui.EndPopup();
-                            }
-                            ImGui.PopStyleColor();
-
-                            ImGui.TableNextColumn();
-                            if (ImGuiComponents.IconButton(FontAwesomeIcon.Trash))
-                            {
-                                def.Cases.RemoveAt(k);
-                                plugin.QoLBarConfig.Save();
-                                k--;
-                            }
-
-                            ImGui.PopID();
-                        }
-                        theme.EndTable();
-                    }
-
-                    theme.SpacerY(0.5f);
-                    if (theme.PrimaryButton("+ Add Case", new Vector2(-1, 0)))
-                    {
-                        def.Cases.Add(new ShConditionCaseDef());
-                        plugin.QoLBarConfig.Save();
-                    }
-
-                    ImGui.EndPopup();
-                }
-
-
-
                 ImGui.PopID();
             }
 
-            ImGui.EndTable();
+            theme.EndTable();
         }
 
         theme.SpacerY(1f);

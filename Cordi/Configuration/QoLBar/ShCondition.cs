@@ -13,6 +13,12 @@ public enum ConditionOperator
 
 public class ShCondition
 {
-    [JsonProperty("conditionName")]
-    public string ConditionName { get; set; } = string.Empty;
+    [JsonProperty("id")]
+    public string ID { get; set; } = System.Guid.NewGuid().ToString();
+
+    [JsonProperty("conditionId")]
+    public string ConditionID { get; set; } = string.Empty;
+
+    [JsonProperty("cases")]
+    public System.Collections.Generic.List<ShConditionCase> Cases { get; set; } = new();
 }
