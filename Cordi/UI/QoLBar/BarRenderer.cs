@@ -30,7 +30,7 @@ public class BarRenderer : IDisposable
 
     public List<ShortcutRenderer> Children { get; } = new();
 
-    public bool IsVisible => !IsHidden && CheckConditionSet();
+    public bool IsVisible => !IsHidden && CheckConditionSet() && CheckDynamicVisibility();
     public bool IsHidden
     {
         get => Config.Hidden;
@@ -110,6 +110,13 @@ public class BarRenderer : IDisposable
         if (Config.ConditionSet < 0 || Config.ConditionSet >= CordiPlugin.Plugin.QoLBarConfig.ConditionSets.Count)
             return true;
         return conditionService.CheckConditionSet(Config.ConditionSet, CordiPlugin.Plugin.QoLBarConfig.ConditionSets);
+    }
+
+    private bool CheckDynamicVisibility()
+    {
+        if (!Config.DynVisEnabled) return true;
+        var val = CordiPlugin.Plugin.VariableService.GetVariable(Config.DynVisVar);
+        return val == Config.DynVisVal;
     }
 
     public void SetupPivot()

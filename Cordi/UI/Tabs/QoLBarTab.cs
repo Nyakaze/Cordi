@@ -81,7 +81,10 @@ public class QoLBarTab
         switch (selectedSubTab)
         {
             case 0: DrawBarManager(config); break;
-            case 1: DrawConditionSets(config); break;
+            case 1:
+                DrawDynamicVariables(config);
+                DrawConditionSets(config);
+                break;
             case 2: DrawSettings(config); break;
         }
     }
@@ -603,6 +606,44 @@ public class QoLBarTab
         }
         if (ImGui.IsItemHovered()) ImGui.SetTooltip("Makes the bar ignore all mouse input");
 
+        ImGui.SameLine();
+
+        var dynVis = bar.DynVisEnabled;
+        if (ImGui.Checkbox("Dyn Vis", ref dynVis))
+        {
+            bar.DynVisEnabled = dynVis;
+            plugin.QoLBarConfig.Save();
+        }
+        if (ImGui.IsItemHovered()) ImGui.SetTooltip("Enable visibility based on a dynamic variable");
+
+        if (bar.DynVisEnabled)
+        {
+            ImGui.Indent();
+            ImGui.TextDisabled("Show when:");
+            ImGui.SameLine();
+
+            ImGui.SetNextItemWidth(100 * scale);
+            var vName = bar.DynVisVar;
+            if (ImGui.InputTextWithHint("##visVar", "Var Name", ref vName, 32))
+            {
+                bar.DynVisVar = vName;
+                plugin.QoLBarConfig.Save();
+            }
+
+            ImGui.SameLine();
+            ImGui.Text("==");
+            ImGui.SameLine();
+
+            ImGui.SetNextItemWidth(100 * scale);
+            var vVal = bar.DynVisVal;
+            if (ImGui.InputTextWithHint("##visVal", "Value", ref vVal, 32))
+            {
+                bar.DynVisVal = vVal;
+                plugin.QoLBarConfig.Save();
+            }
+            ImGui.Unindent();
+        }
+
         if (!bar.NoBackground)
         {
             ImGui.SameLine();
@@ -708,17 +749,20 @@ public class QoLBarTab
                     i--;
                 }
 
-                if (ImGui.BeginPopup($"EditCasesPopup"))
+                ImGui.SetNextWindowSizeConstraints(new Vector2(600, 400) * scale, new Vector2(float.MaxValue, float.MaxValue));
+                if (ImGui.BeginPopup($"EditCasesPopup", ImGuiWindowFlags.None))
                 {
                     ImGui.TextColored(theme.Accent, $"Cases for '{def.Name}'");
                     theme.SpacerY(0.5f);
 
-                    if (theme.BeginTable("##casesTable", 4, ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.SizingFixedFit))
+                    var tableFlags = ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.Resizable | ImGuiTableFlags.ScrollY;
+                    var availY = ImGui.GetContentRegionAvail().Y - 40 * scale;
+                    if (ImGui.BeginTable("##casesTable", 4, tableFlags, new Vector2(0, availY)))
                     {
                         ImGui.TableSetupColumn("Operator", ImGuiTableColumnFlags.WidthFixed, 100 * scale);
                         ImGui.TableSetupColumn("Value", ImGuiTableColumnFlags.WidthStretch);
-                        ImGui.TableSetupColumn("Override", ImGuiTableColumnFlags.WidthFixed, 100 * scale);
-                        ImGui.TableSetupColumn("##del", ImGuiTableColumnFlags.WidthFixed, 30 * scale);
+                        ImGui.TableSetupColumn("Override", ImGuiTableColumnFlags.WidthFixed, 60 * scale);
+                        ImGui.TableSetupColumn("##del", ImGuiTableColumnFlags.WidthFixed, 40 * scale);
                         ImGui.TableHeadersRow();
 
                         for (int k = 0; k < def.Cases.Count; k++)
@@ -746,10 +790,11 @@ public class QoLBarTab
                             }
 
                             ImGui.TableNextColumn();
-                            if (theme.SecondaryButton("Settings##ovr"))
+                            if (ImGuiComponents.IconButton(FontAwesomeIcon.Cog))
                             {
                                 ImGui.OpenPopup("EditCaseOverridePopup");
                             }
+                            if (ImGui.IsItemHovered()) ImGui.SetTooltip("Configure Overrides");
 
                             ImGui.PushStyleColor(ImGuiCol.PopupBg, theme.WindowBg);
                             if (ImGui.BeginPopup("EditCaseOverridePopup"))
@@ -780,7 +825,7 @@ public class QoLBarTab
                     }
 
                     theme.SpacerY(0.5f);
-                    if (theme.PrimaryButton("+ Add Case"))
+                    if (theme.PrimaryButton("+ Add Case", new Vector2(-1, 0)))
                     {
                         def.Cases.Add(new ShConditionCaseDef());
                         plugin.QoLBarConfig.Save();
@@ -1144,5 +1189,96 @@ public class QoLBarTab
             enabled: ref enabled,
             showCheckbox: false
         );
+    }
+    private void DrawDynamicVariables(QoLBarConfig config)
+    {
+        bool open = ImGui.CollapsingHeader("     Dynamic Variables", ImGuiTreeNodeFlags.DefaultOpen);
+
+        var headerMin = ImGui.GetItemRectMin();
+        var headerMax = ImGui.GetItemRectMax();
+        float centerY = headerMin.Y + (headerMax.Y - headerMin.Y) * 0.5f;
+        float iconSize = ImGui.GetFontSize();
+        var iconPos = new Vector2(headerMin.X + 25 * ImGuiHelpers.GlobalScale, centerY - iconSize * 0.5f);
+        ImGui.GetWindowDrawList().AddText(UiBuilder.IconFont, iconSize, iconPos, ImGui.GetColorU32(ImGuiCol.Text), FontAwesomeIcon.Bolt.ToIconString());
+
+        if (!open) return;
+
+        ImGui.Indent(10f);
+        theme.SpacerY(0.5f);
+
+        // Header row
+        ImGui.TextDisabled("Variable Name");
+        ImGui.SameLine(200 * ImGuiHelpers.GlobalScale);
+        ImGui.TextDisabled("Source");
+        ImGui.SameLine(400 * ImGuiHelpers.GlobalScale);
+        ImGui.TextDisabled("Current Value");
+
+        int indexToRemove = -1;
+
+        for (int i = 0; i < config.DynamicVariables.Count; i++)
+        {
+            var entry = config.DynamicVariables[i];
+            ImGui.PushID($"dynvar_{i}");
+
+            // Enabled checkbox
+            var enabled = entry.Enabled;
+            if (ImGui.Checkbox("##en", ref enabled))
+            {
+                entry.Enabled = enabled;
+                config.Save();
+            }
+            if (ImGui.IsItemHovered()) ImGui.SetTooltip("Enable/Disable this variable update");
+            ImGui.SameLine();
+
+            // Name
+            ImGui.SetNextItemWidth(150 * ImGuiHelpers.GlobalScale);
+            var name = entry.VariableName;
+            if (ImGui.InputText("##name", ref name, 32))
+            {
+                entry.VariableName = name;
+                config.Save();
+            }
+            ImGui.SameLine();
+
+            // Source
+            ImGui.SetNextItemWidth(180 * ImGuiHelpers.GlobalScale);
+            var src = entry.Source;
+            if (theme.EnumCombo("##source", ref src))
+            {
+                entry.Source = src;
+                config.Save();
+            }
+            ImGui.SameLine();
+
+            // Current Value (readonly)
+            var currentVal = plugin.VariableService.GetVariable(entry.VariableName);
+            ImGui.TextUnformatted(string.IsNullOrEmpty(currentVal) ? "-" : $"\"{currentVal}\"");
+
+            ImGui.SameLine(ImGui.GetContentRegionAvail().X - 30 * ImGuiHelpers.GlobalScale);
+            if (theme.IconButton(FontAwesomeIcon.Trash, "Delete"))
+            {
+                indexToRemove = i;
+            }
+
+            ImGui.PopID();
+        }
+
+        if (indexToRemove >= 0)
+        {
+            config.DynamicVariables.RemoveAt(indexToRemove);
+            config.Save();
+        }
+
+        theme.SpacerY(0.5f);
+        if (ImGui.Button("+ Add Dynamic Variable"))
+        {
+            config.DynamicVariables.Add(new DynamicVarEntry { VariableName = "new_var", Enabled = true });
+            config.Save();
+        }
+
+        ImGui.Unindent(10f);
+        theme.SpacerY(1f);
+        ImGui.Separator();
+        theme.SpacerY(1f);
     }
 }

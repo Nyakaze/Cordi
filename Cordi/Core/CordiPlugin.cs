@@ -127,7 +127,7 @@ public class CordiPlugin : IDalamudPlugin
         ConditionService = new ConditionService(Service.Condition, Service.ClientState);
         BarImportExport = new BarImportExportService();
         VariableService = new VariableService(CommandManager);
-        DynamicVariableService = new DynamicVariableService(VariableService, ClientState, Service.Condition, DataManager, Framework, QoLBarConfig);
+        DynamicVariableService = new DynamicVariableService(VariableService, Service.ClientState, Service.Condition, Service.DataManager, Framework, QoLBarConfig);
         QoLBarOverlay = new QoLBarOverlay(ConditionService, CommandExecutor);
 
         configWindow = new ConfigWindow(this);

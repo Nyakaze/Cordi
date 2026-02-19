@@ -109,7 +109,7 @@ public class ShortcutRenderer : IDisposable
         animTime = mouse ? -1 : 0;
 
         var cfg = effectiveConfig ?? GetEffectiveConfig();
-        var command = cfg.Command;
+        var command = cfg.Command ?? string.Empty;
         // Service.Log.Info($"[Cordi] OnClick: {cfg.Name} (Type: {cfg.Type}, Cmd: '{command}')");
 
         switch (cfg.Type)
@@ -156,7 +156,7 @@ public class ShortcutRenderer : IDisposable
 
         var inCategory = Parent != null;
         var sh = GetEffectiveConfig();
-        var name = sh.Name;
+        var name = sh.Name ?? string.Empty;
         var spacer = sh.Type == ShortcutType.Spacer;
 
         if (!spacer && (sh.Type == ShortcutType.Command || sh.Type == ShortcutType.Category))
@@ -357,14 +357,14 @@ public class ShortcutRenderer : IDisposable
 
     private void ApplyOverride(ShCfg target, ShCfg ovr)
     {
-        if (!string.IsNullOrEmpty(ovr.Name)) target.Name = ovr.Name;
-        if (!string.IsNullOrEmpty(ovr.Command)) target.Command = ovr.Command;
+        if (ovr.Name != null) target.Name = ovr.Name;
+        if (ovr.Command != null) target.Command = ovr.Command;
         if (ovr.Color != 0xFFFFFFFF) target.Color = ovr.Color; // Default white
         if (ovr.IconId > 0) target.IconId = ovr.IconId;
-        if (!string.IsNullOrEmpty(ovr.CustomIconPath)) target.CustomIconPath = ovr.CustomIconPath;
+        if (ovr.CustomIconPath != null) target.CustomIconPath = ovr.CustomIconPath;
         if (ovr.Hotkey != 0) target.Hotkey = ovr.Hotkey;
 
-        // Booleans are tricky, we assume if Override has a different value than default we take it? 
+        // Booleans are tricky, we assume if Override has a different value than default we take it?
         // Or we should initialize override with defaults that indicate "no change".
         // For simplicity in this version, we will blindly copy non-default looking values.
         if (ovr.IconOnly) target.IconOnly = true;
@@ -375,11 +375,24 @@ public class ShortcutRenderer : IDisposable
         if (ovr.IconRotation != 0) target.IconRotation = ovr.IconRotation;
         if (ovr.IconOffset[0] != 0 || ovr.IconOffset[1] != 0) target.IconOffset = (float[])ovr.IconOffset.Clone();
 
+        if (ovr.Tooltip != null) target.Tooltip = ovr.Tooltip;
+        if (ovr.UseFrame) target.UseFrame = true;
+        if (ovr.ClickThrough) target.ClickThrough = true;
+        if (ovr.Spacing[0] != 0 || ovr.Spacing[1] != 0) target.Spacing = (float[])ovr.Spacing.Clone();
+        if (ovr.CornerRadius > 0) target.CornerRadius = ovr.CornerRadius;
+        if (ovr.HotkeyPassToGame) target.HotkeyPassToGame = true;
+        if (ovr.ColorAnimation != 0) target.ColorAnimation = ovr.ColorAnimation;
+        if (ovr.CloseOnAction) target.CloseOnAction = true;
+        if (ovr.CooldownAction != 0) target.CooldownAction = ovr.CooldownAction;
+        if (ovr.CooldownStyle != 0) target.CooldownStyle = ovr.CooldownStyle;
+
+
         // Category Overrides
         if (ovr.CategoryColumns > 0) target.CategoryColumns = ovr.CategoryColumns;
         if (ovr.HoverOpen) target.HoverOpen = true;
         if (ovr.CategoryAnchor != CategoryAnchor.Auto) target.CategoryAnchor = ovr.CategoryAnchor;
         if (ovr.CategoryNoBackground) target.CategoryNoBackground = true;
+        if (ovr.CategoryFontScale != 1.0f) target.CategoryFontScale = ovr.CategoryFontScale;
     }
 
     private bool DrawIconButton(ShCfg sh, float width, float height, Vector4 textColor)
@@ -426,7 +439,7 @@ public class ShortcutRenderer : IDisposable
             var icon = Service.TextureProvider.GetFromGameIcon(new GameIconLookup((uint)sh.IconId));
             if (icon != null) imgTex = icon.GetWrapOrEmpty();
         }
-        else if (!string.IsNullOrEmpty(sh.CustomIconPath))
+        else if (sh.CustomIconPath != null)
         {
             try { imgTex = Service.TextureProvider.GetFromFile(sh.CustomIconPath).GetWrapOrEmpty(); }
             catch { }
@@ -449,9 +462,9 @@ public class ShortcutRenderer : IDisposable
 
             if (!sh.IconOnly)
             {
-                var textSize = ImGui.CalcTextSize(sh.Name);
+                var textSize = ImGui.CalcTextSize(sh.Name ?? "");
                 var textPos = new Vector2(rectMin.X + iconSize + ImGui.GetStyle().FramePadding.X * 2, center.Y - textSize.Y * 0.5f);
-                ImGui.GetWindowDrawList().AddText(textPos, ImGui.GetColorU32(textColor), sh.Name);
+                ImGui.GetWindowDrawList().AddText(textPos, ImGui.GetColorU32(textColor), sh.Name ?? "");
 
                 if (!sh.IconOnly)
                 {
@@ -481,7 +494,7 @@ public class ShortcutRenderer : IDisposable
         else
         {
             ImGui.PushStyleColor(ImGuiCol.Text, textColor);
-            clicked = ImGui.Button(sh.Name, new Vector2(width, height));
+            clicked = ImGui.Button(sh.Name ?? string.Empty, new Vector2(width, height));
             ImGui.PopStyleColor();
         }
 
@@ -513,7 +526,8 @@ public class ShortcutRenderer : IDisposable
         ImGui.PushStyleColor(ImGuiCol.PopupBg, theme.WindowBg);
         if (ImGui.BeginPopup($"ShortcutConfig##{_guid}"))
         {
-            DrawConfigEditor(Config, false, theme);
+            var effective = GetEffectiveConfig();
+            DrawConfigEditor(Config, false, theme, effective);
 
             if (Parent == null)
             {
@@ -541,18 +555,19 @@ public class ShortcutRenderer : IDisposable
         ImGui.PopStyleColor();
     }
 
-    public static void DrawConfigEditor(ShCfg cfg, bool isOverride, UiTheme? theme = null)
+    public static void DrawConfigEditor(ShCfg cfg, bool isOverride, UiTheme? theme = null, ShCfg? effectiveCfg = null)
     {
         theme ??= new UiTheme();
 
         ImGui.SetNextItemWidth(200);
         theme.PushInputScope();
-        var name = cfg.Name;
+        var name = cfg.Name ?? string.Empty;
         if (ImGui.InputText("Name", ref name, 128))
         {
-            cfg.Name = name;
+            cfg.Name = (isOverride && name.Length == 0) ? null : name;
             CordiPlugin.Plugin.QoLBarConfig.Save();
         }
+        DrawOverrideIndicator(cfg.Name, effectiveCfg?.Name);
         theme.PopInputScope();
 
         theme.SpacerY(0.5f);
@@ -562,7 +577,7 @@ public class ShortcutRenderer : IDisposable
             if (theme.BeginTabItem("General"))
             {
                 theme.PushInputScope();
-                DrawGeneralTab(cfg, isOverride, theme);
+                DrawGeneralTab(cfg, isOverride, theme, effectiveCfg);
                 theme.PopInputScope();
                 theme.EndTabItem();
             }
@@ -570,7 +585,7 @@ public class ShortcutRenderer : IDisposable
             if (theme.BeginTabItem("Style"))
             {
                 theme.PushInputScope();
-                DrawStyleTab(cfg, isOverride, theme);
+                DrawStyleTab(cfg, isOverride, theme, effectiveCfg);
                 theme.PopInputScope();
                 theme.EndTabItem();
             }
@@ -578,7 +593,7 @@ public class ShortcutRenderer : IDisposable
             if (theme.BeginTabItem("Transforms"))
             {
                 theme.PushInputScope();
-                DrawTransformsTab(cfg, theme);
+                DrawTransformsTab(cfg, theme, effectiveCfg);
                 theme.PopInputScope();
                 theme.EndTabItem();
             }
@@ -597,7 +612,7 @@ public class ShortcutRenderer : IDisposable
         }
     }
 
-    private static void DrawGeneralTab(ShCfg cfg, bool isOverride, UiTheme theme)
+    private static void DrawGeneralTab(ShCfg cfg, bool isOverride, UiTheme theme, ShCfg? effectiveCfg)
     {
 
         if (!isOverride)
@@ -615,12 +630,13 @@ public class ShortcutRenderer : IDisposable
             theme.SpacerY(0.5f);
             ImGui.TextDisabled("Command Settings");
             ImGui.SetNextItemWidth(300);
-            var cmd = cfg.Command;
+            var cmd = cfg.Command ?? string.Empty;
             if (ImGui.InputTextMultiline("Command", ref cmd, 4096, new Vector2(300, 80)))
             {
-                cfg.Command = cmd;
+                cfg.Command = (isOverride && cmd.Length == 0) ? null : cmd;
                 CordiPlugin.Plugin.QoLBarConfig.Save();
             }
+            DrawOverrideIndicator(cfg.Command, effectiveCfg?.Command);
 
             if (!isOverride)
             {
@@ -652,6 +668,7 @@ public class ShortcutRenderer : IDisposable
                 cfg.HoverOpen = hover;
                 CordiPlugin.Plugin.QoLBarConfig.Save();
             }
+            DrawOverrideIndicator(cfg.HoverOpen, effectiveCfg?.HoverOpen);
 
             var catCols = cfg.CategoryColumns;
             ImGui.SetNextItemWidth(100);
@@ -660,6 +677,7 @@ public class ShortcutRenderer : IDisposable
                 cfg.CategoryColumns = catCols;
                 CordiPlugin.Plugin.QoLBarConfig.Save();
             }
+            DrawOverrideIndicator(cfg.CategoryColumns, effectiveCfg?.CategoryColumns);
 
             var anchor = (int)cfg.CategoryAnchor;
             if (ImGui.Combo("Open Direction", ref anchor, "Auto\0Top Right\0Top Left\0Top Center\0Bottom Right\0Bottom Left\0Bottom Center\0Right Top\0Right Bottom\0Right Center\0Left Top\0Left Bottom\0Left Center\0"))
@@ -667,17 +685,19 @@ public class ShortcutRenderer : IDisposable
                 cfg.CategoryAnchor = (CategoryAnchor)anchor;
                 CordiPlugin.Plugin.QoLBarConfig.Save();
             }
+            DrawOverrideIndicator(cfg.CategoryAnchor, effectiveCfg?.CategoryAnchor);
         }
 
         theme.SpacerY(0.5f);
         ImGui.Separator();
 
-        var tooltip = cfg.Tooltip;
+        var tooltip = cfg.Tooltip ?? string.Empty;
         if (ImGui.InputText("Tooltip", ref tooltip, 256))
         {
-            cfg.Tooltip = tooltip;
+            cfg.Tooltip = (isOverride && tooltip.Length == 0) ? null : tooltip;
             CordiPlugin.Plugin.QoLBarConfig.Save();
         }
+        DrawOverrideIndicator(cfg.Tooltip, effectiveCfg?.Tooltip);
 
         theme.SpacerY(0.5f);
         ImGui.Separator();
@@ -707,7 +727,7 @@ public class ShortcutRenderer : IDisposable
 
     }
 
-    private static void DrawStyleTab(ShCfg cfg, bool isOverride, UiTheme theme)
+    private static void DrawStyleTab(ShCfg cfg, bool isOverride, UiTheme theme, ShCfg? effectiveCfg)
     {
         var colorVec = ImGui.ColorConvertU32ToFloat4(cfg.Color);
         if (ImGui.ColorEdit4("Color", ref colorVec, ImGuiColorEditFlags.NoInputs))
@@ -715,6 +735,7 @@ public class ShortcutRenderer : IDisposable
             cfg.Color = ImGui.ColorConvertFloat4ToU32(colorVec);
             CordiPlugin.Plugin.QoLBarConfig.Save();
         }
+        DrawOverrideIndicator(cfg.Color, effectiveCfg?.Color);
 
         theme.SpacerY(0.5f);
 
@@ -723,9 +744,10 @@ public class ShortcutRenderer : IDisposable
         if (ImGui.InputInt("Icon ID", ref iconId))
         {
             cfg.IconId = Math.Max(0, iconId);
-            cfg.CustomIconPath = string.Empty;
+            cfg.CustomIconPath = null;
             CordiPlugin.Plugin.QoLBarConfig.Save();
         }
+        DrawOverrideIndicator(cfg.IconId, effectiveCfg?.IconId);
 
         ImGui.SameLine();
         ImGui.SameLine();
@@ -734,7 +756,7 @@ public class ShortcutRenderer : IDisposable
             CordiPlugin.Plugin.QoLBarOverlay.IconPicker.Open((id, path) =>
             {
                 cfg.IconId = id;
-                cfg.CustomIconPath = path;
+                cfg.CustomIconPath = string.IsNullOrEmpty(path) ? null : path;
                 CordiPlugin.Plugin.QoLBarConfig.Save();
             });
         }
@@ -757,6 +779,7 @@ public class ShortcutRenderer : IDisposable
             cfg.IconOnly = iconOnly;
             CordiPlugin.Plugin.QoLBarConfig.Save();
         }
+        DrawOverrideIndicator(cfg.IconOnly, effectiveCfg?.IconOnly);
 
         theme.SpacerY(0.5f);
         ImGui.Separator();
@@ -768,6 +791,7 @@ public class ShortcutRenderer : IDisposable
             cfg.ButtonSize = Math.Max(0, btnSize);
             CordiPlugin.Plugin.QoLBarConfig.Save();
         }
+        DrawOverrideIndicator(cfg.ButtonSize, effectiveCfg?.ButtonSize);
 
         var btnHeight = cfg.ButtonHeight;
         ImGui.SetNextItemWidth(120);
@@ -776,6 +800,7 @@ public class ShortcutRenderer : IDisposable
             cfg.ButtonHeight = Math.Max(0, btnHeight);
             CordiPlugin.Plugin.QoLBarConfig.Save();
         }
+        DrawOverrideIndicator(cfg.ButtonHeight, effectiveCfg?.ButtonHeight);
 
         var opacity = cfg.Opacity;
         ImGui.SetNextItemWidth(120);
@@ -784,6 +809,7 @@ public class ShortcutRenderer : IDisposable
             cfg.Opacity = Math.Clamp(opacity, 0f, 1f);
             CordiPlugin.Plugin.QoLBarConfig.Save();
         }
+        DrawOverrideIndicator(cfg.Opacity, effectiveCfg?.Opacity);
 
         var cornerRadius = cfg.CornerRadius;
         ImGui.SetNextItemWidth(120);
@@ -792,6 +818,7 @@ public class ShortcutRenderer : IDisposable
             cfg.CornerRadius = Math.Max(0, cornerRadius);
             CordiPlugin.Plugin.QoLBarConfig.Save();
         }
+        DrawOverrideIndicator(cfg.CornerRadius, effectiveCfg?.CornerRadius);
 
         theme.SpacerY(0.5f);
         ImGui.Separator();
@@ -803,6 +830,7 @@ public class ShortcutRenderer : IDisposable
             cfg.UseFrame = useFrame;
             CordiPlugin.Plugin.QoLBarConfig.Save();
         }
+        DrawOverrideIndicator(cfg.UseFrame, effectiveCfg?.UseFrame);
 
         var clickThrough = cfg.ClickThrough;
         if (theme.Checkbox("Click-Through", ref clickThrough))
@@ -810,6 +838,7 @@ public class ShortcutRenderer : IDisposable
             cfg.ClickThrough = clickThrough;
             CordiPlugin.Plugin.QoLBarConfig.Save();
         }
+        DrawOverrideIndicator(cfg.ClickThrough, effectiveCfg?.ClickThrough);
         if (ImGui.IsItemHovered()) ImGui.SetTooltip("Ignore mouse input for this button");
 
         ImGui.Text("Spacing (Padding)");
@@ -820,6 +849,8 @@ public class ShortcutRenderer : IDisposable
             cfg.Spacing[0] = spX;
             CordiPlugin.Plugin.QoLBarConfig.Save();
         }
+        DrawOverrideIndicator(cfg.Spacing[0], effectiveCfg?.Spacing?[0]);
+
         ImGui.SameLine();
         var spY = cfg.Spacing[1];
         ImGui.SetNextItemWidth(100);
@@ -828,15 +859,18 @@ public class ShortcutRenderer : IDisposable
             cfg.Spacing[1] = spY;
             CordiPlugin.Plugin.QoLBarConfig.Save();
         }
+        DrawOverrideIndicator(cfg.Spacing[1], effectiveCfg?.Spacing?[1]);
     }
 
-    private static void DrawTransformsTab(ShCfg cfg, UiTheme theme)
+    private static void DrawTransformsTab(ShCfg cfg, UiTheme theme, ShCfg? effectiveCfg)
     {
         var zoom = cfg.IconZoom;
         if (ImGui.DragFloat("Zoom", ref zoom, 0.01f, 0.1f, 5.0f)) cfg.IconZoom = zoom;
+        DrawOverrideIndicator(cfg.IconZoom, effectiveCfg?.IconZoom);
 
         var rot = cfg.IconRotation;
         if (ImGui.DragFloat("Rotation", ref rot, 1f, -360f, 360f)) cfg.IconRotation = rot;
+        DrawOverrideIndicator(cfg.IconRotation, effectiveCfg?.IconRotation);
 
         var off = new Vector2(cfg.IconOffset[0], cfg.IconOffset[1]);
         if (ImGui.DragFloat2("Offset", ref off, 0.5f))
@@ -844,6 +878,7 @@ public class ShortcutRenderer : IDisposable
             cfg.IconOffset[0] = off.X;
             cfg.IconOffset[1] = off.Y;
         }
+        DrawOverrideIndicator(cfg.IconOffset, effectiveCfg?.IconOffset);
 
         theme.SpacerY(0.5f);
         if (theme.Button("Save Transforms")) CordiPlugin.Plugin.QoLBarConfig.Save();
@@ -1062,5 +1097,34 @@ public class ShortcutRenderer : IDisposable
     {
         foreach (var child in Children)
             child.Dispose();
+    }
+
+    private static void DrawOverrideIndicator(object? baseVal, object? effVal)
+    {
+        if (effVal == null) return;
+
+        bool diff = false;
+        if (baseVal == null && effVal == null) diff = false;
+        else if (baseVal == null || effVal == null) diff = true;
+        else if (baseVal is float[] f1 && effVal is float[] f2)
+        {
+            if (f1.Length != f2.Length) diff = true;
+            else if (!f1.SequenceEqual(f2)) diff = true;
+        }
+        else if (!baseVal.Equals(effVal)) diff = true;
+
+        if (diff)
+        {
+            ImGui.SameLine();
+            ImGui.PushFont(UiBuilder.IconFont);
+            ImGui.TextColored(new Vector4(1f, 0.7f, 0.2f, 1f), FontAwesomeIcon.Bolt.ToIconString());
+            ImGui.PopFont();
+            if (ImGui.IsItemHovered())
+            {
+                var valStr = effVal?.ToString() ?? "null";
+                if (effVal is float[] fArr) valStr = string.Join(", ", fArr);
+                ImGui.SetTooltip($"Active Override: {valStr}");
+            }
+        }
     }
 }

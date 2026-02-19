@@ -61,25 +61,27 @@ public class DynamicVariableService : IDisposable
 
     private string GetValue(DynamicVarSource source, Dalamud.Game.ClientState.Objects.SubKinds.IPlayerCharacter? player)
     {
+        if (player == null) return "";
+
         return source switch
         {
-            DynamicVarSource.JobAbbr => player?.ClassJob.Value?.Abbreviation.ToString() ?? "",
-            DynamicVarSource.JobName => player?.ClassJob.Value?.Name.ToString() ?? "",
-            DynamicVarSource.JobRole => GetJobRole(player?.ClassJob.Value?.Role ?? 0),
-            DynamicVarSource.Level => player?.Level.ToString() ?? "0",
+            DynamicVarSource.JobAbbr => player.ClassJob.Value.Abbreviation.ToString(),
+            DynamicVarSource.JobName => player.ClassJob.Value.Name.ToString(),
+            DynamicVarSource.JobRole => GetJobRole(player.ClassJob.Value.Role),
+            DynamicVarSource.Level => player.Level.ToString(),
 
-            DynamicVarSource.HpPct => player != null && player.MaxHp > 0
+            DynamicVarSource.HpPct => player.MaxHp > 0
                 ? $"{(int)((float)player.CurrentHp / player.MaxHp * 100)}"
                 : "0",
 
-            DynamicVarSource.MpPct => player != null && player.MaxMp > 0
+            DynamicVarSource.MpPct => player.MaxMp > 0
                 ? $"{(int)((float)player.CurrentMp / player.MaxMp * 100)}"
                 : "0",
 
             DynamicVarSource.ZoneId => clientState.TerritoryType.ToString(),
             DynamicVarSource.ZoneName => GetZoneName(clientState.TerritoryType),
 
-            DynamicVarSource.OnlineStatus => player?.OnlineStatus.Value?.Name.ToString() ?? "",
+            DynamicVarSource.OnlineStatus => player.OnlineStatus.Value.Name.ToString(),
 
             // Booleans return "true" or "false"
             DynamicVarSource.InCombat => condition[ConditionFlag.InCombat].ToString().ToLower(),
@@ -89,7 +91,7 @@ public class DynamicVariableService : IDisposable
             DynamicVarSource.Swimming => (condition[ConditionFlag.Swimming] || condition[ConditionFlag.Diving]).ToString().ToLower(),
             DynamicVarSource.Crafting => condition[ConditionFlag.Crafting].ToString().ToLower(),
             DynamicVarSource.Gathering => condition[ConditionFlag.Gathering].ToString().ToLower(),
-            DynamicVarSource.WeaponDrawn => condition[ConditionFlag.NormalConditions] ? "false" : "true", // NormalConditions is usually true when weapon sheathed? Check condition logic later
+            DynamicVarSource.WeaponDrawn => (!condition[ConditionFlag.NormalConditions]).ToString().ToLower(),
             DynamicVarSource.Performing => condition[ConditionFlag.Performing].ToString().ToLower(),
 
             _ => ""
@@ -99,12 +101,10 @@ public class DynamicVariableService : IDisposable
     private string GetJobRole(byte role)
     {
         // ClassJobRole enum: 0=None, 1=Tank, 2=Attacker, 3=Healer, 4=Crafter, 5=Gatherer
-        // Need to refinement 'Attacker' into Melee/Ranged/Caster if possible, but role byte is coarse.
-        // Let's stick to base roles or check ClassJobCategory.
         return role switch
         {
             1 => "Tank",
-            2 => "DPS", // Generic, specific sub-roles require more logic
+            2 => "DPS",
             3 => "Healer",
             4 => "Crafter",
             5 => "Gatherer",

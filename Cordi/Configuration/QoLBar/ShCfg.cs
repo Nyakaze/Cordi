@@ -30,13 +30,13 @@ public enum CategoryAnchor
 public class ShCfg
 {
     [JsonProperty("name")]
-    public string Name { get; set; } = string.Empty;
+    public string? Name { get; set; } = null;
 
     [JsonProperty("type")]
     public ShortcutType Type { get; set; } = ShortcutType.Command;
 
     [JsonProperty("command")]
-    public string Command { get; set; } = string.Empty;
+    public string? Command { get; set; } = null;
 
     [JsonProperty("color")]
     public uint Color { get; set; } = 0xFFFFFFFF;
@@ -45,7 +45,7 @@ public class ShCfg
     public int IconId { get; set; } = 0;
 
     [JsonProperty("customIconPath")]
-    public string CustomIconPath { get; set; } = string.Empty;
+    public string? CustomIconPath { get; set; } = null;
 
     [JsonProperty("iconOnly")]
     public bool IconOnly { get; set; } = false;
@@ -69,7 +69,7 @@ public class ShCfg
     public bool ClickThrough { get; set; } = false;
 
     [JsonProperty("tooltip")]
-    public string Tooltip { get; set; } = string.Empty;
+    public string? Tooltip { get; set; } = null;
 
     [JsonProperty("cornerRadius")]
     public float CornerRadius { get; set; } = 0.0f;

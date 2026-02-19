@@ -218,6 +218,43 @@ public sealed class UiTheme
         return ret;
     }
 
+    public bool EnumCombo<T>(string id, ref T value) where T : struct, Enum
+    {
+        var values = Enum.GetValues<T>();
+        int currentIndex = Array.IndexOf(values, value);
+        if (currentIndex < 0) currentIndex = 0;
+
+        string[] names = Enum.GetNames<T>();
+
+        bool changed = false;
+        if (ImGui.Combo(id, ref currentIndex, names, names.Length))
+        {
+            value = values[currentIndex];
+            changed = true;
+        }
+        HoverHandIfItem();
+        return changed;
+    }
+
+    public bool IconButton(FontAwesomeIcon icon, string tooltip = "", float size = 0)
+    {
+        ImGui.PushFont(UiBuilder.IconFont);
+        string label = icon.ToIconString();
+
+        bool clicked = size > 0
+            ? Button(label, new Vector2(size, size))
+            : Button(label);
+
+        ImGui.PopFont();
+
+        if (!string.IsNullOrEmpty(tooltip) && ImGui.IsItemHovered())
+        {
+            ImGui.SetTooltip(tooltip);
+        }
+
+        return clicked;
+    }
+
     public bool IconToggleButton(string id, ref bool state, float size = 28f)
     {
         float scale = ImGuiHelpers.GlobalScale;
