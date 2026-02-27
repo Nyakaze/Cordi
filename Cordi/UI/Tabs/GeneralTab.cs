@@ -159,6 +159,8 @@ public class GeneralTab
 
         theme.SpacerY(2f);
 
+        theme.SpacerY(2f);
+
         Action save = () => plugin.Config.Save();
 
         theme.DrawStringTable("hsregex", "High-Score Regex Patterns ", ref _highScoreRegexExpanded,
@@ -175,5 +177,78 @@ public class GeneralTab
 
         theme.DrawStringTable("wl", "Whitelist", ref _whitelistExpanded,
             plugin.Config.AdvertisementFilter.Whitelist, save, itemName: "Pattern");
+
+        theme.SpacerY(2f);
+
+        theme.SpacerY(2f);
+
+        bool cwActive = plugin.CleanWindowUI.IsOpen;
+
+        theme.DrawPluginCardAuto(
+            id: "clean-window",
+            title: "Clean Window",
+            enabled: ref cwActive,
+            showCheckbox: true,
+            drawContent: (avail) =>
+            {
+                ImGui.TextWrapped("Opens a secondary, borderless game window WITHOUT Dalamud UI.\nUseful for OBS capture. Must be played in borderless windowed mode.");
+                theme.SpacerY(1f);
+
+                bool showUI = plugin.Config.CleanWindow.ShowGameUI;
+                if (ImGui.Checkbox("Show Game UI", ref showUI))
+                {
+                    plugin.Config.CleanWindow.ShowGameUI = showUI;
+                    plugin.Config.Save();
+                }
+                if (ImGui.IsItemHovered())
+                    ImGui.SetTooltip("When enabled, shows the native game UI (chat, hotbars, etc.) in the clean window.\nWhen disabled, shows only the game world without any UI.");
+
+                theme.SpacerY(0.5f);
+
+                string[] sizes = { "Native", "1440p", "1080p", "720p" };
+                int[] heights = { 0, 1440, 1080, 720 };
+
+                int currentHeight = plugin.Config.CleanWindow.OutputHeight;
+                int selectedIndex = Array.IndexOf(heights, currentHeight);
+                if (selectedIndex == -1) selectedIndex = 0;
+
+                ImGui.PushItemWidth(150);
+                if (ImGui.BeginCombo("Output Size", sizes[selectedIndex]))
+                {
+                    for (int i = 0; i < sizes.Length; i++)
+                    {
+                        bool isSelected = (selectedIndex == i);
+                        if (ImGui.Selectable(sizes[i], isSelected))
+                        {
+                            plugin.Config.CleanWindow.OutputHeight = heights[i];
+                            plugin.Config.Save();
+                        }
+                        if (isSelected) ImGui.SetItemDefaultFocus();
+                    }
+                    ImGui.EndCombo();
+                }
+                ImGui.PopItemWidth();
+                if (ImGui.IsItemHovered())
+                    ImGui.SetTooltip("Scales the clean window down to save screen space while capturing.");
+
+                theme.SpacerY(0.5f);
+
+                bool movable = plugin.Config.CleanWindow.MovableWindow;
+                if (ImGui.Checkbox("Movable Window", ref movable))
+                {
+                    plugin.Config.CleanWindow.MovableWindow = movable;
+                    plugin.Config.Save();
+                }
+                if (ImGui.IsItemHovered())
+                    ImGui.SetTooltip("When disabled, the window will lose its title bar and perfectly wrap the game texture.");
+            }
+        );
+
+        if (cwActive != plugin.CleanWindowUI.IsOpen)
+        {
+            plugin.CleanWindowUI.IsOpen = cwActive;
+            plugin.Config.CleanWindow.Enabled = cwActive;
+            plugin.Config.Save();
+        }
     }
 }

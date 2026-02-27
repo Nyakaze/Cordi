@@ -92,6 +92,26 @@
         "resolved": "10.0.2",
         "contentHash": "FJEb7THQLoYQDSIfu656zidYmLFZTBE9gi/IdKpPV9KhGuMZL/xLpLpRNLr7WDt2oLNldae8Jp/1e2H+MPCxGg=="
       },
+      "Vortice.Direct3D11": {
+        "type": "Direct",
+        "requested": "[3.8.2, )",
+        "resolved": "3.8.2",
+        "contentHash": "GvwickYBqqYs0AVg2eZtlQHlm5E4l4a86U88iBQ6QI91+D7TUtp5hdG3GIMlq+8NFB3V/sjLhcAKw9hKI7O8cA==",
+        "dependencies": {
+          "SharpGen.Runtime": "2.4.2-beta",
+          "Vortice.DXGI": "3.8.2"
+        }
+      },
+      "Vortice.DXGI": {
+        "type": "Direct",
+        "requested": "[3.8.2, )",
+        "resolved": "3.8.2",
+        "contentHash": "372JYFek9IwG5cBXyJYEnUgujV42hFjWCDPBFig52shet05C4nuNsYDxr+h+/1AGdBiHLkqCh3AVznJiOXmwyQ==",
+        "dependencies": {
+          "SharpGen.Runtime": "2.4.2-beta",
+          "Vortice.DirectX": "3.8.2"
+        }
+      },
       "DSharpPlus": {
         "type": "Transitive",
         "resolved": "4.5.1",
@@ -256,6 +276,34 @@
         "type": "Transitive",
         "resolved": "13.0.3",
         "contentHash": "HrC5BXdl00IP9zeV+0Z848QWPAoCr9P3bDEZguI+gkLcBKAOxix/tLEAAHC+UvDNPv4a2d18lOReHMOagPa+zQ=="
+      },
+      "SharpGen.Runtime": {
+        "type": "Transitive",
+        "resolved": "2.4.2-beta",
+        "contentHash": "niTtWAUov1F7wZGAlVeEvW+Tnqvg5yTmhI7rxmYu2Utoyu2TbC9tWWpUpMs0PQg5lu5svoYpCAztNjxCqMFP/w=="
+      },
+      "SharpGen.Runtime.COM": {
+        "type": "Transitive",
+        "resolved": "2.4.2-beta",
+        "contentHash": "9lxDFMiepqo3lJQzMSjECCIONeCc2f3Drokgj6HtrTLZcJSftNgcLbD6/iXYj2iphkwgrZb1oLsDOZxoFZkawQ==",
+        "dependencies": {
+          "SharpGen.Runtime": "2.4.2-beta"
+        }
+      },
+      "Vortice.DirectX": {
+        "type": "Transitive",
+        "resolved": "3.8.2",
+        "contentHash": "A3P4XpiUqf+asGFMw4BRtec3q+ZM6cCkTc2FSeVXkZoEvvu+Yl9REen/qQrs623ZfMdHc74BZWDhaiumKItLpQ==",
+        "dependencies": {
+          "SharpGen.Runtime": "2.4.2-beta",
+          "SharpGen.Runtime.COM": "2.4.2-beta",
+          "Vortice.Mathematics": "2.1.0"
+        }
+      },
+      "Vortice.Mathematics": {
+        "type": "Transitive",
+        "resolved": "2.1.0",
+        "contentHash": "KK+SjNSuKdP+zbavekubi+vaeb1Jo4k87ZF6CMkVWjr6RjJwc8peVtmgzXXDIMy4ZC3ZISyk3llY3q65ISOkBQ=="
       }
     }
   }

@@ -24,6 +24,7 @@ public class Configuration : IPluginConfiguration
     public RememberMeConfig RememberMe { get; set; } = new();
     public AdvertisementFilterConfig AdvertisementFilter { get; set; } = new();
     public LodestoneConfig Lodestone { get; set; } = new();
+    public CleanWindowConfig CleanWindow { get; set; } = new();
     public ThroughputStats Stats { get; set; } = new();
 
 

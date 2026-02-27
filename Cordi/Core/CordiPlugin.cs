@@ -15,6 +15,7 @@ using Cordi.Services;
 using Cordi.Services.Discord;
 using Cordi.Services.Features;
 using Cordi.Services.QoLBar;
+using Cordi.Services.CleanWindow;
 using Cordi.Configuration.QoLBar;
 using Cordi.UI.QoLBar;
 using Dalamud.Interface.Windowing;
@@ -94,6 +95,8 @@ public class CordiPlugin : IDalamudPlugin
     public DynamicVariableService DynamicVariableService { get; private set; }
     public QoLBarOverlay QoLBarOverlay { get; private set; }
     public QoLBarConfig QoLBarConfig { get; private set; }
+    public CleanWindowService CleanWindowService { get; private set; }
+    public CleanWindowUI CleanWindowUI { get; private set; }
 
     public CordiPlugin()
     {
@@ -130,6 +133,9 @@ public class CordiPlugin : IDalamudPlugin
         DynamicVariableService = new DynamicVariableService(VariableService, Service.ClientState, Service.Condition, Service.DataManager, Framework, QoLBarConfig);
         QoLBarOverlay = new QoLBarOverlay(ConditionService, CommandExecutor);
 
+        CleanWindowService = new CleanWindowService(Config.CleanWindow);
+        CleanWindowUI = new CleanWindowUI();
+
         configWindow = new ConfigWindow(this);
         discordWindow = new DiscordWindow(this);
         CordiPeepWindow = new CordiPeepWindow(this);
@@ -139,6 +145,7 @@ public class CordiPlugin : IDalamudPlugin
         windowSystem.AddWindow(configWindow);
         windowSystem.AddWindow(CordiPeepWindow);
         windowSystem.AddWindow(this.EmoteLogWindow);
+        windowSystem.AddWindow(CleanWindowUI);
 
         PluginInterface.UiBuilder.Draw += DrawUI;
 
@@ -359,6 +366,21 @@ public class CordiPlugin : IDalamudPlugin
         }
 
         ConditionService?.Update(framework.UpdateDelta.Milliseconds / 1000f);
+        CleanWindowService?.OnFrameworkUpdate();
+
+        if (CleanWindowUI != null && CleanWindowService != null)
+        {
+            if (CleanWindowUI.IsOpen && !Config.CleanWindow.Enabled)
+            {
+                Config.CleanWindow.Enabled = true;
+                Config.Save();
+            }
+            else if (!CleanWindowUI.IsOpen && Config.CleanWindow.Enabled)
+            {
+                Config.CleanWindow.Enabled = false;
+                Config.Save();
+            }
+        }
     }
 
     private async void OnLoginEvent()
@@ -416,6 +438,7 @@ public class CordiPlugin : IDalamudPlugin
         this.PartyService?.Dispose();
         this.RememberMe?.Dispose();
         this.QoLBarOverlay?.Dispose();
+        this.CleanWindowService?.Dispose();
         this.ConditionService?.Dispose();
         this.KeybindService?.Dispose();
         this.CommandExecutor?.Dispose();
