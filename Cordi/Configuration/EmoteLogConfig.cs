@@ -18,6 +18,7 @@ public class EmoteLogConfig
     public bool WindowLocked { get; set; } = false;
     public bool WindowLockPosition { get; set; } = false;
     public bool WindowLockSize { get; set; } = false;
+    public bool IgnoreEsc { get; set; } = false;
 
     public List<EmoteLogBlacklistEntry> Blacklist { get; set; } = new();
 }

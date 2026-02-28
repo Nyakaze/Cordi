@@ -15,6 +15,7 @@ public class CordiPeepConfig
     public bool OpenOnLogin { get; set; } = false;
     public bool WindowLocked { get; set; } = false;
     public bool WindowNoResize { get; set; } = false;
+    public bool IgnoreEsc { get; set; } = false;
     public bool FocusOnHover { get; set; } = false;
     public bool AltClickExamine { get; set; } = false;
     public bool IncludeSelf { get; set; } = false;

@@ -28,6 +28,7 @@ public class CordiPeepWindow : Window
     public override void PreDraw()
     {
         base.PreDraw();
+        RespectCloseHotkey = !_plugin.Config.CordiPeep.IgnoreEsc;
         Flags = ImGuiWindowFlags.None;
         if (_plugin.Config.CordiPeep.WindowLocked) Flags |= ImGuiWindowFlags.NoMove;
         if (_plugin.Config.CordiPeep.WindowNoResize) Flags |= ImGuiWindowFlags.NoResize;

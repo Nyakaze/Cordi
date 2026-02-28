@@ -151,6 +151,14 @@ public class EmoteLogTab : ConfigTabBase
                 });
                 theme.HoverHandIfItem();
 
+                var ignoreEsc = plugin.Config.EmoteLog.IgnoreEsc;
+                theme.ConfigCheckbox("Ignore ESC", ref ignoreEsc, () =>
+                {
+                    plugin.Config.EmoteLog.IgnoreEsc = ignoreEsc;
+                    plugin.Config.Save();
+                });
+                theme.HoverHandIfItem();
+
                 var showReply = plugin.Config.EmoteLog.ShowReplyButton;
                 theme.ConfigCheckbox("Show Reply Button", ref showReply, () =>
                 {

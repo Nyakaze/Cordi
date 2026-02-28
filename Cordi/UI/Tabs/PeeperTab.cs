@@ -160,6 +160,14 @@ public class CordiPeepTab : ConfigTabBase
                 });
                 theme.HoverHandIfItem();
 
+                bool ignoreEsc = plugin.Config.CordiPeep.IgnoreEsc;
+                theme.ConfigCheckbox("Ignore ESC", ref ignoreEsc, () =>
+                {
+                    plugin.Config.CordiPeep.IgnoreEsc = ignoreEsc;
+                    plugin.Config.Save();
+                });
+                theme.HoverHandIfItem();
+
                 bool wFocusHover = plugin.Config.CordiPeep.FocusOnHover;
                 theme.ConfigCheckbox("Focus on hover", ref wFocusHover, () =>
                 {

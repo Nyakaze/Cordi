@@ -106,6 +106,7 @@ public class EmoteLogWindow : Window, IDisposable
 
     public override void PreDraw()
     {
+        RespectCloseHotkey = !_plugin.Config.EmoteLog.IgnoreEsc;
 
         if (_plugin.Config.EmoteLog.WindowLockPosition)
         {
