@@ -480,6 +480,59 @@ public class DiscordActivityTab
         }
         ImGui.EndGroup();
 
+        _theme.SpacerY(0.5f);
+        ImGui.Separator();
+        _theme.SpacerY(0.5f);
+
+        ImGui.Text("Gradient Title");
+        ImGui.BeginGroup();
+
+        bool hasGradient = conf.GradientColourSet.HasValue;
+        if (ImGui.Checkbox($"Enable Gradient##{label.GetHashCode()}_grad", ref hasGradient))
+        {
+            conf.GradientColourSet = hasGradient ? 0 : null;
+            conf.GradientAnimationStyle = hasGradient ? 0 : null;
+            localChanged = true;
+        }
+        _theme.HoverHandIfItem();
+
+        if (hasGradient)
+        {
+            ImGui.SameLine();
+            _theme.SpacerX(1f);
+            ImGui.SameLine();
+
+            int preset = conf.GradientColourSet ?? 0;
+            ImGui.Text("Preset");
+            ImGui.SameLine();
+            ImGui.SetNextItemWidth(80f * ImGuiHelpers.GlobalScale);
+            if (ImGui.InputInt($"##GradPreset_{label.GetHashCode()}", ref preset))
+            {
+                if (preset < -1) preset = -1;
+                conf.GradientColourSet = preset;
+                localChanged = true;
+            }
+            if (ImGui.IsItemHovered()) ImGui.SetTooltip("Gradient colour set index from Honorific.\n-1 = Two Colour Gradient (uses the Override Color & Glow above as gradient colours).");
+
+            ImGui.SameLine();
+            _theme.SpacerX(1f);
+            ImGui.SameLine();
+
+            string[] animStyles = { "Pulse", "Wave", "Static" };
+            int animIdx = conf.GradientAnimationStyle ?? 0;
+            if (animIdx < 0 || animIdx >= animStyles.Length) animIdx = 0;
+            ImGui.Text("Animation");
+            ImGui.SameLine();
+            ImGui.SetNextItemWidth(100f * ImGuiHelpers.GlobalScale);
+            if (ImGui.Combo($"##GradAnim_{label.GetHashCode()}", ref animIdx, animStyles, animStyles.Length))
+            {
+                conf.GradientAnimationStyle = animIdx;
+                localChanged = true;
+            }
+            _theme.HoverHandIfItem();
+        }
+        ImGui.EndGroup();
+
         if (localChanged) changed = true;
     }
 }

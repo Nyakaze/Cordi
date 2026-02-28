@@ -45,6 +45,9 @@ public class ActivityTypeConfig
     public System.Numerics.Vector3? Color { get; set; } = null;
     public System.Numerics.Vector3? Glow { get; set; } = null;
 
+    public int? GradientColourSet { get; set; } = null;
+    public int? GradientAnimationStyle { get; set; } = null;
+
 
     public List<FilterRule> Filters { get; set; } = new();
 }

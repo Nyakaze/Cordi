@@ -140,7 +140,7 @@ namespace Cordi.Services
             if (player != null)
             {
                 var typeConf = best.Config;
-                _honorific.SetTitle(player, title, config.PrefixTitle, typeConf.Color, typeConf.Glow);
+                _honorific.SetTitle(player, title, config.PrefixTitle, typeConf.Color, typeConf.Glow, typeConf.GradientColourSet, typeConf.GradientAnimationStyle);
             }
         }
 

@@ -24,20 +24,25 @@ namespace Cordi.Services
             _clearCharacterTitle = _pluginInterface.GetIpcSubscriber<int, object>("Honorific.ClearCharacterTitle");
         }
 
-        public void SetTitle(IPlayerCharacter character, string title, bool isPrefix = false, System.Numerics.Vector3? color = null, System.Numerics.Vector3? glow = null)
+        public void SetTitle(IPlayerCharacter character, string title, bool isPrefix = false, System.Numerics.Vector3? color = null, System.Numerics.Vector3? glow = null, int? gradientColourSet = null, int? gradientAnimationStyle = null)
         {
             if (character == null) return;
             try
             {
-
-                var data = new
+                var dict = new System.Collections.Generic.Dictionary<string, object>
                 {
-                    Title = title,
-                    IsPrefix = isPrefix,
-                    Color = color,
-                    Glow = glow
+                    ["Title"] = title,
+                    ["IsPrefix"] = isPrefix,
                 };
-                string json = Newtonsoft.Json.JsonConvert.SerializeObject(data);
+                if (color != null) dict["Color"] = color;
+                if (glow != null) dict["Glow"] = glow;
+                if (gradientColourSet != null)
+                {
+                    dict["GradientColourSet"] = gradientColourSet;
+                    if (color != null) dict["Color3"] = color;
+                }
+                if (gradientAnimationStyle != null) dict["GradientAnimationStyle"] = gradientAnimationStyle;
+                string json = Newtonsoft.Json.JsonConvert.SerializeObject(dict);
 
 
                 _setCharacterTitle.InvokeAction(0, json);
