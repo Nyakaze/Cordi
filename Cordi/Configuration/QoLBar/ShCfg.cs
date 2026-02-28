@@ -125,5 +125,41 @@ public class ShCfg
     [JsonProperty("conditions")]
     public List<ShCondition> Conditions { get; set; } = new();
 
+    public void CopyFrom(ShCfg source)
+    {
+        Name = source.Name;
+        Type = source.Type;
+        Command = source.Command;
+        Color = source.Color;
+        IconId = source.IconId;
+        CustomIconPath = source.CustomIconPath;
+        IconOnly = source.IconOnly;
+        ButtonSize = source.ButtonSize;
+        ButtonHeight = source.ButtonHeight;
+        Opacity = source.Opacity;
+        Spacing = source.Spacing;
+        UseFrame = source.UseFrame;
+        ClickThrough = source.ClickThrough;
+        Tooltip = source.Tooltip;
+        CornerRadius = source.CornerRadius;
+        HoverOpen = source.HoverOpen;
+        ColorAnimation = source.ColorAnimation;
+        IconZoom = source.IconZoom;
+        IconOffset = source.IconOffset;
+        IconRotation = source.IconRotation;
+        CooldownAction = source.CooldownAction;
+        CooldownStyle = source.CooldownStyle;
+        Hotkey = source.Hotkey;
+        HotkeyPassToGame = source.HotkeyPassToGame;
+        CategoryNoBackground = source.CategoryNoBackground;
+        CategoryColumns = source.CategoryColumns;
+        CategoryFontScale = source.CategoryFontScale;
+        _i = source._i;
+        CloseOnAction = source.CloseOnAction;
+        CategoryAnchor = source.CategoryAnchor;
+        SubList = source.SubList;
+        Conditions = source.Conditions;
+    }
+
     public ShCfg Clone() => (ShCfg)MemberwiseClone();
 }

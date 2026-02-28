@@ -13,10 +13,8 @@ using Cordi.Configuration;
 
 namespace Cordi.UI.Tabs;
 
-public class GeneralTab
+public class GeneralTab : ConfigTabBase
 {
-    private readonly CordiPlugin plugin;
-    private readonly UiTheme theme;
     private string botToken = string.Empty;
     private bool _botTokenInputActive = false;
 
@@ -28,15 +26,14 @@ public class GeneralTab
     private bool _mediumScoreKeywordsExpanded = false;
     private bool _whitelistExpanded = false;
 
-    public GeneralTab(CordiPlugin plugin, UiTheme theme)
-    {
-        this.plugin = plugin;
-        this.theme = theme;
+    public override string Label => "General";
 
+    public GeneralTab(CordiPlugin plugin, UiTheme theme) : base(plugin, theme)
+    {
         this.botToken = plugin.Config.Discord.BotToken ?? string.Empty;
     }
 
-    public void Draw()
+    public override void Draw()
     {
         theme.SpacerY(2f);
         bool enabled = true;

@@ -133,68 +133,26 @@ public sealed class ConfigWindow : Window, IDisposable
         }
 
 
-        PushBtnColor(selectedTab == 0);
-        if (ImGui.Button("General", buttonSize)) selectedTab = 0;
-        theme.HoverHandIfItem();
-        ImGui.PopStyleColor(3);
-        ImGui.Spacing();
+        void DrawSidebarButton(string label, int tabIndex)
+        {
+            PushBtnColor(selectedTab == tabIndex);
+            if (ImGui.Button(label, buttonSize)) selectedTab = tabIndex;
+            theme.HoverHandIfItem();
+            ImGui.PopStyleColor(3);
+            ImGui.Spacing();
+        }
 
-
-        PushBtnColor(selectedTab == 1);
-        if (ImGui.Button("Chats", buttonSize)) selectedTab = 1;
-        theme.HoverHandIfItem();
-        ImGui.PopStyleColor(3);
-        ImGui.Spacing();
-
-
-        PushBtnColor(selectedTab == 4);
-        if (ImGui.Button("Emote Log", buttonSize)) selectedTab = 4;
-        theme.HoverHandIfItem();
-        ImGui.PopStyleColor(3);
-        ImGui.Spacing();
-
-
-        PushBtnColor(selectedTab == 2);
-        if (ImGui.Button("Peepers", buttonSize)) selectedTab = 2;
-        theme.HoverHandIfItem();
-        ImGui.PopStyleColor(3);
-        ImGui.Spacing();
-
-
-        PushBtnColor(selectedTab == 5);
-        if (ImGui.Button("Activity", buttonSize)) selectedTab = 5;
-        theme.HoverHandIfItem();
-        ImGui.PopStyleColor(3);
-        ImGui.Spacing();
-
-
-        PushBtnColor(selectedTab == 6);
-        if (ImGui.Button("Party", buttonSize)) selectedTab = 6;
-        theme.HoverHandIfItem();
-        ImGui.PopStyleColor(3);
-        ImGui.Spacing();
-
-
-        PushBtnColor(selectedTab == 7);
-        if (ImGui.Button("Remember Me", buttonSize)) selectedTab = 7;
-        theme.HoverHandIfItem();
-        ImGui.PopStyleColor(3);
-        ImGui.Spacing();
-
-
-        PushBtnColor(selectedTab == 8);
-        if (ImGui.Button("QoL Bar", buttonSize)) selectedTab = 8;
-        theme.HoverHandIfItem();
-        ImGui.PopStyleColor(3);
-        ImGui.Spacing();
-
+        DrawSidebarButton("General", 0);
+        DrawSidebarButton("Chats", 1);
+        DrawSidebarButton("Emote Log", 4);
+        DrawSidebarButton("Peepers", 2);
+        DrawSidebarButton("Activity", 5);
+        DrawSidebarButton("Party", 6);
+        DrawSidebarButton("Remember Me", 7);
+        DrawSidebarButton("QoL Bar", 8);
 
 #if DEBUG
-        PushBtnColor(selectedTab == 3);
-        if (ImGui.Button("Debug", buttonSize)) selectedTab = 3;
-        theme.HoverHandIfItem();
-        ImGui.PopStyleColor(3);
-        ImGui.Spacing();
+        DrawSidebarButton("Debug", 3);
 #endif
 
         ImGui.PopStyleVar(2);

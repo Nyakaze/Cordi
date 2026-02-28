@@ -50,6 +50,8 @@ public class CordiPlugin : IDalamudPlugin
     public LodestoneService Lodestone { get; private set; }
     public TomestoneService Tomestone { get; private set; }
     public DiscordWebhookService Webhook { get; private set; }
+    public DiscordEmbedFactory EmbedFactory { get; private set; }
+    public AdvertisementFilterService AdvertisementFilterService { get; private set; }
     public ActivityManager ActivityManager { get; private set; }
     public HonorificBridge HonorificBridge { get; private set; }
     public DiscordChannelCache ChannelCache { get; private set; }
@@ -112,7 +114,9 @@ public class CordiPlugin : IDalamudPlugin
         Tomestone = new TomestoneService(this);
         Webhook = new DiscordWebhookService(this);
         ChannelCache = new DiscordChannelCache(this);
-        Discord = new DiscordHandler(this, Webhook);
+        AdvertisementFilterService = new AdvertisementFilterService(this, Webhook);
+        Discord = new DiscordHandler(this, Webhook, AdvertisementFilterService);
+        EmbedFactory = new DiscordEmbedFactory(Lodestone);
 
         NotificationManager = new NotificationManager();
 

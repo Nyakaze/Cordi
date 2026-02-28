@@ -499,6 +499,9 @@ public unsafe class CleanWindowService : IDisposable
         return (nint)backBuffer->D3D11Texture2D;
     }
 
+    private nint _cachedSrcTexturePtr = IntPtr.Zero;
+    private ID3D11Texture2D? _cachedSrcTexture = null;
+
     private void DXGIPresentDetour(ulong a, ulong b)
     {
         try
@@ -515,10 +518,14 @@ public unsafe class CleanWindowService : IDisposable
 
                         if (srcTexturePtr != IntPtr.Zero)
                         {
-                            using var srcTexture = new ID3D11Texture2D(srcTexturePtr);
-                            srcTexture.AddRef(); // Don't let Dispose release the game's texture
+                            if (_cachedSrcTexturePtr != srcTexturePtr || _cachedSrcTexture == null)
+                            {
+                                _cachedSrcTexturePtr = srcTexturePtr;
+                                _cachedSrcTexture = new ID3D11Texture2D(srcTexturePtr);
+                                GC.SuppressFinalize(_cachedSrcTexture); // Never call Release() when collected, pure wrapper
+                            }
 
-                            var srcDesc = srcTexture.Description;
+                            var srcDesc = _cachedSrcTexture.Description;
 
                             if (_cleanTexture == null || srcDesc.Width != _viewWidth || srcDesc.Height != _viewHeight)
                             {
@@ -532,7 +539,7 @@ public unsafe class CleanWindowService : IDisposable
                             if (_cleanTexture != null)
                             {
                                 // Asynchronous GPU command. No CPU blocking occurs here.
-                                _context.CopyResource(_cleanTexture, srcTexture);
+                                _context.CopyResource(_cleanTexture, _cachedSrcTexture);
                             }
 
                             // Present to the native window so Discord/OBS can capture it
@@ -547,7 +554,7 @@ public unsafe class CleanWindowService : IDisposable
                                 if (_nativeSwapChain != null)
                                 {
                                     using var scBackBuffer = _nativeSwapChain.GetBuffer<ID3D11Texture2D>(0);
-                                    _context.CopyResource(scBackBuffer, srcTexture);
+                                    _context.CopyResource(scBackBuffer, _cachedSrcTexture);
                                     _nativeSwapChain.Present(0, PresentFlags.None);
                                 }
                             }

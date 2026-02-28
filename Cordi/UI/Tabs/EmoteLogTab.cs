@@ -16,23 +16,20 @@ using Cordi.Configuration;
 
 namespace Cordi.UI.Tabs;
 
-public class EmoteLogTab
+public class EmoteLogTab : ConfigTabBase
 {
-    private readonly CordiPlugin plugin;
-    private readonly UiTheme theme;
-
 
 
     private string newBlacklistName = string.Empty;
     private string newBlacklistWorld = string.Empty;
 
-    public EmoteLogTab(CordiPlugin plugin, UiTheme theme)
+    public override string Label => "Emote Log";
+
+    public EmoteLogTab(CordiPlugin plugin, UiTheme theme) : base(plugin, theme)
     {
-        this.plugin = plugin;
-        this.theme = theme;
     }
 
-    public void Draw()
+    public override void Draw()
     {
         theme.SpacerY(2f);
 

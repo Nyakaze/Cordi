@@ -18,11 +18,8 @@ using Cordi.Configuration;
 
 namespace Cordi.UI.Tabs;
 
-public class DebugTab
+public class DebugTab : ConfigTabBase
 {
-    private readonly CordiPlugin plugin;
-    private readonly UiTheme theme;
-
 
     private string sendTestMessage = "Test message from Cordi plugin.";
     private string sendUser = "Nya@Alpaha";
@@ -38,13 +35,13 @@ public class DebugTab
     private DateTime _lastGuildFetch = DateTime.MinValue;
     private readonly TimeSpan _cacheInterval = TimeSpan.FromSeconds(5);
 
-    public DebugTab(CordiPlugin plugin, UiTheme theme)
+    public override string Label => "Debug";
+
+    public DebugTab(CordiPlugin plugin, UiTheme theme) : base(plugin, theme)
     {
-        this.plugin = plugin;
-        this.theme = theme;
     }
 
-    public void Draw()
+    public override void Draw()
     {
         theme.SpacerY(2f);
         DrawStatusCard();
@@ -217,9 +214,9 @@ public class DebugTab
                 {
                     if (isConnected)
                     {
-                        ImGui.TextColored(UiTheme.ColorSuccessText, $"Connected (Ping: {client?.Ping ?? 0}ms)");
+                        ImGui.TextColored(UiTheme.ColorSuccessText, "Connected (Ping: "); ImGui.SameLine(0, 0); ImGui.TextColored(UiTheme.ColorSuccessText, (client?.Ping ?? 0).ToString()); ImGui.SameLine(0, 0); ImGui.TextColored(UiTheme.ColorSuccessText, "ms)");
                         ImGui.SameLine();
-                        ImGui.TextColored(theme.MutedText, $"| Gateway: v{client?.GatewayVersion ?? 0}");
+                        ImGui.TextColored(theme.MutedText, "| Gateway: v"); ImGui.SameLine(0, 0); ImGui.TextColored(theme.MutedText, (client?.GatewayVersion ?? 0).ToString());
                     }
                     else
                     {
@@ -238,8 +235,8 @@ public class DebugTab
                 ImGui.TextColored(theme.MutedText, "Current User");
                 if (isConnected && client?.CurrentUser != null)
                 {
-                    ImGui.Text($"{client.CurrentUser.Username}#{client.CurrentUser.Discriminator}");
-                    ImGui.TextColored(theme.MutedText, $"ID: {client.CurrentUser.Id}");
+                    ImGui.TextUnformatted(client.CurrentUser.Username); ImGui.SameLine(0, 0); ImGui.TextUnformatted("#"); ImGui.SameLine(0, 0); ImGui.TextUnformatted(client.CurrentUser.Discriminator ?? "0000");
+                    ImGui.TextColored(theme.MutedText, "ID: "); ImGui.SameLine(0, 0); ImGui.TextColored(theme.MutedText, client.CurrentUser.Id.ToString());
                 }
                 else
                 {
@@ -413,9 +410,9 @@ public class DebugTab
                                     {
                                         ImGui.TableNextRow();
                                         ImGui.TableNextColumn();
-                                        ImGui.Text(kvp.Key.ToString());
+                                        ImGui.TextUnformatted(kvp.Key.ToString());
                                         ImGui.TableNextColumn();
-                                        ImGui.Text($"{kvp.Value}");
+                                        ImGui.TextUnformatted(kvp.Value.ToString());
                                     }
                                     ImGui.EndTable();
                                 }
@@ -536,11 +533,11 @@ public class DebugTab
                                     {
                                         ImGui.TableNextRow();
                                         ImGui.TableNextColumn();
-                                        ImGui.Text($"{kvp.Value.Name}@{kvp.Value.World}");
+                                        ImGui.TextUnformatted(kvp.Value.Name); ImGui.SameLine(0, 0); ImGui.TextUnformatted("@"); ImGui.SameLine(0, 0); ImGui.TextUnformatted(kvp.Value.World);
                                         ImGui.TableNextColumn();
-                                        ImGui.Text($"{kvp.Value.Count}");
+                                        ImGui.TextUnformatted(kvp.Value.Count.ToString());
                                         ImGui.TableNextColumn();
-                                        ImGui.Text($"{kvp.Value.LastSeen:yyyy-MM-dd HH:mm:ss}");
+                                        ImGui.TextUnformatted(kvp.Value.LastSeen.ToString("yyyy-MM-dd HH:mm:ss"));
                                     }
                                     ImGui.EndTable();
                                 }
@@ -792,7 +789,7 @@ public class DebugTab
                 {
                     foreach (var guild in _cachedGuilds)
                     {
-                        ImGui.Text($"{guild.Name} (ID: {guild.Id}) - Members: {guild.MemberCount}");
+                        ImGui.TextUnformatted(guild.Name); ImGui.SameLine(0, 0); ImGui.TextUnformatted(" (ID: "); ImGui.SameLine(0, 0); ImGui.TextUnformatted(guild.Id.ToString()); ImGui.SameLine(0, 0); ImGui.TextUnformatted(") - Members: "); ImGui.SameLine(0, 0); ImGui.TextUnformatted(guild.MemberCount.ToString());
                     }
                 }
                 else
@@ -806,7 +803,7 @@ public class DebugTab
             if (ImGui.TreeNode("Avatar Cache"))
             {
                 var cache = plugin.Lodestone.AvatarCache;
-                ImGui.Text($"Cached Entries: {cache.Count}");
+                ImGui.TextUnformatted("Cached Entries: "); ImGui.SameLine(0, 0); ImGui.TextUnformatted(cache.Count.ToString());
 
                 theme.SpacerY(1f);
 
@@ -984,7 +981,7 @@ public class DebugTab
                     if (ImGui.BeginTabItem("Active Discord Emotes"))
                     {
                         var active = plugin.EmoteLog.ActiveDiscordEmotes;
-                        ImGui.Text($"Active Tracking Count: {active.Count}");
+                        ImGui.TextUnformatted("Active Tracking Count: "); ImGui.SameLine(0, 0); ImGui.TextUnformatted(active.Count.ToString());
 
                         if (ImGui.BeginTable("##dbgActiveEmotes", 5, ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.SizingStretchProp))
                         {
@@ -1001,7 +998,7 @@ public class DebugTab
                                 ImGui.TableNextColumn();
                                 ImGui.Text(kvp.Key);
                                 ImGui.TableNextColumn();
-                                ImGui.Text($"{kvp.Value.User}@{kvp.Value.World}");
+                                ImGui.TextUnformatted(kvp.Value.User); ImGui.SameLine(0, 0); ImGui.TextUnformatted("@"); ImGui.SameLine(0, 0); ImGui.TextUnformatted(kvp.Value.World);
                                 ImGui.TableNextColumn();
                                 ImGui.Text(kvp.Value.EmoteName);
                                 ImGui.TableNextColumn();
@@ -1017,7 +1014,7 @@ public class DebugTab
                     if (ImGui.BeginTabItem("Message ID Cache"))
                     {
                         var cache = plugin.EmoteLog.MessageIdCache;
-                        ImGui.Text($"Cache Size: {cache.Count}");
+                        ImGui.TextUnformatted("Cache Size: "); ImGui.SameLine(0, 0); ImGui.TextUnformatted(cache.Count.ToString());
 
                         if (ImGui.BeginTable("##dbgMsgCache", 4, ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.SizingStretchProp))
                         {
@@ -1033,7 +1030,7 @@ public class DebugTab
                                 ImGui.TableNextColumn();
                                 ImGui.Text(kvp.Key.ToString());
                                 ImGui.TableNextColumn();
-                                ImGui.Text($"{kvp.Value.User}@{kvp.Value.World}");
+                                ImGui.TextUnformatted(kvp.Value.User); ImGui.SameLine(0, 0); ImGui.TextUnformatted("@"); ImGui.SameLine(0, 0); ImGui.TextUnformatted(kvp.Value.World);
                                 ImGui.TableNextColumn();
                                 ImGui.Text(kvp.Value.EmoteName);
                                 ImGui.TableNextColumn();

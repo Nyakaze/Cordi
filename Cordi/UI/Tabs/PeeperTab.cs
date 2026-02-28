@@ -15,23 +15,20 @@ using Cordi.Configuration;
 
 namespace Cordi.UI.Tabs;
 
-public class CordiPeepTab
+public class CordiPeepTab : ConfigTabBase
 {
-    private readonly CordiPlugin plugin;
-    private readonly UiTheme theme;
-
 
 
     private string newBlacklistName = string.Empty;
     private string newBlacklistWorld = string.Empty;
 
-    public CordiPeepTab(CordiPlugin plugin, UiTheme theme)
+    public override string Label => "Peeper";
+
+    public CordiPeepTab(CordiPlugin plugin, UiTheme theme) : base(plugin, theme)
     {
-        this.plugin = plugin;
-        this.theme = theme;
     }
 
-    public void Draw()
+    public override void Draw()
     {
         bool enabled = true;
 

@@ -14,38 +14,35 @@ using Cordi.UI.Themes;
 
 namespace Cordi.UI.Tabs;
 
-public class DiscordActivityTab
+public class DiscordActivityTab : ConfigTabBase
 {
-    private readonly CordiPlugin _plugin;
-    private readonly UiTheme _theme;
-
     private string newGameInputState = "";
 
-    public DiscordActivityTab(CordiPlugin plugin, UiTheme theme)
+    public override string Label => "Activity";
+
+    public DiscordActivityTab(CordiPlugin plugin, UiTheme theme) : base(plugin, theme)
     {
-        _plugin = plugin;
-        _theme = theme;
     }
 
-    public void Draw()
+    public override void Draw()
     {
-        var config = _plugin.Config.ActivityConfig;
+        var config = plugin.Config.ActivityConfig;
         bool changed = false;
 
-        _theme.SpacerY(2f);
+        theme.SpacerY(2f);
 
 
         bool enabled = config.Enabled;
         bool unused = true;
-        _theme.DrawPluginCardAuto(
+        theme.DrawPluginCardAuto(
             id: "act-general-card",
             enabled: ref unused,
             showCheckbox: false,
             title: "General",
             drawContent: (avail) =>
             {
-                ImGui.TextColored(_theme.MutedText, "Configure the target Discord user and main settings.");
-                _theme.SpacerY(0.5f);
+                ImGui.TextColored(theme.MutedText, "Configure the target Discord user and main settings.");
+                theme.SpacerY(0.5f);
 
 
                 if (ImGui.Checkbox("Enable Discord Activity Integration", ref enabled))
@@ -53,9 +50,9 @@ public class DiscordActivityTab
                     config.Enabled = enabled;
                     changed = true;
                 }
-                _theme.HoverHandIfItem();
+                theme.HoverHandIfItem();
 
-                _theme.SpacerY(0.5f);
+                theme.SpacerY(0.5f);
 
 
                 string userIdStr = config.TargetUserId == 0 ? "" : config.TargetUserId.ToString();
@@ -78,31 +75,31 @@ public class DiscordActivityTab
                 if (ImGui.IsItemHovered()) ImGui.SetTooltip("The value from 'Copy User ID' in Discord.");
 
                 ImGui.SameLine();
-                _theme.SpacerX(1f);
+                theme.SpacerX(1f);
                 ImGui.SameLine();
 
 
                 bool prefix = config.PrefixTitle;
                 if (ImGui.Checkbox("Prefix Mode", ref prefix)) { config.PrefixTitle = prefix; changed = true; }
-                _theme.HoverHandIfItem();
+                theme.HoverHandIfItem();
             }
         );
 
-        _theme.SpacerY(1f);
+        theme.SpacerY(1f);
         ImGui.Separator();
-        _theme.SpacerY(1f);
+        theme.SpacerY(1f);
 
 
 
         DrawTypeCard(ActivityType.Playing, "Activity: Playing", config, ref changed, (avail) =>
         {
-            _theme.SpacerY(1f);
+            theme.SpacerY(1f);
             ImGui.Separator();
-            _theme.SpacerY(1f);
+            theme.SpacerY(1f);
 
-            ImGui.TextColored(_theme.MutedText, "Game Specific Overrides");
-            _theme.MutedLabel("Define special formats for specific games by name.");
-            _theme.SpacerY(0.5f);
+            ImGui.TextColored(theme.MutedText, "Game Specific Overrides");
+            theme.MutedLabel("Define special formats for specific games by name.");
+            theme.SpacerY(0.5f);
 
             if (ImGui.BeginTable("GamesTable", 2, ImGuiTableFlags.SizingStretchProp))
             {
@@ -144,7 +141,7 @@ public class DiscordActivityTab
                 }
             }
 
-            _theme.SpacerY(0.5f);
+            theme.SpacerY(0.5f);
 
             string newGameName = newGameInputState;
             ImGui.SetNextItemWidth(200f * ImGuiHelpers.GlobalScale);
@@ -165,33 +162,33 @@ public class DiscordActivityTab
                 }
             }
         });
-        _theme.SpacerY(0.5f);
+        theme.SpacerY(0.5f);
 
 
         DrawTypeCard(ActivityType.ListeningTo, "Activity: Listening", config, ref changed);
-        _theme.SpacerY(0.5f);
+        theme.SpacerY(0.5f);
 
 
         DrawTypeCard(ActivityType.Watching, "Activity: Watching", config, ref changed);
-        _theme.SpacerY(0.5f);
+        theme.SpacerY(0.5f);
 
 
         DrawTypeCard(ActivityType.Custom, "Activity: Custom Status", config, ref changed);
 
-        _theme.SpacerY(1f);
+        theme.SpacerY(1f);
         ImGui.Separator();
-        _theme.SpacerY(1f);
+        theme.SpacerY(1f);
 
 
-        _theme.DrawPluginCardAuto(
+        theme.DrawPluginCardAuto(
             id: "act-replacements-card",
             enabled: ref unused,
             showCheckbox: false,
             title: "Text Replacements",
             drawContent: (avail) =>
             {
-                ImGui.TextColored(_theme.MutedText, "Sanitize or shorten text before it appears in the title.");
-                _theme.SpacerY(0.5f);
+                ImGui.TextColored(theme.MutedText, "Sanitize or shorten text before it appears in the title.");
+                theme.SpacerY(0.5f);
 
                 List<string> keys = config.Replacements.Keys.ToList();
                 string keyToDelete = null;
@@ -233,7 +230,7 @@ public class DiscordActivityTab
 
                             ImGui.TableNextColumn();
                             if (ImGui.Button($"X##Del_{i}")) keyToDelete = key;
-                            _theme.HoverHandIfItem();
+                            theme.HoverHandIfItem();
                         }
                         ImGui.EndTable();
                     }
@@ -257,8 +254,8 @@ public class DiscordActivityTab
                     changed = true;
                 }
 
-                _theme.SpacerY(0.5f);
-                if (_theme.SecondaryButton("+ Add New Replacement"))
+                theme.SpacerY(0.5f);
+                if (theme.SecondaryButton("+ Add New Replacement"))
                 {
                     string newKey = "New";
                     int i = 1;
@@ -271,7 +268,7 @@ public class DiscordActivityTab
 
         if (changed)
         {
-            _plugin.Config.Save();
+            plugin.Config.Save();
         }
     }
 
@@ -287,7 +284,7 @@ public class DiscordActivityTab
         bool enabled = conf.Enabled;
         bool cardChanged = false;
 
-        _theme.DrawPluginCardAuto(
+        theme.DrawPluginCardAuto(
             id: $"act-card-{type}",
             enabled: ref enabled,
             showCheckbox: true,
@@ -328,26 +325,26 @@ public class DiscordActivityTab
         float scale = ImGuiHelpers.GlobalScale;
 
         ImGui.SameLine();
-        ImGui.TextColored(_theme.MutedText, "Priority: ");
+        ImGui.TextColored(theme.MutedText, "Priority: ");
         ImGui.SameLine();
         int prio = conf.Priority;
         ImGui.SetNextItemWidth(80f * ImGuiHelpers.GlobalScale);
         if (ImGui.InputInt($"##Prio_{label.GetHashCode()}", ref prio)) { conf.Priority = prio; localChanged = true; }
 
-        _theme.SpacerY(0.5f);
+        theme.SpacerY(0.5f);
 
         ImGui.Text("Format");
         string fmt = conf.Format;
         ImGui.SetNextItemWidth(ImGui.GetContentRegionAvail().X);
         if (ImGui.InputText($"##Fmt_{label.GetHashCode()}", ref fmt, 128)) { conf.Format = fmt; localChanged = true; }
 
-        _theme.SpacerY(0.5f);
+        theme.SpacerY(0.5f);
         ImGui.Separator();
-        _theme.SpacerY(0.5f);
+        theme.SpacerY(0.5f);
 
         bool cycle = conf.EnableCycling;
         if (ImGui.Checkbox($"Cycling Mode##{label.GetHashCode()}", ref cycle)) { conf.EnableCycling = cycle; localChanged = true; }
-        _theme.HoverHandIfItem();
+        theme.HoverHandIfItem();
 
         if (cycle)
         {
@@ -388,13 +385,13 @@ public class DiscordActivityTab
                 ImGui.EndTable();
             }
 
-            if (_theme.SecondaryButton($"+ Add Cycle Format##{label.GetHashCode()}"))
+            if (theme.SecondaryButton($"+ Add Cycle Format##{label.GetHashCode()}"))
             {
                 conf.CycleFormats.Add("");
                 localChanged = true;
             }
 
-            _theme.SpacerY(0.5f);
+            theme.SpacerY(0.5f);
             ImGui.Text("Switch Interval (s)");
             int interval = conf.CycleIntervalSeconds;
             ImGui.SetNextItemWidth(100f * ImGuiHelpers.GlobalScale);
@@ -404,9 +401,9 @@ public class DiscordActivityTab
 
         if (showLimits)
         {
-            _theme.SpacerY(0.5f);
+            theme.SpacerY(0.5f);
             ImGui.Separator();
-            _theme.SpacerY(0.5f);
+            theme.SpacerY(0.5f);
 
             ImGui.Text("Lists / Limits");
             ImGui.BeginGroup();
@@ -417,7 +414,7 @@ public class DiscordActivityTab
             if (ImGui.InputInt($"##TLim_{label.GetHashCode()}", ref tLim)) { conf.TrackLimit = Math.Max(0, tLim); localChanged = true; }
 
             ImGui.SameLine();
-            _theme.SpacerX(1f);
+            theme.SpacerX(1f);
             ImGui.SameLine();
 
             ImGui.Text("Artist Limit");
@@ -428,9 +425,9 @@ public class DiscordActivityTab
             ImGui.EndGroup();
         }
 
-        _theme.SpacerY(0.5f);
+        theme.SpacerY(0.5f);
         ImGui.Separator();
-        _theme.SpacerY(0.5f);
+        theme.SpacerY(0.5f);
 
         ImGui.Text("Title Colors");
         ImGui.BeginGroup();
@@ -442,7 +439,7 @@ public class DiscordActivityTab
             conf.Color = hasColor ? new Vector3(1, 1, 1) : null;
             localChanged = true;
         }
-        _theme.HoverHandIfItem();
+        theme.HoverHandIfItem();
         if (hasColor)
         {
             ImGui.SameLine();
@@ -452,11 +449,11 @@ public class DiscordActivityTab
                 conf.Color = col;
                 localChanged = true;
             }
-            _theme.HoverHandIfItem();
+            theme.HoverHandIfItem();
         }
 
         ImGui.SameLine();
-        _theme.SpacerX(2f);
+        theme.SpacerX(2f);
         ImGui.SameLine();
 
         Vector3? gVal = conf.Glow;
@@ -466,7 +463,7 @@ public class DiscordActivityTab
             conf.Glow = hasGlow ? new Vector3(1, 1, 1) : null;
             localChanged = true;
         }
-        _theme.HoverHandIfItem();
+        theme.HoverHandIfItem();
         if (hasGlow)
         {
             ImGui.SameLine();
@@ -476,13 +473,13 @@ public class DiscordActivityTab
                 conf.Glow = glo;
                 localChanged = true;
             }
-            _theme.HoverHandIfItem();
+            theme.HoverHandIfItem();
         }
         ImGui.EndGroup();
 
-        _theme.SpacerY(0.5f);
+        theme.SpacerY(0.5f);
         ImGui.Separator();
-        _theme.SpacerY(0.5f);
+        theme.SpacerY(0.5f);
 
         ImGui.Text("Gradient Title");
         ImGui.BeginGroup();
@@ -494,12 +491,12 @@ public class DiscordActivityTab
             conf.GradientAnimationStyle = hasGradient ? 0 : null;
             localChanged = true;
         }
-        _theme.HoverHandIfItem();
+        theme.HoverHandIfItem();
 
         if (hasGradient)
         {
             ImGui.SameLine();
-            _theme.SpacerX(1f);
+            theme.SpacerX(1f);
             ImGui.SameLine();
 
             int preset = conf.GradientColourSet ?? 0;
@@ -515,7 +512,7 @@ public class DiscordActivityTab
             if (ImGui.IsItemHovered()) ImGui.SetTooltip("Gradient colour set index from Honorific.\n-1 = Two Colour Gradient (uses the Override Color & Glow above as gradient colours).");
 
             ImGui.SameLine();
-            _theme.SpacerX(1f);
+            theme.SpacerX(1f);
             ImGui.SameLine();
 
             string[] animStyles = { "Pulse", "Wave", "Static" };
@@ -529,7 +526,7 @@ public class DiscordActivityTab
                 conf.GradientAnimationStyle = animIdx;
                 localChanged = true;
             }
-            _theme.HoverHandIfItem();
+            theme.HoverHandIfItem();
         }
         ImGui.EndGroup();
 

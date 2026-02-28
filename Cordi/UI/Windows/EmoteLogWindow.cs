@@ -9,6 +9,7 @@ using ECommons.ImGuiMethods;
 using Dalamud.Interface;
 
 using Cordi.Core;
+using Cordi.Extensions;
 
 namespace Cordi.UI.Windows;
 
@@ -92,7 +93,7 @@ public class EmoteLogWindow : Window, IDisposable
 
                 if (ImGui.IsItemClicked(ImGuiMouseButton.Right))
                 {
-                    var target = Service.ObjectTable.FirstOrDefault(x => x.Name.ToString() == entry.User);
+                    var target = Service.ObjectTable.FindPlayerByName(entry.User);
                     if (target != null) Service.TargetManager.Target = target;
                 }
                 if (ImGui.IsItemHovered())

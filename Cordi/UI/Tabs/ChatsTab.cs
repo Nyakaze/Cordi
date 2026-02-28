@@ -18,10 +18,8 @@ using Dalamud.Interface.Components;
 
 namespace Cordi.UI.Tabs;
 
-public class ChatsTab
+public class ChatsTab : ConfigTabBase
 {
-    private readonly CordiPlugin plugin;
-    private readonly UiTheme theme;
     private bool _activeTellsExpanded = false;
     private bool _existingAvatarsExpanded = false;
     private Dictionary<ulong, string> _cachedAvailableThreads = new();
@@ -37,14 +35,14 @@ public class ChatsTab
         XivChatType.TellIncoming
     };
 
-    public ChatsTab(CordiPlugin plugin, UiTheme theme)
+    public override string Label => "Chats";
+
+    public ChatsTab(CordiPlugin plugin, UiTheme theme) : base(plugin, theme)
     {
-        this.plugin = plugin;
-        this.theme = theme;
         extraChatService = new Cordi.Services.Features.ExtraChatService(plugin);
     }
 
-    public void Draw()
+    public override void Draw()
     {
         theme.SpacerY(2f);
         bool enabled = true;

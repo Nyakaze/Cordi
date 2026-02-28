@@ -11,11 +11,8 @@ using Dalamud.Bindings.ImGui;
 
 namespace Cordi.UI.Tabs;
 
-public class RememberMeTab
+public class RememberMeTab : ConfigTabBase
 {
-    private readonly CordiPlugin plugin;
-    private readonly UiTheme theme;
-
     private string searchText = string.Empty;
     private string newPlayerName = string.Empty;
     private string newPlayerWorld = string.Empty;
@@ -32,13 +29,13 @@ public class RememberMeTab
     private bool showRememberedPlayers = true;
     private bool showExaminedPlayers = false;
 
-    public RememberMeTab(CordiPlugin plugin, UiTheme theme)
+    public override string Label => "Remember Me";
+
+    public RememberMeTab(CordiPlugin plugin, UiTheme theme) : base(plugin, theme)
     {
-        this.plugin = plugin;
-        this.theme = theme;
     }
 
-    public void Draw()
+    public override void Draw()
     {
         bool enabled = true;
 
@@ -116,7 +113,7 @@ public class RememberMeTab
                     return;
                 }
 
-                ImGui.Text($"Party size: {partyList.Count}/8");
+                ImGui.TextUnformatted("Party size: "); ImGui.SameLine(0, 0); ImGui.TextUnformatted(partyList.Count.ToString()); ImGui.SameLine(0, 0); ImGui.TextUnformatted("/8");
                 theme.SpacerY(0.5f);
 
                 if (ImGui.BeginTable("##currentPartyTable", 3, ImGuiTableFlags.NoBordersInBody | ImGuiTableFlags.RowBg))
@@ -137,7 +134,7 @@ public class RememberMeTab
                         ImGui.TableNextRow();
 
                         ImGui.TableSetColumnIndex(0);
-                        ImGui.Text($"{name}@{world}");
+                        ImGui.TextUnformatted(name); ImGui.SameLine(0, 0); ImGui.TextUnformatted("@"); ImGui.SameLine(0, 0); ImGui.TextUnformatted(world);
 
                         ImGui.TableSetColumnIndex(1);
                         var classJobId = member.JobId;
@@ -310,7 +307,7 @@ public class RememberMeTab
             {
                 if (viewingGlamour != null)
                 {
-                    ImGui.Text($"Captured: {viewingGlamour.CapturedAt}");
+                    ImGui.TextUnformatted("Captured: "); ImGui.SameLine(0, 0); ImGui.TextUnformatted(viewingGlamour.CapturedAt.ToString());
                     theme.SpacerY(0.5f);
 
                     if (ImGui.BeginTable("glamour_table", 2, ImGuiTableFlags.BordersInnerV | ImGuiTableFlags.SizingStretchProp))
@@ -508,7 +505,7 @@ public class RememberMeTab
         }
         else
         {
-            ImGui.Text($"Unknown Item (ID: {item.ItemId})");
+            ImGui.TextUnformatted("Unknown Item (ID: "); ImGui.SameLine(0, 0); ImGui.TextUnformatted(item.ItemId.ToString()); ImGui.SameLine(0, 0); ImGui.TextUnformatted(")");
             if (ImGui.IsItemHovered())
                 ImGui.SetTooltip("Could not resolve Item ID to Name. Might be a Model ID.");
         }

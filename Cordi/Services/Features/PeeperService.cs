@@ -16,6 +16,7 @@ using DSharpPlus.EventArgs;
 using Lumina.Excel.Sheets;
 using Cordi.Core;
 using Cordi.Configuration;
+using Cordi.Extensions;
 
 namespace Cordi.Services;
 
@@ -81,8 +82,13 @@ public class CordiPeepService : IDisposable
 
     private readonly HashSet<ulong> currentPeepers = new();
 
+    private DateTime _lastUpdate = DateTime.MinValue;
+
     private void OnFrameworkUpdate(IFramework framework)
     {
+        if ((DateTime.Now - _lastUpdate).TotalMilliseconds < 250) return;
+        _lastUpdate = DateTime.Now;
+
         if (!plugin.Config.CordiPeep.Enabled) return;
 
         if (plugin.CordiPeepWindow == null) return;
@@ -112,7 +118,7 @@ public class CordiPeepService : IDisposable
                 if (target != null && target.GameObjectId == localPlayer.GameObjectId)
                 {
                     currentPeepers.Add(player.GameObjectId);
-                    UpdatePeeperState(player.GameObjectId, player.Name.ToString(), player.HomeWorld.Value.Name.ToString());
+                    UpdatePeeperState(player);
                 }
                 continue;
             }
@@ -132,7 +138,7 @@ public class CordiPeepService : IDisposable
             if (player.TargetObjectId == localPlayer.GameObjectId)
             {
                 currentPeepers.Add(player.GameObjectId);
-                UpdatePeeperState(player.GameObjectId, player.Name.ToString(), player.HomeWorld.Value.Name.ToString());
+                UpdatePeeperState(player);
             }
         }
 
@@ -169,6 +175,29 @@ public class CordiPeepService : IDisposable
 
     private bool configChanged = false;
     private DateTime _lastSaveTime = DateTime.MinValue;
+
+    private void UpdatePeeperState(IPlayerCharacter player)
+    {
+        var id = player.GameObjectId;
+        var now = DateTime.Now;
+
+        if (ActivePeepers.TryGetValue(id, out var state))
+        {
+            state.LastSeen = now;
+
+            if (!state.IsLooking)
+            {
+                state.IsLooking = true;
+                state.StartTime = now;
+                state.EndTime = null;
+                _ = SendAlert(state, GetLocalPlayerTargetName());
+            }
+        }
+        else
+        {
+            UpdatePeeperState(id, player.Name.ToString(), player.HomeWorld.Value.Name.ToString());
+        }
+    }
 
     private void UpdatePeeperState(ulong id, string name, string world)
     {
@@ -251,14 +280,15 @@ public class CordiPeepService : IDisposable
             var avatarUrl = await plugin.Lodestone.GetAvatarUrlAsync(state.Name, state.World);
             state.AvatarUrl = avatarUrl;
 
-            var embed = new DiscordEmbedBuilder()
-                .WithTitle("Peeper Detected!")
-                .WithDescription($"**{state.Name}@{state.World}** is looking at you!")
-                .WithColor(DiscordColor.Red)
-                .WithThumbnail(avatarUrl)
-                .AddField("Your Target", myTargetName, true)
-                .WithFooter($"Started looking at {state.StartTime:HH:mm:ss}")
-                .Build();
+            var embedBuilder = plugin.EmbedFactory.CreateEmbedBuilder(
+                "Peeper Detected!",
+                $"**{state.Name}@{state.World}** is looking at you!",
+                DiscordColor.Red,
+                avatarUrl,
+                $"Started looking at {state.StartTime:HH:mm:ss}"
+            );
+            embedBuilder.AddField("Your Target", myTargetName, true);
+            var embed = embedBuilder.Build();
 
             if (state.DiscordMessageId == 0)
             {
@@ -305,14 +335,15 @@ public class CordiPeepService : IDisposable
         if (ulong.TryParse(channelIdStr, out var channelId))
         {
             var duration = (state.EndTime ?? DateTime.Now) - state.StartTime;
-            var embed = new DiscordEmbedBuilder()
-                .WithTitle("Peeper Left!")
-                .WithDescription($"**{state.Name}@{state.World}** was looking at you.")
-                .WithColor(DiscordColor.Green)
-                .WithThumbnail(state.AvatarUrl)
-                .AddField("Your Target", myTargetName, true)
-                .WithFooter($"Looked away at {DateTime.Now:HH:mm:ss} (Duration: {duration.TotalSeconds:F1}s)")
-                .Build();
+            var embedBuilder = plugin.EmbedFactory.CreateEmbedBuilder(
+                "Peeper Left!",
+                $"**{state.Name}@{state.World}** was looking at you.",
+                DiscordColor.Green,
+                state.AvatarUrl,
+                $"Looked away at {DateTime.Now:HH:mm:ss} (Duration: {duration.TotalSeconds:F1}s)"
+            );
+            embedBuilder.AddField("Your Target", myTargetName, true);
+            var embed = embedBuilder.Build();
 
             await plugin.Discord.EditWebhookMessage(channelId, state.DiscordMessageId, embed);
         }
@@ -419,10 +450,7 @@ public class CordiPeepService : IDisposable
 
                 if (target == null)
                 {
-                    target = Service.ObjectTable.FirstOrDefault(x =>
-                        x is IPlayerCharacter pc &&
-                        pc.Name.ToString() == peeper.Name &&
-                        pc.HomeWorld.Value.Name.ToString() == peeper.World);
+                    target = Service.ObjectTable.FindPlayerByName(peeper.Name, peeper.World);
                 }
 
                 if (target != null)
@@ -466,19 +494,7 @@ public class CordiPeepService : IDisposable
             {
                 IGameObject? target = null;
 
-                if (string.IsNullOrEmpty(world))
-                {
-                    target = Service.ObjectTable.FirstOrDefault(x =>
-                        x is IPlayerCharacter pc &&
-                        pc.Name.ToString() == name);
-                }
-                else
-                {
-                    target = Service.ObjectTable.FirstOrDefault(x =>
-                        x is IPlayerCharacter pc &&
-                        pc.Name.ToString() == name &&
-                        pc.HomeWorld.Value.Name.ToString() == world);
-                }
+                target = Service.ObjectTable.FindPlayerByName(name, world);
 
                 if (target != null)
                 {

@@ -77,10 +77,10 @@ public sealed class UiTheme
     public Vector4 Tab;
     public Vector4 TabActive;
     public Vector4 TabHovered;
-    public static Vector4 ColorSuccess => ColorConvertor.ToVector4("#3C00A5");
-    public static Vector4 ColorSuccessText => ColorConvertor.ToVector4("#CF9FFF"); // Lighter purple/lilac for readability
-    public static Vector4 ColorDanger => new(0.565f, 0.0f, 0.0f, 1f);
-    public static Vector4 ColorDangerText => new(1.0f, 0.4f, 0.4f, 1f);
+    public static readonly Vector4 ColorSuccess = ColorConvertor.ToVector4("#3C00A5");
+    public static readonly Vector4 ColorSuccessText = ColorConvertor.ToVector4("#CF9FFF");
+    public static readonly Vector4 ColorDanger = new(0.565f, 0.0f, 0.0f, 1f);
+    public static readonly Vector4 ColorDangerText = new(1.0f, 0.4f, 0.4f, 1f);
 
     public float RadiusBase = 8f;
     public float PadBase = 10f;

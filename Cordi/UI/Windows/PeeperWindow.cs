@@ -7,6 +7,7 @@ using Dalamud.Bindings.ImGui;
 using FFXIVClientStructs.FFXIV.Client.UI.Agent;
 
 using Cordi.Core;
+using Cordi.Extensions;
 
 namespace Cordi.UI.Windows;
 
@@ -212,11 +213,7 @@ public class CordiPeepWindow : Window
         var obj = Service.ObjectTable.SearchById(peeper.GameObjectId);
 
 
-        if (obj == null)
-        {
-            obj = Service.ObjectTable.FirstOrDefault(x => x.Name.ToString() == peeper.Name &&
-               (x as Dalamud.Game.ClientState.Objects.SubKinds.IPlayerCharacter)?.HomeWorld.Value.Name.ToString() == peeper.World);
-        }
+        obj ??= Service.ObjectTable.FindPlayerByName(peeper.Name, peeper.World);
 
         return obj;
     }

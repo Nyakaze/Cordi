@@ -1,8 +1,8 @@
 using System;
-using System.Net.Http;
 using System.Collections.Concurrent;
 using System.Linq;
 using System.Threading.Tasks;
+using Cordi.Helpers;
 using Cordi.Services;
 using Dalamud.Plugin.Services;
 using DSharpPlus;
@@ -77,12 +77,9 @@ public class DiscordWebhookService
 
     public async Task<ulong> ExecuteWebhookAsync(DiscordChannel channel, DiscordWebhookBuilder builder)
     {
-        const int maxRetries = 3;
-        int delay = 1000;
-
-        for (int i = 0; i < maxRetries; i++)
+        try
         {
-            try
+            return await RetryHelper.WithRetryAsync(async () =>
             {
                 var webhook = await GetWebhookAsync(channel);
                 if (channel.IsThread)
@@ -91,89 +88,44 @@ public class DiscordWebhookService
                 }
                 var msg = await webhook.ExecuteAsync(builder);
                 return msg.Id;
-            }
-            catch (HttpRequestException ex)
-            {
-                Logger.Warning($"Failed to execute webhook (Attempt {i + 1}/{maxRetries}): {ex.Message}");
-                if (i == maxRetries - 1)
-                {
-                    Logger.Error(ex, "Failed to execute webhook.");
-                    return 0;
-                }
-            }
-            catch (Exception ex)
-            {
-                Logger.Error(ex, "Failed to execute webhook.");
-                return 0;
-            }
-
-            await Task.Delay(delay);
-            delay *= 2;
+            }, log: Logger);
         }
-        return 0;
+        catch (Exception ex)
+        {
+            Logger.Error(ex, "Failed to execute webhook.");
+            return 0;
+        }
     }
 
     public async Task EditWebhookMessageAsync(DiscordChannel channel, ulong messageId, DiscordWebhookBuilder builder)
     {
-        const int maxRetries = 3;
-        int delay = 1000;
-
-        for (int i = 0; i < maxRetries; i++)
+        try
         {
-            try
+            await RetryHelper.WithRetryAsync(async () =>
             {
                 var webhook = await GetWebhookAsync(channel);
                 await webhook.EditMessageAsync(messageId, builder);
-                return;
-            }
-            catch (HttpRequestException ex)
-            {
-                Logger.Warning($"Failed to edit webhook message (Attempt {i + 1}/{maxRetries}): {ex.Message}");
-                if (i == maxRetries - 1)
-                {
-                    Logger.Error(ex, "Failed to edit webhook message.");
-                }
-            }
-            catch (Exception ex)
-            {
-                Logger.Error(ex, "Failed to edit webhook message.");
-                return;
-            }
-
-            await Task.Delay(delay);
-            delay *= 2;
+            }, log: Logger);
+        }
+        catch (Exception ex)
+        {
+            Logger.Error(ex, "Failed to edit webhook message.");
         }
     }
 
     public async Task DeleteWebhookMessageAsync(DiscordChannel channel, ulong messageId)
     {
-        const int maxRetries = 3;
-        int delay = 1000;
-
-        for (int i = 0; i < maxRetries; i++)
+        try
         {
-            try
+            await RetryHelper.WithRetryAsync(async () =>
             {
                 var webhook = await GetWebhookAsync(channel);
                 await webhook.DeleteMessageAsync(messageId);
-                return;
-            }
-            catch (HttpRequestException ex)
-            {
-                Logger.Warning($"Failed to delete webhook message (Attempt {i + 1}/{maxRetries}): {ex.Message}");
-                if (i == maxRetries - 1)
-                {
-                    Logger.Error(ex, "Failed to delete webhook message.");
-                }
-            }
-            catch (Exception ex)
-            {
-                Logger.Error(ex, "Failed to delete webhook message.");
-                return;
-            }
-
-            await Task.Delay(delay);
-            delay *= 2;
+            }, log: Logger);
+        }
+        catch (Exception ex)
+        {
+            Logger.Error(ex, "Failed to delete webhook message.");
         }
     }
 

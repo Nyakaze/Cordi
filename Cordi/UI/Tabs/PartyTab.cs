@@ -13,19 +13,16 @@ using System;
 
 namespace Cordi.UI.Tabs;
 
-public class PartyTab
+public class PartyTab : ConfigTabBase
 {
-    private readonly CordiPlugin plugin;
-    private readonly UiTheme theme;
 
+    public override string Label => "Party";
 
-    public PartyTab(CordiPlugin plugin, UiTheme theme)
+    public PartyTab(CordiPlugin plugin, UiTheme theme) : base(plugin, theme)
     {
-        this.plugin = plugin;
-        this.theme = theme;
     }
 
-    public void Draw()
+    public override void Draw()
     {
         bool enabled = true;
 

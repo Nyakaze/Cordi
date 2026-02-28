@@ -19,6 +19,7 @@ public class PartyService : IDisposable
 {
     private readonly CordiPlugin plugin;
     private readonly NotificationManager notificationService;
+    private readonly PartyDiscordNotifier _discordNotifier;
     private readonly HashSet<ulong> currentPartyMembers = new();
     private DateTime _lastPartyCheck = DateTime.MinValue;
     private readonly TimeSpan _partyCheckInterval = TimeSpan.FromMilliseconds(500);
@@ -37,6 +38,7 @@ public class PartyService : IDisposable
     {
         this.plugin = plugin;
         this.notificationService = notificationService;
+        _discordNotifier = new PartyDiscordNotifier(plugin);
         Service.Framework.Update += OnFrameworkUpdate;
     }
 
@@ -503,57 +505,12 @@ public class PartyService : IDisposable
 
     private async Task<ulong> SendDiscordNotificationAsync(string title, string description, DiscordColor color, string? characterName = null, string? characterWorld = null)
     {
-        if (!plugin.Config.Party.DiscordEnabled) return 0;
-
-        var channelIdStr = plugin.Config.Party.DiscordChannelId;
-        if (!ulong.TryParse(channelIdStr, out var channelId)) return 0;
-
-        string? avatarUrl = null;
-        if (!string.IsNullOrEmpty(characterName) && !string.IsNullOrEmpty(characterWorld))
-        {
-            avatarUrl = await plugin.Lodestone.GetAvatarUrlAsync(characterName, characterWorld);
-        }
-
-        var embed = new DiscordEmbedBuilder()
-            .WithTitle(title)
-            .WithDescription(description)
-            .WithColor(color)
-            .WithTimestamp(DateTime.Now);
-
-        if (avatarUrl != null)
-        {
-            embed.WithThumbnail(avatarUrl);
-        }
-
-        string username = "Party Notification";
-        if (!string.IsNullOrEmpty(characterName) && !string.IsNullOrEmpty(characterWorld))
-        {
-            username = $"{characterName}@{characterWorld}";
-        }
-
-        return await plugin.Discord.SendWebhookMessageRaw(channelId, embed.Build(), username, avatarUrl);
+        return await _discordNotifier.SendNotificationAsync(title, description, color, characterName, characterWorld);
     }
 
     private async Task UpdateDiscordNotificationAsync(ulong msgId, string title, string description, DiscordColor color, string? characterName = null, string? characterWorld = null)
     {
-        if (!plugin.Config.Party.DiscordEnabled) return;
-
-        var channelIdStr = plugin.Config.Party.DiscordChannelId;
-        if (!ulong.TryParse(channelIdStr, out var channelId)) return;
-
-        var embed = new DiscordEmbedBuilder()
-            .WithTitle(title)
-            .WithDescription(description)
-            .WithColor(color)
-            .WithTimestamp(DateTime.Now);
-
-        if (!string.IsNullOrEmpty(characterName) && !string.IsNullOrEmpty(characterWorld))
-        {
-            var avatarUrl = await plugin.Lodestone.GetAvatarUrlAsync(characterName, characterWorld);
-            if (avatarUrl != null) embed.WithThumbnail(avatarUrl);
-        }
-
-        await plugin.Discord.EditWebhookMessage(channelId, msgId, embed.Build());
+        await _discordNotifier.UpdateNotificationAsync(msgId, title, description, color, characterName, characterWorld);
     }
 
     public async void DebugTriggerLeave(string name, string world)
@@ -571,26 +528,6 @@ public class PartyService : IDisposable
 
     private string CleanRaidName(string name)
     {
-        if (string.IsNullOrEmpty(name)) return name;
-
-        // Common patterns to remove to leave only the tier (e.g., M1, P1S, etc.)
-        var patterns = new[]
-        {
-            "AAC Heavyweight",
-            "Eden's Promise",
-            "Anabaseios",
-            "Abyssos",
-            "Asphodelos",
-            "(Savage)",
-            " - "
-        };
-
-        var result = name;
-        foreach (var pattern in patterns)
-        {
-            result = result.Replace(pattern, "", StringComparison.OrdinalIgnoreCase);
-        }
-
-        return result.Trim();
+        return PartyDiscordNotifier.CleanRaidName(name);
     }
 }
