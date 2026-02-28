@@ -98,8 +98,9 @@ public class CordiPlugin : IDalamudPlugin
     public DynamicVariableService DynamicVariableService { get; private set; }
     public QoLBarOverlay QoLBarOverlay { get; private set; }
     public QoLBarConfig QoLBarConfig { get; private set; }
-    public CleanWindowService CleanWindowService { get; private set; }
-    public CleanWindowUI CleanWindowUI { get; private set; }
+    public CleanWindowService CleanWindowService { get; set; }
+    public CleanWindowUI CleanWindowUI { get; set; }
+    public KeepTargetService KeepTargetService { get; private set; }
 
     public CordiPlugin()
     {
@@ -140,6 +141,7 @@ public class CordiPlugin : IDalamudPlugin
 
         CleanWindowService = new CleanWindowService(Config.CleanWindow);
         CleanWindowUI = new CleanWindowUI();
+        KeepTargetService = new KeepTargetService(this);
 
         configWindow = new ConfigWindow(this);
         discordWindow = new DiscordWindow(this);
@@ -259,6 +261,27 @@ public class CordiPlugin : IDalamudPlugin
     public void OpenConfigCommand(string command, string args)
     {
         configWindow.Toggle();
+    }
+
+    [Command("/cordikpt")]
+    [HelpMessage("Force keep target. Usage: /cordikpt <name> to enable and target, /cordikpt off to disable.")]
+    public void KeepTargetCommand(string command, string args)
+    {
+        var arg = args.Trim();
+        if (string.Equals(arg, "off", StringComparison.OrdinalIgnoreCase) || string.IsNullOrEmpty(arg))
+        {
+            Config.KeepTarget.Enabled = false;
+            Config.KeepTarget.TargetName = "";
+            Config.Save();
+            ChatGui.Print("[Cordi] Keep Target: Disabled.");
+        }
+        else
+        {
+            Config.KeepTarget.Enabled = true;
+            Config.KeepTarget.TargetName = arg;
+            Config.Save();
+            ChatGui.Print($"[Cordi] Keep Target: Enabled for '{arg}'.");
+        }
     }
 
     public void ToggleConfigUI() => configWindow.Toggle();
@@ -455,6 +478,7 @@ public class CordiPlugin : IDalamudPlugin
         this.RememberMe?.Dispose();
         this.QoLBarOverlay?.Dispose();
         this.CleanWindowService?.Dispose();
+        this.KeepTargetService?.Dispose();
         this.ConditionService?.Dispose();
         this.KeybindService?.Dispose();
         this.CommandExecutor?.Dispose();

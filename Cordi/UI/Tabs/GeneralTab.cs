@@ -111,6 +111,61 @@ public class GeneralTab : ConfigTabBase
         ImGui.Separator();
         theme.SpacerY(2f);
 
+        bool keepTargetActive = plugin.Config.KeepTarget.Enabled;
+        string keepTargetName = plugin.Config.KeepTarget.TargetName;
+
+        theme.DrawPluginCardAuto(
+            id: "keep-target",
+            title: "Keep Target",
+            enabled: ref keepTargetActive,
+            showCheckbox: true,
+            drawContent: (avail) =>
+            {
+                ImGui.TextWrapped("Automatically retargets a specific player or NPC if they are nearby.\nYou can also use /cordikpt <name> to toggle this.");
+                theme.SpacerY(1f);
+
+                ImGui.TextColored(theme.Text, "Target Name");
+                ImGui.PushItemWidth(200);
+                if (ImGui.InputText("##target-name", ref keepTargetName, 64))
+                {
+                    plugin.Config.KeepTarget.TargetName = keepTargetName;
+                    plugin.Config.Save();
+                }
+                ImGui.PopItemWidth();
+                if (ImGui.IsItemHovered())
+                {
+                    ImGui.SetTooltip("The exact name of the character to keep targeted.");
+                }
+
+                ImGui.SameLine();
+                if (ImGui.Button("Current Target"))
+                {
+                    var target = Service.TargetManager.Target;
+                    if (target != null)
+                    {
+                        keepTargetName = target.Name.TextValue;
+                        plugin.Config.KeepTarget.TargetName = keepTargetName;
+                        plugin.Config.Save();
+                    }
+                }
+                theme.HoverHandIfItem();
+                if (ImGui.IsItemHovered())
+                {
+                    ImGui.SetTooltip("Set target name to your current target.");
+                }
+            }
+        );
+
+        if (keepTargetActive != plugin.Config.KeepTarget.Enabled)
+        {
+            plugin.Config.KeepTarget.Enabled = keepTargetActive;
+            plugin.Config.Save();
+        }
+
+        theme.SpacerY(2f);
+        ImGui.Separator();
+        theme.SpacerY(2f);
+
         theme.DrawPluginCardAuto(
             id: "ad-filter",
             enabled: ref enabled,

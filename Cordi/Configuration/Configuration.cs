@@ -26,6 +26,7 @@ public class Configuration : IPluginConfiguration
     public LodestoneConfig Lodestone { get; set; } = new();
     public CleanWindowConfig CleanWindow { get; set; } = new();
     public CombinedWindowConfig CombinedWindow { get; set; } = new();
+    public KeepTargetConfig KeepTarget { get; set; } = new();
     public ThroughputStats Stats { get; set; } = new();
 
 
