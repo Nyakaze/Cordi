@@ -41,6 +41,7 @@ public sealed class ConfigWindow : Window, IDisposable
     private RememberMeTab rememberMeTab;
     private QoLBarTab qolBarTab;
     private CombinedWindowTab combinedWindowTab;
+    private NearbyTab nearbyTab;
 
     private int selectedTab = 0;
 
@@ -54,14 +55,15 @@ public sealed class ConfigWindow : Window, IDisposable
         this.chatsTab = new ChatsTab(plugin, theme);
         this.cordiPeepTab = new CordiPeepTab(plugin, theme);
         this.emoteLogTab = new EmoteLogTab(plugin, theme);
+        this.discordActivityTab = new DiscordActivityTab(plugin, theme);
 #if DEBUG
         this.debugTab = new DebugTab(plugin, theme);
 #endif
-        this.discordActivityTab = new DiscordActivityTab(plugin, theme);
         this.partyTab = new PartyTab(plugin, theme);
         this.rememberMeTab = new RememberMeTab(plugin, theme);
         this.qolBarTab = new QoLBarTab(plugin, theme, plugin.BarImportExport, plugin.QoLBarOverlay);
         this.combinedWindowTab = new CombinedWindowTab(plugin, theme);
+        this.nearbyTab = new NearbyTab(plugin);
 
         SizeConstraints = new WindowSizeConstraints
         {
@@ -148,6 +150,7 @@ public sealed class ConfigWindow : Window, IDisposable
         DrawSidebarButton("Chats", 1);
         DrawSidebarButton("Emote Log", 4);
         DrawSidebarButton("Peepers", 2);
+        DrawSidebarButton("Nearby", 10);
         DrawSidebarButton("Combined", 9);
         DrawSidebarButton("Activity", 5);
         DrawSidebarButton("Party", 6);
@@ -213,6 +216,10 @@ public sealed class ConfigWindow : Window, IDisposable
 
             case 9:
                 combinedWindowTab.Draw();
+                break;
+
+            case 10:
+                nearbyTab.Draw();
                 break;
         }
         ImGui.EndChild();

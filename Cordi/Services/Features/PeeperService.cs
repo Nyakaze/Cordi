@@ -17,6 +17,7 @@ using Lumina.Excel.Sheets;
 using Cordi.Core;
 using Cordi.Configuration;
 using Cordi.Extensions;
+using FFXIVClientStructs.FFXIV.Client.Game.Control;
 
 namespace Cordi.Services;
 
@@ -67,6 +68,11 @@ public class CordiPeepService : IDisposable
         public ulong DiscordMessageId;
         public bool IsLooking;
         public string AvatarUrl = string.Empty;
+        public float Distance;
+        public float DirectionAngle;
+        public string? CurrentTargetName;
+        public ulong CurrentTargetId;
+        public bool IsPresent;
     }
 
     public CordiPeepService(CordiPlugin plugin)
@@ -104,6 +110,12 @@ public class CordiPeepService : IDisposable
 
         currentPeepers.Clear();
 
+        foreach (var state in ActivePeepers.Values) state.IsPresent = false;
+        lock (History)
+        {
+            foreach (var state in History) state.IsPresent = false;
+        }
+
         foreach (var obj in Service.ObjectTable)
         {
             if (obj is not IPlayerCharacter player) continue;
@@ -123,6 +135,8 @@ public class CordiPeepService : IDisposable
                 continue;
             }
 
+            // Update distance, direction, and current target for any tracked peeper (Active or History)
+            UpdatePeeperData(player, localPlayer);
 
             bool inCombat = (player.StatusFlags & Dalamud.Game.ClientState.Objects.Enums.StatusFlags.InCombat) != 0;
             if (!plugin.Config.CordiPeep.LogCombat && inCombat) continue;
@@ -152,7 +166,6 @@ public class CordiPeepService : IDisposable
             }
         }
 
-
         foreach (var id in ActivePeepers.Keys)
         {
             if (!currentPeepers.Contains(id))
@@ -160,6 +173,26 @@ public class CordiPeepService : IDisposable
                 if (ActivePeepers.TryGetValue(id, out var state) && state.IsLooking)
                 {
                     UpdatePeeperStateLoss(state);
+                }
+            }
+        }
+
+        foreach (var state in ActivePeepers.Values)
+        {
+            if (!state.IsPresent)
+            {
+                state.CurrentTargetId = 0;
+                state.CurrentTargetName = null;
+            }
+        }
+        lock (History)
+        {
+            foreach (var state in History)
+            {
+                if (!state.IsPresent)
+                {
+                    state.CurrentTargetId = 0;
+                    state.CurrentTargetName = null;
                 }
             }
         }
@@ -470,6 +503,61 @@ public class CordiPeepService : IDisposable
         });
 
         return Task.CompletedTask;
+    }
+
+    private void UpdatePeeperData(IPlayerCharacter player, IPlayerCharacter localPlayer)
+    {
+        PeeperState? state = null;
+        if (ActivePeepers.TryGetValue(player.GameObjectId, out state))
+        {
+            // found in active
+        }
+        else
+        {
+            lock (History)
+            {
+                state = History.FirstOrDefault(h =>
+                    h.GameObjectId == player.GameObjectId ||
+                    (h.Name == player.Name.TextValue && h.World == player.HomeWorld.Value.Name.ExtractText()));
+            }
+        }
+
+        if (state == null) return;
+
+        state.IsPresent = true;
+
+        // Direction and distance updated for anyone in active or history list currently present
+        state.Distance = Vector3.Distance(localPlayer.Position, player.Position);
+
+        var dx = player.Position.X - localPlayer.Position.X;
+        var dz = player.Position.Z - localPlayer.Position.Z;
+        var camRot = GetCameraRotation();
+        var worldAngle = MathF.Atan2(dx, dz);
+        var relative = worldAngle - (camRot + MathF.PI);
+        while (relative > MathF.PI) relative -= 2 * MathF.PI;
+        while (relative < -MathF.PI) relative += 2 * MathF.PI;
+        state.DirectionAngle = -relative;
+
+        // Current target of the peeper — always updated
+        if (player.TargetObjectId != 0)
+        {
+            state.CurrentTargetId = player.TargetObjectId;
+            var pTarget = Service.ObjectTable.SearchById(player.TargetObjectId);
+            state.CurrentTargetName = pTarget?.Name.TextValue;
+        }
+        else
+        {
+            state.CurrentTargetId = 0;
+            state.CurrentTargetName = null;
+        }
+    }
+
+    private static unsafe float GetCameraRotation()
+    {
+        var cm = CameraManager.Instance();
+        if (cm != null && cm->Camera != null)
+            return cm->Camera->DirH;
+        return 0f;
     }
 
     private string GetLocalPlayerTargetName()

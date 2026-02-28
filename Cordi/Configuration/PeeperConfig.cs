@@ -31,5 +31,11 @@ public class CordiPeepConfig
     public float SoundVolume { get; set; } = 1.0f;
     public Guid SoundDevice { get; set; } = Guid.Empty;
 
+    public bool ShowDirection { get; set; } = true;
+    public bool ShowDistance { get; set; } = true;
+    public bool ShowDirectionInHistory { get; set; } = true;
+    public bool ShowDistanceInHistory { get; set; } = true;
+    public bool ShowCurrentTarget { get; set; } = true;
+
     public List<CordiPeepBlacklistEntry> Blacklist { get; set; } = new();
 }

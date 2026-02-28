@@ -84,6 +84,8 @@ public class CordiPlugin : IDalamudPlugin
     public ChatMessenger _chat = null!;
     public CordiPeepService CordiPeep { get; private set; }
     public CordiPeepWindow CordiPeepWindow { get; private set; }
+    public NearbyService NearbyService { get; private set; }
+    public NearbyWindow NearbyWindow { get; private set; }
     public EmoteLogService EmoteLog { get; private set; }
     public EmoteLogWindow EmoteLogWindow { get; private set; }
     public CombinedWindow CombinedWindow { get; private set; }
@@ -146,12 +148,15 @@ public class CordiPlugin : IDalamudPlugin
         configWindow = new ConfigWindow(this);
         discordWindow = new DiscordWindow(this);
         CordiPeepWindow = new CordiPeepWindow(this);
+        NearbyService = new NearbyService(this);
+        NearbyWindow = new NearbyWindow(this);
         this.EmoteLogWindow = new EmoteLogWindow(this);
         CombinedWindow = new CombinedWindow(this);
 
         windowSystem.AddWindow(discordWindow);
         windowSystem.AddWindow(configWindow);
         windowSystem.AddWindow(CordiPeepWindow);
+        windowSystem.AddWindow(NearbyWindow);
         windowSystem.AddWindow(this.EmoteLogWindow);
         windowSystem.AddWindow(CombinedWindow);
         windowSystem.AddWindow(CleanWindowUI);
@@ -179,6 +184,7 @@ public class CordiPlugin : IDalamudPlugin
             if (Service.ClientState.IsLoggedIn)
             {
                 if (Config!.CordiPeep.OpenOnLogin) CordiPeepWindow.IsOpen = true;
+                if (Config!.Nearby.OpenOnLogin) NearbyWindow.IsOpen = true;
                 if (Config!.EmoteLog.WindowOpenOnLogin) this.EmoteLogWindow.IsOpen = true;
                 if (Config!.CombinedWindow.OpenOnLogin) CombinedWindow.IsOpen = true;
             }
@@ -380,6 +386,25 @@ public class CordiPlugin : IDalamudPlugin
             CommandManager.RemoveHandler(PeepCmd);
         }
 
+        const string NearbyCmd = "/cordinearby";
+        bool nearbyEnabled = Config.Nearby.WindowEnabled;
+        bool nearbyRegistered = CommandManager.Commands.ContainsKey(NearbyCmd);
+
+        if (nearbyEnabled && !nearbyRegistered)
+        {
+            CommandManager.AddHandler(NearbyCmd, new CommandInfo((cmd, args) =>
+            {
+                NearbyWindow.IsOpen = !NearbyWindow.IsOpen;
+            })
+            {
+                HelpMessage = "Toggles the Nearby Players Window"
+            });
+        }
+        else if (!nearbyEnabled && nearbyRegistered)
+        {
+            CommandManager.RemoveHandler(NearbyCmd);
+        }
+
         const string ComboCmd = "/cordicombo";
         bool comboRegistered = CommandManager.Commands.ContainsKey(ComboCmd);
 
@@ -425,6 +450,10 @@ public class CordiPlugin : IDalamudPlugin
         {
             CordiPeepWindow.IsOpen = true;
         }
+        if (Config.Nearby.OpenOnLogin)
+        {
+            NearbyWindow.IsOpen = true;
+        }
         if (Config.EmoteLog.WindowOpenOnLogin)
         {
             EmoteLogWindow.IsOpen = true;
@@ -469,6 +498,7 @@ public class CordiPlugin : IDalamudPlugin
 
         this.commandManager.Dispose();
         this.CordiPeep?.Dispose();
+        this.NearbyService?.Dispose();
         this.EmoteLog?.Dispose();
         this.ActivityManager?.Dispose();
         this.HonorificBridge?.Dispose();

@@ -185,6 +185,59 @@ public class CordiPeepTab : ConfigTabBase
                 theme.HoverHandIfItem();
                 ImGui.EndGroup();
 
+                theme.SpacerY(1f);
+                ImGui.Separator();
+                theme.SpacerY(0.5f);
+                ImGui.TextColored(theme.MutedText, "Overlay Display");
+                theme.SpacerY(0.5f);
+
+                ImGui.BeginGroup();
+                bool showDir = plugin.Config.CordiPeep.ShowDirection;
+                theme.ConfigCheckbox("Show Direction Arrow", ref showDir, () =>
+                {
+                    plugin.Config.CordiPeep.ShowDirection = showDir;
+                    plugin.Config.Save();
+                });
+                theme.HoverHandIfItem();
+
+                bool showDist = plugin.Config.CordiPeep.ShowDistance;
+                theme.ConfigCheckbox("Show Distance", ref showDist, () =>
+                {
+                    plugin.Config.CordiPeep.ShowDistance = showDist;
+                    plugin.Config.Save();
+                });
+                theme.HoverHandIfItem();
+                ImGui.EndGroup();
+
+                ImGui.SameLine();
+                ImGui.SetCursorPosX(ImGui.GetCursorPosX() + theme.Gap(2f));
+
+                ImGui.BeginGroup();
+                bool showTarget = plugin.Config.CordiPeep.ShowCurrentTarget;
+                theme.ConfigCheckbox("Show Peeper's Target", ref showTarget, () =>
+                {
+                    plugin.Config.CordiPeep.ShowCurrentTarget = showTarget;
+                    plugin.Config.Save();
+                });
+                theme.HoverHandIfItem();
+
+                bool showDirHistory = plugin.Config.CordiPeep.ShowDirectionInHistory;
+                theme.ConfigCheckbox("Show Direction in History", ref showDirHistory, () =>
+                {
+                    plugin.Config.CordiPeep.ShowDirectionInHistory = showDirHistory;
+                    plugin.Config.Save();
+                });
+                theme.HoverHandIfItem();
+
+                bool showDistHistory = plugin.Config.CordiPeep.ShowDistanceInHistory;
+                theme.ConfigCheckbox("Show Distance in History", ref showDistHistory, () =>
+                {
+                    plugin.Config.CordiPeep.ShowDistanceInHistory = showDistHistory;
+                    plugin.Config.Save();
+                });
+                theme.HoverHandIfItem();
+                ImGui.EndGroup();
+
                 theme.SpacerY(0.7f);
 
                 if (theme.SecondaryButton("Open Window Now", new Vector2(avail, 28)))
