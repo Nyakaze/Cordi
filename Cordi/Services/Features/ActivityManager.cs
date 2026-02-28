@@ -61,21 +61,18 @@ namespace Cordi.Services
 
         private void ProcessPresence(DiscordPresence presence, bool isUpdateLoop)
         {
-            if (presence == null || presence.Activities == null || !presence.Activities.Any())
-            {
-                ClearTitle();
-                return;
-            }
-
             var config = _plugin.Config.ActivityConfig;
-            if (!config.Enabled)
+            if (config == null || !config.Enabled)
             {
                 ClearTitle();
                 return;
             }
 
-            var candidates = presence.Activities
-                .Select(a =>
+            var candidates = new List<(DiscordActivity Activity, ActivityTypeConfig Config)>();
+
+            if (presence != null && presence.Activities != null)
+            {
+                foreach (var a in presence.Activities)
                 {
                     ActivityTypeConfig conf = null;
                     // Check for Game Override first (Only for Playing activities)
@@ -87,25 +84,37 @@ namespace Cordi.Services
                     {
                         conf = GetConfigForType(a.ActivityType, config);
                     }
-                    return new { Activity = a, Config = conf };
-                })
-                .Where(x => x.Config != null && x.Config.Enabled)
-                .OrderByDescending(x => x.Config.Priority)
-                .ToList();
 
-            var best = candidates.FirstOrDefault();
+                    if (conf != null && conf.Enabled)
+                    {
+                        candidates.Add((a, conf));
+                    }
+                }
+            }
 
-            if (best == null)
+            if (config.TypeConfigs.TryGetValue(ActivityType.Custom, out var customConf) && customConf.Enabled)
+            {
+                if (!candidates.Any(c => c.Activity != null && c.Activity.ActivityType == ActivityType.Custom))
+                {
+                    candidates.Add((null, customConf));
+                }
+            }
+
+            var best = candidates.OrderByDescending(x => x.Config.Priority).FirstOrDefault();
+
+            if (best.Config == null)
             {
                 ClearTitle();
                 return;
             }
 
+            var bestActivityType = best.Activity?.ActivityType ?? ActivityType.Custom;
+
             if (best.Config.EnableCycling && best.Config.CycleFormats != null && best.Config.CycleFormats.Any())
             {
-                if (_currentCyclingType != best.Activity.ActivityType)
+                if (_currentCyclingType != bestActivityType)
                 {
-                    _currentCyclingType = best.Activity.ActivityType;
+                    _currentCyclingType = bestActivityType;
                     _lastCycleSwap = DateTime.Now;
                     _currentCycleIndex = -1;
                 }
@@ -164,7 +173,7 @@ namespace Cordi.Services
 
             if (string.IsNullOrEmpty(format)) return "";
 
-            string name = act.Name ?? "";
+            string name = act?.Name ?? "";
             string details = "";
             string state = "";
             string album = "";
@@ -174,53 +183,56 @@ namespace Cordi.Services
             string timeStart = "";
             string timeEnd = "";
 
-            try
+            if (act != null)
             {
-                dynamic dAct = act;
-
-                try { details = dAct.Details ?? ""; } catch { }
-                try { state = dAct.State ?? ""; } catch { }
-
-                dynamic rp = null;
-                try { rp = dAct.RichPresence; } catch { }
-
-                if (rp != null)
+                try
                 {
-                    try { if (string.IsNullOrEmpty(details)) details = rp.Details ?? ""; } catch { }
-                    try { if (string.IsNullOrEmpty(state)) state = rp.State ?? ""; } catch { }
-                    try { album = rp.LargeImageText ?? ""; } catch { }
+                    dynamic dAct = act;
 
-                    DateTimeOffset? start = null;
-                    DateTimeOffset? end = null;
+                    try { details = dAct.Details ?? ""; } catch { }
+                    try { state = dAct.State ?? ""; } catch { }
 
-                    try { start = rp.StartTimestamp; } catch { }
-                    try { end = rp.EndTimestamp; } catch { }
+                    dynamic rp = null;
+                    try { rp = dAct.RichPresence; } catch { }
 
-                    if (start != null)
+                    if (rp != null)
                     {
-                        TimeSpan diff = DateTimeOffset.UtcNow - start.Value;
-                        elapsed = $"{(int)diff.TotalMinutes:D2}:{diff.Seconds:D2}";
-                        timeStart = start.Value.ToLocalTime().ToString("HH:mm");
-                    }
+                        try { if (string.IsNullOrEmpty(details)) details = rp.Details ?? ""; } catch { }
+                        try { if (string.IsNullOrEmpty(state)) state = rp.State ?? ""; } catch { }
+                        try { album = rp.LargeImageText ?? ""; } catch { }
 
-                    if (end != null)
-                    {
-                        TimeSpan diff = end.Value - DateTimeOffset.UtcNow;
-                        if (diff.TotalSeconds > 0)
+                        DateTimeOffset? start = null;
+                        DateTimeOffset? end = null;
+
+                        try { start = rp.StartTimestamp; } catch { }
+                        try { end = rp.EndTimestamp; } catch { }
+
+                        if (start != null)
                         {
-                            if (start != null)
+                            TimeSpan diff = DateTimeOffset.UtcNow - start.Value;
+                            elapsed = $"{(int)diff.TotalMinutes:D2}:{diff.Seconds:D2}";
+                            timeStart = start.Value.ToLocalTime().ToString("HH:mm");
+                        }
+
+                        if (end != null)
+                        {
+                            TimeSpan diff = end.Value - DateTimeOffset.UtcNow;
+                            if (diff.TotalSeconds > 0)
                             {
-                                TimeSpan total = end.Value - start.Value;
-                                duration = $"{(int)total.TotalMinutes:D2}:{total.Seconds:D2}";
+                                if (start != null)
+                                {
+                                    TimeSpan total = end.Value - start.Value;
+                                    duration = $"{(int)total.TotalMinutes:D2}:{total.Seconds:D2}";
+                                }
+                                timeEnd = end.Value.ToLocalTime().ToString("HH:mm");
                             }
-                            timeEnd = end.Value.ToLocalTime().ToString("HH:mm");
                         }
                     }
                 }
-            }
-            catch (Exception ex)
-            {
-                if (!silent) Service.Log.Error($"[ActivityManager] Extraction Error: {ex.Message}");
+                catch (Exception ex)
+                {
+                    if (!silent) Service.Log.Error($"[ActivityManager] Extraction Error: {ex.Message}");
+                }
             }
 
             if (config != null)
