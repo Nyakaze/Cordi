@@ -227,9 +227,9 @@ public class EmoteLogService : IDisposable
         await _discordNotifier.ProcessDiscordEmote(name, world, gameObjectId, emoteName, command, uiCount);
     }
 
-    public async Task PerformEmoteBack(string targetName, string targetWorld, string command, ulong targetId = 0)
+    public async Task PerformEmoteBack(string targetName, string targetWorld, string command, ulong targetId = 0, bool keepTarget = false, bool keepRotation = false)
     {
-        await _emoteBackAction.PerformAsync(targetName, targetWorld, command, targetId);
+        await _emoteBackAction.PerformAsync(targetName, targetWorld, command, targetId, keepTarget, keepRotation);
     }
 
 

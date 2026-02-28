@@ -19,7 +19,7 @@ public class EmoteBackAction
         _log = Service.Log;
     }
 
-    public async Task PerformAsync(string targetName, string targetWorld, string command, ulong targetId = 0)
+    public async Task PerformAsync(string targetName, string targetWorld, string command, ulong targetId = 0, bool keepTarget = false, bool keepRotation = false)
     {
         float savedRotation = 0;
         bool targetFound = false;
@@ -56,19 +56,25 @@ public class EmoteBackAction
             var localPlayer = Service.ClientState.LocalPlayer;
             if (localPlayer == null) return;
 
-            var currentTarget = Service.TargetManager.Target;
-            if (currentTarget != null)
+            if (!keepTarget)
             {
-                if (currentTarget.Name.ToString() == targetName)
+                var currentTarget = Service.TargetManager.Target;
+                if (currentTarget != null)
                 {
-                    Service.TargetManager.Target = null;
+                    if (currentTarget.Name.ToString() == targetName)
+                    {
+                        Service.TargetManager.Target = null;
+                    }
                 }
             }
 
-            unsafe
+            if (!keepRotation)
             {
-                var go = (FFXIVClientStructs.FFXIV.Client.Game.Object.GameObject*)localPlayer.Address;
-                go->Rotation = savedRotation;
+                unsafe
+                {
+                    var go = (FFXIVClientStructs.FFXIV.Client.Game.Object.GameObject*)localPlayer.Address;
+                    go->Rotation = savedRotation;
+                }
             }
         });
     }

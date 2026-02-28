@@ -47,6 +47,9 @@ public class EmoteLogPanel
 
                     ImGui.PushFont(UiBuilder.IconFont);
                     ImGui.PushStyleVar(ImGuiStyleVar.FramePadding, Vector2.Zero);
+                    bool keepTarget = ImGui.GetIO().KeyShift;
+                    bool keepRotation = ImGui.GetIO().KeyAlt;
+
                     if (ImGui.Button($"{FontAwesomeIcon.Reply.ToIconString()}##{i}", buttonSize))
                     {
                         var cmd = entry.Command;
@@ -60,13 +63,18 @@ public class EmoteLogPanel
                             entry.User,
                             entry.World,
                             cmd,
-                            entry.GameObjectId
+                            entry.GameObjectId,
+                            keepTarget,
+                            keepRotation
                         );
                     }
                     ImGui.PopStyleVar();
                     ImGui.PopFont();
 
-                    if (ImGui.IsItemHovered()) ImGui.SetTooltip($"Emote Back ({(!string.IsNullOrEmpty(entry.Command) ? entry.Command : entry.Emote)})");
+                    if (ImGui.IsItemHovered())
+                    {
+                        ImGui.SetTooltip($"Emote Back ({(!string.IsNullOrEmpty(entry.Command) ? entry.Command : entry.Emote)})\n[Shift] Keep target\n[Alt] Keep rotation");
+                    }
                 }
 
                 if (ImGui.IsItemClicked(ImGuiMouseButton.Right))
