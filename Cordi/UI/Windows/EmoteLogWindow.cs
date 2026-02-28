@@ -5,6 +5,7 @@ using Dalamud.Bindings.ImGui;
 
 using Cordi.Core;
 using Cordi.UI.Panels;
+using Cordi.UI.Themes;
 
 namespace Cordi.UI.Windows;
 
@@ -12,6 +13,7 @@ public class EmoteLogWindow : Window, IDisposable
 {
     private readonly CordiPlugin _plugin;
     private readonly EmoteLogPanel _panel;
+    private readonly UiTheme _theme = new UiTheme();
 
     public EmoteLogWindow(CordiPlugin plugin) : base("Emote Log##CordiEmoteLog", ImGuiWindowFlags.None)
     {
@@ -57,6 +59,13 @@ public class EmoteLogWindow : Window, IDisposable
         {
             Flags &= ~ImGuiWindowFlags.NoResize;
         }
+
+        _theme.PushWindow();
+    }
+
+    public override void PostDraw()
+    {
+        _theme.PopWindow();
     }
 
     public void Dispose()

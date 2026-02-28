@@ -4,6 +4,7 @@ using Dalamud.Bindings.ImGui;
 
 using Cordi.Core;
 using Cordi.UI.Panels;
+using Cordi.UI.Themes;
 
 namespace Cordi.UI.Windows;
 
@@ -12,6 +13,7 @@ public class CombinedWindow : Window
     private readonly CordiPlugin _plugin;
     private readonly EmoteLogPanel _emoteLogPanel;
     private readonly CordiPeepPanel _peepPanel;
+    private readonly UiTheme _theme = new UiTheme();
 
     public CombinedWindow(CordiPlugin plugin) : base("Emote Log & Peeper###CordiCombo", ImGuiWindowFlags.None)
     {
@@ -31,9 +33,17 @@ public class CombinedWindow : Window
         base.PreDraw();
         var cfg = _plugin.Config.CombinedWindow;
         RespectCloseHotkey = !cfg.IgnoreEsc;
-        Flags = ImGuiWindowFlags.None;
+        Flags = ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse;
         if (cfg.WindowLocked) Flags |= ImGuiWindowFlags.NoMove;
         if (cfg.WindowNoResize) Flags |= ImGuiWindowFlags.NoResize;
+
+        _theme.PushWindow();
+    }
+
+    public override void PostDraw()
+    {
+        _theme.PopWindow();
+        base.PostDraw();
     }
 
     public override void Draw()
@@ -47,25 +57,31 @@ public class CombinedWindow : Window
             ImGui.TableSetupColumn("LeftCol", ImGuiTableColumnFlags.None);
             ImGui.TableSetupColumn("RightCol", ImGuiTableColumnFlags.None);
 
+            ImGui.PushStyleColor(ImGuiCol.TableHeaderBg, _theme.WindowBg);
             ImGui.TableNextRow(ImGuiTableRowFlags.Headers);
+            ImGui.PopStyleColor();
 
             ImGui.TableSetColumnIndex(0);
             var text0 = swap ? "Peeper" : "Emote Log";
             var posX0 = (ImGui.GetContentRegionAvail().X - ImGui.CalcTextSize(text0).X) / 2;
             if (posX0 > 0) ImGui.SetCursorPosX(ImGui.GetCursorPosX() + posX0);
+            ImGui.PushStyleColor(ImGuiCol.Text, _theme.MutedText);
             ImGui.TextUnformatted(text0);
+            ImGui.PopStyleColor();
 
             ImGui.TableSetColumnIndex(1);
             var text1 = swap ? "Emote Log" : "Peeper";
             var posX1 = (ImGui.GetContentRegionAvail().X - ImGui.CalcTextSize(text1).X) / 2;
             if (posX1 > 0) ImGui.SetCursorPosX(ImGui.GetCursorPosX() + posX1);
+            ImGui.PushStyleColor(ImGuiCol.Text, _theme.MutedText);
             ImGui.TextUnformatted(text1);
+            ImGui.PopStyleColor();
 
             ImGui.TableNextRow();
 
             // Left column
             ImGui.TableSetColumnIndex(0);
-            ImGui.BeginChild("##LeftPanel", new Vector2(0, -1), false);
+            ImGui.BeginChild("##LeftPanel", new Vector2(0, 0), false);
             if (swap)
                 _peepPanel.Draw();
             else
@@ -74,7 +90,7 @@ public class CombinedWindow : Window
 
             // Right column
             ImGui.TableSetColumnIndex(1);
-            ImGui.BeginChild("##RightPanel", new Vector2(0, -1), false);
+            ImGui.BeginChild("##RightPanel", new Vector2(0, 0), false);
             if (swap)
                 _emoteLogPanel.Draw();
             else

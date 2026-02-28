@@ -4,6 +4,7 @@ using Dalamud.Bindings.ImGui;
 
 using Cordi.Core;
 using Cordi.UI.Panels;
+using Cordi.UI.Themes;
 
 namespace Cordi.UI.Windows;
 
@@ -11,6 +12,7 @@ public class CordiPeepWindow : Window
 {
     private readonly CordiPlugin _plugin;
     private readonly CordiPeepPanel _panel;
+    private readonly UiTheme _theme = new UiTheme();
 
     public CordiPeepWindow(CordiPlugin plugin) : base("Peeper###Cordi Peep", ImGuiWindowFlags.None)
     {
@@ -30,6 +32,14 @@ public class CordiPeepWindow : Window
         Flags = ImGuiWindowFlags.None;
         if (_plugin.Config.CordiPeep.WindowLocked) Flags |= ImGuiWindowFlags.NoMove;
         if (_plugin.Config.CordiPeep.WindowNoResize) Flags |= ImGuiWindowFlags.NoResize;
+
+        _theme.PushWindow();
+    }
+
+    public override void PostDraw()
+    {
+        _theme.PopWindow();
+        base.PostDraw();
     }
 
     public override void Draw()
