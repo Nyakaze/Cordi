@@ -25,6 +25,7 @@ public class Configuration : IPluginConfiguration
     public AdvertisementFilterConfig AdvertisementFilter { get; set; } = new();
     public LodestoneConfig Lodestone { get; set; } = new();
     public CleanWindowConfig CleanWindow { get; set; } = new();
+    public CombinedWindowConfig CombinedWindow { get; set; } = new();
     public ThroughputStats Stats { get; set; } = new();
 
 

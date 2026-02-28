@@ -86,6 +86,7 @@ public class CordiPlugin : IDalamudPlugin
     public CordiPeepWindow CordiPeepWindow { get; private set; }
     public EmoteLogService EmoteLog { get; private set; }
     public EmoteLogWindow EmoteLogWindow { get; private set; }
+    public CombinedWindow CombinedWindow { get; private set; }
     public PartyService PartyService { get; private set; }
     public RememberMeService RememberMe { get; private set; }
 
@@ -144,11 +145,13 @@ public class CordiPlugin : IDalamudPlugin
         discordWindow = new DiscordWindow(this);
         CordiPeepWindow = new CordiPeepWindow(this);
         this.EmoteLogWindow = new EmoteLogWindow(this);
+        CombinedWindow = new CombinedWindow(this);
 
         windowSystem.AddWindow(discordWindow);
         windowSystem.AddWindow(configWindow);
         windowSystem.AddWindow(CordiPeepWindow);
         windowSystem.AddWindow(this.EmoteLogWindow);
+        windowSystem.AddWindow(CombinedWindow);
         windowSystem.AddWindow(CleanWindowUI);
 
         PluginInterface.UiBuilder.Draw += DrawUI;
@@ -175,6 +178,7 @@ public class CordiPlugin : IDalamudPlugin
             {
                 if (Config!.CordiPeep.OpenOnLogin) CordiPeepWindow.IsOpen = true;
                 if (Config!.EmoteLog.WindowOpenOnLogin) this.EmoteLogWindow.IsOpen = true;
+                if (Config!.CombinedWindow.OpenOnLogin) CombinedWindow.IsOpen = true;
             }
         });
 
@@ -352,6 +356,20 @@ public class CordiPlugin : IDalamudPlugin
         {
             CommandManager.RemoveHandler(PeepCmd);
         }
+
+        const string ComboCmd = "/cordicombo";
+        bool comboRegistered = CommandManager.Commands.ContainsKey(ComboCmd);
+
+        if (!comboRegistered)
+        {
+            CommandManager.AddHandler(ComboCmd, new CommandInfo((cmd, args) =>
+            {
+                CombinedWindow.IsOpen = !CombinedWindow.IsOpen;
+            })
+            {
+                HelpMessage = "Toggles the Combined Emote Log & Peeper Window"
+            });
+        }
     }
 
     private void OnFrameworkUpdate(IFramework framework)
@@ -387,6 +405,10 @@ public class CordiPlugin : IDalamudPlugin
         if (Config.EmoteLog.WindowOpenOnLogin)
         {
             EmoteLogWindow.IsOpen = true;
+        }
+        if (Config.CombinedWindow.OpenOnLogin)
+        {
+            CombinedWindow.IsOpen = true;
         }
     }
     private async void OnLogoutEvent(int type, int code)

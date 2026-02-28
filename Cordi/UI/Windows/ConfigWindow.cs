@@ -40,6 +40,7 @@ public sealed class ConfigWindow : Window, IDisposable
     private PartyTab partyTab;
     private RememberMeTab rememberMeTab;
     private QoLBarTab qolBarTab;
+    private CombinedWindowTab combinedWindowTab;
 
     private int selectedTab = 0;
 
@@ -60,6 +61,7 @@ public sealed class ConfigWindow : Window, IDisposable
         this.partyTab = new PartyTab(plugin, theme);
         this.rememberMeTab = new RememberMeTab(plugin, theme);
         this.qolBarTab = new QoLBarTab(plugin, theme, plugin.BarImportExport, plugin.QoLBarOverlay);
+        this.combinedWindowTab = new CombinedWindowTab(plugin, theme);
 
         SizeConstraints = new WindowSizeConstraints
         {
@@ -146,6 +148,7 @@ public sealed class ConfigWindow : Window, IDisposable
         DrawSidebarButton("Chats", 1);
         DrawSidebarButton("Emote Log", 4);
         DrawSidebarButton("Peepers", 2);
+        DrawSidebarButton("Combined", 9);
         DrawSidebarButton("Activity", 5);
         DrawSidebarButton("Party", 6);
         DrawSidebarButton("Remember Me", 7);
@@ -206,6 +209,10 @@ public sealed class ConfigWindow : Window, IDisposable
 
             case 8:
                 qolBarTab.Draw();
+                break;
+
+            case 9:
+                combinedWindowTab.Draw();
                 break;
         }
         ImGui.EndChild();
