@@ -74,15 +74,19 @@ public class CordiPeepPanel
         {
             if (_hoveredPeeperThisFrame != _lastHoveredPeeper)
             {
+                bool focusSet = false;
+
                 if (_hoveredPeeperThisFrame.HasValue)
                 {
                     var obj = Service.ObjectTable.SearchById(_hoveredPeeperThisFrame.Value);
                     if (obj != null)
                     {
                         Service.TargetManager.FocusTarget = obj;
+                        focusSet = true;
                     }
                 }
-                else
+
+                if (!focusSet)
                 {
                     var currentFocus = Service.TargetManager.FocusTarget;
                     if (currentFocus != null && currentFocus.GameObjectId == _lastHoveredPeeper)
@@ -90,6 +94,7 @@ public class CordiPeepPanel
                         Service.TargetManager.FocusTarget = null;
                     }
                 }
+
                 _lastHoveredPeeper = _hoveredPeeperThisFrame;
             }
         }
