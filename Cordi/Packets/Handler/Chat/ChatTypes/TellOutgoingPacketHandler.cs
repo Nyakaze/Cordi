@@ -42,6 +42,8 @@ public class TellOutgoingPacketHandler : IChatHandler
         var localName = CordiPlugin.Plugin.cachedLocalPlayer?.Name.TextValue ?? "Unknown";
         var localWorld = CordiPlugin.Plugin.cachedLocalPlayer?.HomeWorld.Value.Name.ExtractText() ?? "Unknown";
 
+        TellIncommingPacketHandler.LastTellActivity[correspondent] = System.DateTime.UtcNow;
+
         await discord.SendMessage(null, msg.Message, localName, localWorld, ChatType, correspondent);
 
         return Task.CompletedTask;

@@ -15,7 +15,7 @@ namespace Cordi.Packets.Handler.Chat.ChatTypes;
 public class TellIncommingPacketHandler : IChatHandler
 {
     static readonly IPluginLog Logger = Service.Log;
-    private static System.Collections.Generic.Dictionary<string, System.DateTime> LastNotificationTime = new();
+    internal static System.Collections.Generic.Dictionary<string, System.DateTime> LastTellActivity = new();
 
     public XivChatType ChatType => XivChatType.TellIncoming;
 
@@ -47,26 +47,30 @@ public class TellIncommingPacketHandler : IChatHandler
         {
             await discord.SendMessage(null, msg.Message, playerLink.PlayerName, playerLink.World.Value.Name.ExtractText(), ChatType, correspondent);
 
-            if (CordiPlugin.Plugin.Config.Chat.EnableTellNotification
+            var now = System.DateTime.UtcNow;
+            bool shouldNotify = false;
+
+            if (!LastTellActivity.TryGetValue(correspondent, out var lastTime)
+                || (now - lastTime).TotalSeconds > CordiPlugin.Plugin.Config.Chat.TellNotificationCooldownSeconds)
+            {
+                shouldNotify = true;
+            }
+
+            LastTellActivity[correspondent] = now;
+
+            if (shouldNotify && CordiPlugin.Plugin.Config.Chat.EnableTellNotification
                 && ulong.TryParse(CordiPlugin.Plugin.Config.Chat.TellNotificationChannelId, out var notifChannelId)
                 && notifChannelId > 0)
             {
-                var now = System.DateTime.UtcNow;
-                if (!LastNotificationTime.TryGetValue(correspondent, out var lastTime)
-                    || (now - lastTime).TotalSeconds > CordiPlugin.Plugin.Config.Chat.TellNotificationCooldownSeconds)
+                string link = "";
+                if (CordiPlugin.Plugin.Config.Chat.TellThreadMappings.TryGetValue(correspondent, out var threadId))
                 {
-                    LastNotificationTime[correspondent] = now;
-
-                    string link = "";
-                    if (CordiPlugin.Plugin.Config.Chat.TellThreadMappings.TryGetValue(correspondent, out var threadId))
-                    {
-                        link = $"<#{threadId}>";
-                    }
-
-                    string notifMsg = $"U got a Tell from {correspondent} {link}";
-                    Logger.Info($"Sending Tell Notification to {notifChannelId}: {notifMsg} | correspondent: {correspondent} | link: {link}");
-                    _ = discord.SendWebhookMessage(notifChannelId, notifMsg, playerLink.PlayerName, playerLink.World.Value.Name.ExtractText());
+                    link = $"<#{threadId}>";
                 }
+
+                string notifMsg = $"U got a Tell from {correspondent} {link}";
+                Logger.Info($"Sending Tell Notification to {notifChannelId}: {notifMsg} | correspondent: {correspondent} | link: {link}");
+                _ = discord.SendWebhookMessage(notifChannelId, notifMsg, playerLink.PlayerName, playerLink.World.Value.Name.ExtractText());
             }
         }
 
