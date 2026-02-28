@@ -182,7 +182,7 @@ public class GeneralTab
 
         theme.SpacerY(2f);
 
-        bool cwActive = plugin.CleanWindowUI.IsOpen;
+        bool cwActive = plugin.Config.CleanWindow.Enabled;
 
         theme.DrawPluginCardAuto(
             id: "clean-window",
@@ -244,9 +244,8 @@ public class GeneralTab
             }
         );
 
-        if (cwActive != plugin.CleanWindowUI.IsOpen)
+        if (cwActive != plugin.Config.CleanWindow.Enabled)
         {
-            plugin.CleanWindowUI.IsOpen = cwActive;
             plugin.Config.CleanWindow.Enabled = cwActive;
             plugin.Config.Save();
         }

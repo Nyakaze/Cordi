@@ -131,7 +131,6 @@ public unsafe class CleanWindowService : IDisposable
         _log = Service.Log;
         Instance = this;
 
-        _cfg.WindowOrder = 2; // Default to Native Viewport
         Service.GameInteropProvider.InitializeFromAttributes(this);
         _presentHook?.Enable();
 
@@ -165,7 +164,6 @@ public unsafe class CleanWindowService : IDisposable
     {
         if (msg == WM_CLOSE)
         {
-            // Don't let DefWindowProc destroy the window; flag it for the service to handle.
             if (Instance != null) Instance._nativeCloseRequested = true;
             ShowWindow(hWnd, SW_HIDE);
             return IntPtr.Zero;
@@ -182,10 +180,11 @@ public unsafe class CleanWindowService : IDisposable
         // Keep the delegate alive for the lifetime of the class registration.
         s_wndProcDelegate = NativeWndProc;
 
-        if (_windowClassAtom == 0)
-        {
+        if (_classNamePtr == IntPtr.Zero)
             _classNamePtr = Marshal.StringToHGlobalUni("CordiCleanWindow");
 
+        if (_windowClassAtom == 0)
+        {
             var wc = new WNDCLASSEXW
             {
                 cbSize = (uint)Marshal.SizeOf<WNDCLASSEXW>(),
@@ -197,8 +196,16 @@ public unsafe class CleanWindowService : IDisposable
             _windowClassAtom = RegisterClassExW(ref wc);
             if (_windowClassAtom == 0)
             {
-                _log.Error($"[CleanWindow] RegisterClassExW failed: {Marshal.GetLastWin32Error()}");
-                return;
+                var err = Marshal.GetLastWin32Error();
+                if (err == 1410) // ERROR_CLASS_ALREADY_EXISTS — class survived a plugin reload
+                {
+                    _log.Info("[CleanWindow] Window class already registered (plugin reload), reusing by name.");
+                }
+                else
+                {
+                    _log.Error($"[CleanWindow] RegisterClassExW failed: {err}");
+                    return;
+                }
             }
         }
 
@@ -208,9 +215,12 @@ public unsafe class CleanWindowService : IDisposable
         var rect = new RECT { Left = 0, Top = 0, Right = clientW, Bottom = clientH };
         AdjustWindowRectEx(ref rect, style, false, exStyle);
 
+        // Use atom if available, otherwise fall back to class name pointer
+        var lpClassName = _windowClassAtom != 0 ? (IntPtr)_windowClassAtom : _classNamePtr;
+
         _nativeHwnd = CreateWindowExW(
             exStyle,
-            (IntPtr)_windowClassAtom,
+            lpClassName,
             "Cordi \u2014 Clean View",
             style,
             CW_USEDEFAULT, CW_USEDEFAULT,
@@ -459,8 +469,8 @@ public unsafe class CleanWindowService : IDisposable
     /// <summary>
     /// Resolves the source texture for the clean window based on ShowGameUI config.
     /// When ShowGameUI is true, uses the backbuffer (game + native UI, no Dalamud).
-    /// When ShowGameUI is false, tries to use a RenderTargetManager render target
-    /// (game world only, no UI at all), falling back to the backbuffer.
+    /// When ShowGameUI is false, tries RenderIndexWithoutUI (game world only, no UI),
+    /// falling back to the backbuffer.
     /// </summary>
     private nint ResolveSourceTexture(Texture* backBuffer)
     {
@@ -469,7 +479,7 @@ public unsafe class CleanWindowService : IDisposable
             var rtm = RenderTargetManager.Instance();
             if (rtm != null)
             {
-                int rtIndex = _cfg.RenderIndexWithoutUI; // default: 71
+                int rtIndex = _cfg.RenderIndexWithoutUI;
                 int maxIndex = RenderTargetManager.StructSize / sizeof(nint);
 
                 if (rtIndex > 0 && rtIndex < maxIndex)
@@ -485,7 +495,7 @@ public unsafe class CleanWindowService : IDisposable
             }
         }
 
-        // Default: backbuffer (game + native UI, no Dalamud overlays)
+        // ShowGameUI=true or fallback: backbuffer (game + native UI, no Dalamud overlays)
         return (nint)backBuffer->D3D11Texture2D;
     }
 

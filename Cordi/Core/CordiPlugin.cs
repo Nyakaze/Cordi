@@ -368,19 +368,9 @@ public class CordiPlugin : IDalamudPlugin
         ConditionService?.Update(framework.UpdateDelta.Milliseconds / 1000f);
         CleanWindowService?.OnFrameworkUpdate();
 
-        if (CleanWindowUI != null && CleanWindowService != null)
-        {
-            if (CleanWindowUI.IsOpen && !Config.CleanWindow.Enabled)
-            {
-                Config.CleanWindow.Enabled = true;
-                Config.Save();
-            }
-            else if (!CleanWindowUI.IsOpen && Config.CleanWindow.Enabled)
-            {
-                Config.CleanWindow.Enabled = false;
-                Config.Save();
-            }
-        }
+        // The clean window service (native Win32 window for Discord streaming) is
+        // controlled solely via Config.CleanWindow.Enabled from the settings UI.
+        // The ImGui preview window (CleanWindowUI) is independent and not auto-opened.
     }
 
     private async void OnLoginEvent()
