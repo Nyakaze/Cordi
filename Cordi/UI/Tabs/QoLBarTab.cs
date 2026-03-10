@@ -14,79 +14,35 @@ using Dalamud.Interface.Utility;
 
 namespace Cordi.UI.Tabs;
 
-public class QoLBarTab
+public class QoLBarTab : ConfigTabBase
 {
-    private readonly CordiPlugin plugin;
-    private readonly UiTheme theme;
     private readonly BarImportExportService importExport;
     private readonly QoLBarOverlay overlay;
-    private int selectedSubTab = 0;
     private bool _conditionSetsExpanded = true;
     private string _importBuffer = string.Empty;
 
+    public override string Label => "QoL Bar";
+
     public QoLBarTab(CordiPlugin plugin, UiTheme theme, BarImportExportService importExport, QoLBarOverlay overlay)
+        : base(plugin, theme)
     {
-        this.plugin = plugin;
-        this.theme = theme;
         this.importExport = importExport;
         this.overlay = overlay;
     }
 
-    public void Draw()
+    protected override IReadOnlyList<(string Label, Action Draw)> GetSubTabs()
     {
         var config = plugin.QoLBarConfig;
-
-        theme.SpacerY(1f);
-
-        ImGui.PushStyleVar(ImGuiStyleVar.FrameRounding, theme.Radius());
-        ImGui.PushStyleVar(ImGuiStyleVar.ItemSpacing, new Vector2(theme.Gap(0.5f), theme.Gap(0.5f)));
-
-        float btnW = ImGui.GetContentRegionAvail().X / 3 - theme.Gap(0.5f);
-        float btnH = 32f * ImGuiHelpers.GlobalScale;
-
-        void SubTabButton(string label, int idx)
+        return new (string, Action)[]
         {
-            if (selectedSubTab == idx)
+            ("Bars", () => DrawBarManager(config)),
+            ("Conditions", () =>
             {
-                ImGui.PushStyleColor(ImGuiCol.Button, theme.Accent);
-                ImGui.PushStyleColor(ImGuiCol.ButtonHovered, theme.Accent);
-                ImGui.PushStyleColor(ImGuiCol.ButtonActive, theme.Accent);
-            }
-            else
-            {
-                ImGui.PushStyleColor(ImGuiCol.Button, theme.FrameBg);
-                ImGui.PushStyleColor(ImGuiCol.ButtonHovered, theme.FrameBgHover);
-                ImGui.PushStyleColor(ImGuiCol.ButtonActive, theme.FrameBgActive);
-            }
-
-            if (ImGui.Button(label, new Vector2(btnW, btnH)))
-                selectedSubTab = idx;
-            theme.HoverHandIfItem();
-
-            ImGui.PopStyleColor(3);
-        }
-
-        SubTabButton("Bars", 0);
-        ImGui.SameLine();
-        SubTabButton("Conditions", 1);
-        ImGui.SameLine();
-        SubTabButton("Settings", 2);
-
-        ImGui.PopStyleVar(2);
-
-        theme.SpacerY(1f);
-        ImGui.Separator();
-        theme.SpacerY(1f);
-
-        switch (selectedSubTab)
-        {
-            case 0: DrawBarManager(config); break;
-            case 1:
                 DrawDynamicVariables(config);
                 DrawConditionSets(config);
-                break;
-            case 2: DrawSettings(config); break;
-        }
+            }),
+            ("Settings", () => DrawSettings(config)),
+        };
     }
 
     private void DrawBarManager(QoLBarConfig config)
@@ -1163,10 +1119,15 @@ public class QoLBarTab
             ImGui.TextUnformatted(string.IsNullOrEmpty(currentVal) ? "-" : $"\"{currentVal}\"");
 
             ImGui.SameLine(ImGui.GetContentRegionAvail().X - 30 * ImGuiHelpers.GlobalScale);
-            if (theme.IconButton(FontAwesomeIcon.Trash, "Delete"))
+            if (theme.IconButton($"##qolVar{indexToRemove}", FontAwesomeIcon.Trash, tooltip: "Delete"))
             {
                 indexToRemove = i;
             }
+            
+            // if (theme.IconButton(FontAwesomeIcon.Trash, "Delete"))
+            // {
+            //     indexToRemove = i;
+            // }
 
             ImGui.PopID();
         }

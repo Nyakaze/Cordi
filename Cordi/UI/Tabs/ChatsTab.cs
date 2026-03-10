@@ -21,12 +21,11 @@ namespace Cordi.UI.Tabs;
 public class ChatsTab : ConfigTabBase
 {
     private bool _activeTellsExpanded = false;
+    private bool _extraChatExpanded = false;
     private bool _existingAvatarsExpanded = false;
     private Dictionary<ulong, string> _cachedAvailableThreads = new();
     private readonly Services.Features.ExtraChatService extraChatService;
-
-
-
+    
 
     private readonly XivChatType[] supportedChatTypes = new[]
     {
@@ -42,50 +41,75 @@ public class ChatsTab : ConfigTabBase
         extraChatService = new Cordi.Services.Features.ExtraChatService(plugin);
     }
 
-    public override void Draw()
+    protected override IReadOnlyList<(string Label, Action Draw)> GetSubTabs()
     {
-        theme.SpacerY(2f);
-        bool enabled = true;
-
-
         RefreshThreadCache();
-
-        var textChannels = plugin.ChannelCache.TextChannels;
-        var forumChannels = plugin.ChannelCache.ForumChannels;
-
-
-        DrawDefaultChannelCard(textChannels, ref enabled);
-
-        theme.SpacerY(2f);
-
-        ImGui.Separator();
-        theme.SpacerY(2f);
-
-        DrawActiveTellsCard(forumChannels, ref enabled);
-
-        theme.SpacerY(1f);
-
-
-        DrawExistingAvatarsCard(ref enabled);
-
-        theme.SpacerY(1f);
-
-        ImGui.Separator();
-        theme.SpacerY(2f);
-
-        DrawChatMappingsCard(textChannels, forumChannels, ref enabled);
-
+        
+        var tabs = new List<(string Label, Action Draw)>
+        {
+            ("Channel Mappings", () => DrawChatMappingsCard(plugin.ChannelCache.TextChannels, plugin.ChannelCache.ForumChannels, ref _activeTellsExpanded)),
+            ("Active Conversations", () => DrawActiveTellsCard(plugin.ChannelCache.ForumChannels, ref _activeTellsExpanded)),
+            ("Custom Avatars", () => DrawExistingAvatarsCard(ref _existingAvatarsExpanded))
+        };
 
         if (extraChatService.IsExtraChatInstalled())
         {
-
-            theme.SpacerY(2f);
-            ImGui.Separator();
-            theme.SpacerY(2f);
-
-            DrawExtraChatMappingsCard(textChannels, ref enabled, extraChatService);
+            tabs.Add(("ExtraChat Mappings", () =>
+            {
+                DrawExtraChatMappingsCard(plugin.ChannelCache.TextChannels, ref _extraChatExpanded, extraChatService);
+            }));
         }
+
+        return tabs;
     }
+
+
+
+
+    // public override void Draw()
+    // {
+    //     theme.SpacerY(2f);
+    //     bool enabled = true;
+    //
+    //
+    //     RefreshThreadCache();
+    //
+    //     var textChannels = plugin.ChannelCache.TextChannels;
+    //     var forumChannels = plugin.ChannelCache.ForumChannels;
+    //
+    //
+    //     DrawDefaultChannelCard(textChannels, ref enabled);
+    //
+    //     theme.SpacerY(2f);
+    //
+    //     ImGui.Separator();
+    //     theme.SpacerY(2f);
+    //
+    //     DrawActiveTellsCard(forumChannels, ref enabled);
+    //
+    //     theme.SpacerY(1f);
+    //
+    //
+    //     DrawExistingAvatarsCard(ref enabled);
+    //
+    //     theme.SpacerY(1f);
+    //
+    //     ImGui.Separator();
+    //     theme.SpacerY(2f);
+    //
+    //     DrawChatMappingsCard(textChannels, forumChannels, ref enabled);
+    //
+    //
+    //     if (extraChatService.IsExtraChatInstalled())
+    //     {
+    //
+    //         theme.SpacerY(2f);
+    //         ImGui.Separator();
+    //         theme.SpacerY(2f);
+    //
+    //         DrawExtraChatMappingsCard(textChannels, ref enabled, extraChatService);
+    //     }
+    // }
 
     private void RefreshThreadCache()
     {
@@ -145,8 +169,6 @@ public class ChatsTab : ConfigTabBase
 
     private void DrawExtraChatMappingsCard(IReadOnlyList<DiscordChannel>? textChannels, ref bool enabled, Services.Features.ExtraChatService extraChatService)
     {
-
-
         theme.DrawPluginCardAuto(
            id: "extrachat-mappings-card",
            enabled: ref enabled,
@@ -281,6 +303,10 @@ public class ChatsTab : ConfigTabBase
 
     private void DrawChatMappingsCard(IReadOnlyList<DiscordChannel>? textChannels, IReadOnlyList<DiscordChannel>? forumChannels, ref bool enabled)
     {
+        DrawDefaultChannelCard(textChannels, ref enabled);
+        
+        theme.SpacerY();
+        
         theme.DrawPluginCardAuto(
            id: "chat-mappings-card",
            enabled: ref enabled,
@@ -526,16 +552,18 @@ public class ChatsTab : ConfigTabBase
             }
         };
 
+        bool dummy = true;
         theme.DrawDictionaryTable(
             "activeTells",
             $"Active Private Conversation: {tells.Count}",
-            ref _activeTellsExpanded,
+            ref dummy,
             tells,
             () => plugin.Config.Save(),
             headers,
             setupColumns: setupCols,
             getDisplayValue: getDisplayValue,
-            drawEditUI: drawEdit
+            drawEditUI: drawEdit,
+            collapsible: false
         );
     }
 

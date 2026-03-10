@@ -341,8 +341,9 @@ public unsafe class CleanWindowService : IDisposable
                 _opaqueBlendState = _device.CreateBlendState(blendDesc);
 
                 // Create a native Win32 window that Discord/OBS can discover for streaming.
-                int initialW = _cfg.OutputHeight > 0 ? (int)(_cfg.OutputHeight * 16.0 / 9.0) : 1280;
-                int initialH = _cfg.OutputHeight > 0 ? _cfg.OutputHeight : 720;
+                int h = (int)_cfg.OutputSize;
+                int initialW = h > 0 ? (int)(h * 16.0 / 9.0) : 1280;
+                int initialH = h > 0 ? h : 720;
                 CreateNativeWindow(initialW, initialH);
 
                 _isEnabled = true;
@@ -407,9 +408,10 @@ public unsafe class CleanWindowService : IDisposable
             float outWidth = _viewWidth;
             float outHeight = _viewHeight;
 
-            if (_cfg != null && _cfg.OutputHeight > 0 && _cfg.OutputHeight != _viewHeight)
+            int cfgHeight = _cfg != null ? (int)_cfg.OutputSize : 0;
+            if (cfgHeight > 0 && cfgHeight != _viewHeight)
             {
-                outHeight = _cfg.OutputHeight;
+                outHeight = cfgHeight;
                 outWidth = (_viewWidth * outHeight) / _viewHeight;
             }
 

@@ -77,20 +77,25 @@ public sealed class UiTheme
     public Vector4 Tab;
     public Vector4 TabActive;
     public Vector4 TabHovered;
-    public static readonly Vector4 ColorSuccess = ColorConvertor.ToVector4("#3C00A5");
-    public static readonly Vector4 ColorSuccessText = ColorConvertor.ToVector4("#CF9FFF");
+    public static readonly Vector4 ColorSuccess = new(0.24f, 0.00f, 0.65f, 1f);
+    public static readonly Vector4 ColorSuccessText = new(0.81f, 0.62f, 1.00f, 1f);
     public static readonly Vector4 ColorDanger = new(0.565f, 0.0f, 0.0f, 1f);
     public static readonly Vector4 ColorDangerText = new(1.0f, 0.4f, 0.4f, 1f);
+    public static readonly Vector4 ColorCheckboxOn = new(0.35f, 0.75f, 0.45f, 1f);
 
     public float RadiusBase = 8f;
     public float PadBase = 10f;
     public float GapBase = 8f;
 
+    private const float PadYRatio = 0.9f;
+    private const float ActionsColumnWidth = 80f;
+    private const float CollapsableHeaderHeight = 35f;
 
     public float Radius(float mul = 1f) => RadiusBase * ImGuiHelpers.GlobalScale * mul;
     public float PadX(float mul = 1f) => PadBase * ImGuiHelpers.GlobalScale * mul;
-    public float PadY(float mul = 1f) => (PadBase * 0.9f) * ImGuiHelpers.GlobalScale * mul;
+    public float PadY(float mul = 1f) => (PadBase * PadYRatio) * ImGuiHelpers.GlobalScale * mul;
     public float Gap(float mul = 1f) => GapBase * ImGuiHelpers.GlobalScale * mul;
+    private float ScaledActionsWidth => ActionsColumnWidth * ImGuiHelpers.GlobalScale;
 
     public UiTheme(Vector4? accentOverride = null)
     {
@@ -121,28 +126,25 @@ public sealed class UiTheme
     }
 
 
-    int _pushedWindowColors, _pushedWindowVars;
+    private const int WindowColorCount = 4;
+    private const int WindowVarCount = 3;
 
     public void PushWindow()
     {
-        _pushedWindowColors = 0;
-        _pushedWindowVars = 0;
+        ImGui.PushStyleColor(ImGuiCol.WindowBg, WindowBg);
+        ImGui.PushStyleColor(ImGuiCol.Border, WindowBorder);
+        ImGui.PushStyleColor(ImGuiCol.TitleBg, TitleBg);
+        ImGui.PushStyleColor(ImGuiCol.TitleBgActive, TitleBgActive);
 
-        ImGui.PushStyleColor(ImGuiCol.WindowBg, WindowBg); _pushedWindowColors++;
-        ImGui.PushStyleColor(ImGuiCol.Border, WindowBorder); _pushedWindowColors++;
-        ImGui.PushStyleColor(ImGuiCol.TitleBg, TitleBg); _pushedWindowColors++;
-        ImGui.PushStyleColor(ImGuiCol.TitleBgActive, TitleBgActive); _pushedWindowColors++;
-
-        ImGui.PushStyleVar(ImGuiStyleVar.WindowRounding, Radius(1.2f)); _pushedWindowVars++;
-        ImGui.PushStyleVar(ImGuiStyleVar.WindowBorderSize, 1f * ImGuiHelpers.GlobalScale); _pushedWindowVars++;
-        ImGui.PushStyleVar(ImGuiStyleVar.WindowPadding, new Vector2(PadX(), PadY())); _pushedWindowVars++;
+        ImGui.PushStyleVar(ImGuiStyleVar.WindowRounding, Radius(1.2f));
+        ImGui.PushStyleVar(ImGuiStyleVar.WindowBorderSize, 1f * ImGuiHelpers.GlobalScale);
+        ImGui.PushStyleVar(ImGuiStyleVar.WindowPadding, new Vector2(PadX(), PadY()));
     }
 
     public void PopWindow()
     {
-        if (_pushedWindowVars > 0) ImGui.PopStyleVar(_pushedWindowVars);
-        if (_pushedWindowColors > 0) ImGui.PopStyleColor(_pushedWindowColors);
-        _pushedWindowVars = _pushedWindowColors = 0;
+        ImGui.PopStyleVar(WindowVarCount);
+        ImGui.PopStyleColor(WindowColorCount);
     }
 
 
@@ -203,10 +205,30 @@ public sealed class UiTheme
         HoverHandIfItem();
         return ret;
     }
+    public bool Button(string label, string tooltip, Vector2 size = default)
+    {
+        var ret = ImGui.Button(label, size);
+        if (!string.IsNullOrEmpty(tooltip) && ImGui.IsItemHovered())
+        {
+            ImGui.SetTooltip(tooltip);
+        }
+        HoverHandIfItem();
+        return ret;
+    }
 
     public bool Checkbox(string label, ref bool v)
     {
         var ret = ImGui.Checkbox(label, ref v);
+        HoverHandIfItem();
+        return ret;
+    }
+    public bool Checkbox(string label, string tooltip,ref bool v)
+    {
+        var ret = ImGui.Checkbox(label, ref v);
+        if (!string.IsNullOrEmpty(tooltip) && ImGui.IsItemHovered())
+        {
+            ImGui.SetTooltip(tooltip);
+        }
         HoverHandIfItem();
         return ret;
     }
@@ -235,23 +257,69 @@ public sealed class UiTheme
         HoverHandIfItem();
         return changed;
     }
-
-    public bool IconButton(FontAwesomeIcon icon, string tooltip = "", float size = 0)
+    
+    public bool EnumCombo<T>(string id, string tooltip ,ref T value) where T : struct, Enum
     {
-        ImGui.PushFont(UiBuilder.IconFont);
-        string label = icon.ToIconString();
+        var values = Enum.GetValues<T>();
+        int currentIndex = Array.IndexOf(values, value);
+        if (currentIndex < 0) currentIndex = 0;
 
-        bool clicked = size > 0
-            ? Button(label, new Vector2(size, size))
-            : Button(label);
+        string[] names = Enum.GetNames<T>();
 
-        ImGui.PopFont();
+        bool changed = false;
+        if (ImGui.Combo(id, ref currentIndex, names, names.Length))
+        {
+            value = values[currentIndex];
+            changed = true;
+        }
+        if (!string.IsNullOrEmpty(tooltip) && ImGui.IsItemHovered())
+        {
+            ImGui.SetTooltip(tooltip);
+        }
+        HoverHandIfItem();
+        return changed;
+    }
+
+    public bool IconButton(string id, FontAwesomeIcon icon, string tooltip = "")
+    {
+        bool clicked = ImGuiComponents.IconButton(id, icon);
 
         if (!string.IsNullOrEmpty(tooltip) && ImGui.IsItemHovered())
         {
             ImGui.SetTooltip(tooltip);
         }
+        HoverHandIfItem();
 
+        return clicked;
+    }
+
+    public bool SuccessIconButton(string id, FontAwesomeIcon icon, string tooltip = "")
+    {
+        ImGui.PushStyleColor(ImGuiCol.Button, Accent);
+        ImGui.PushStyleColor(ImGuiCol.ButtonHovered, Lerp(Accent, Vector4.One, 0.08f));
+        ImGui.PushStyleColor(ImGuiCol.ButtonActive, Lerp(Accent, Vector4.Zero, 0.10f));
+        var clicked = IconButton(id, icon, tooltip);
+        ImGui.PopStyleColor(3);
+        return clicked;
+    }
+
+    public bool SecondaryIconButton(string id, FontAwesomeIcon icon, string tooltip = "")
+    {
+        ImGui.PushStyleColor(ImGuiCol.Button, FrameBg);
+        ImGui.PushStyleColor(ImGuiCol.ButtonHovered, FrameBgHover);
+        ImGui.PushStyleColor(ImGuiCol.ButtonActive, FrameBgActive);
+        var clicked = IconButton(id, icon, tooltip);
+        ImGui.PopStyleColor(3);
+        return clicked;
+    }
+
+    public bool DangerIconButton(string id, FontAwesomeIcon icon, string tooltip = "")
+    {
+        ImGui.PushStyleColor(ImGuiCol.Button, ColorDanger);
+        ImGui.PushStyleColor(ImGuiCol.ButtonHovered, Lerp(ColorDanger, Vector4.One, 0.08f));
+        ImGui.PushStyleColor(ImGuiCol.ButtonActive, Lerp(ColorDanger, Vector4.Zero, 0.10f));
+        var clicked = IconButton(id, icon, tooltip);
+        ImGui.PopStyleColor(3);
         return clicked;
     }
 
@@ -292,25 +360,24 @@ public sealed class UiTheme
     }
 
 
-    int _pushedInputColors, _pushedInputVars;
+    private const int InputColorCount = 5;
+    private const int InputVarCount = 2;
 
     public void PushInputScope()
     {
-        _pushedInputColors = 0; _pushedInputVars = 0;
-        ImGui.PushStyleColor(ImGuiCol.FrameBg, FrameBg); _pushedInputColors++;
-        ImGui.PushStyleColor(ImGuiCol.FrameBgHovered, FrameBgHover); _pushedInputColors++;
-        ImGui.PushStyleColor(ImGuiCol.FrameBgActive, FrameBgActive); _pushedInputColors++;
-        ImGui.PushStyleColor(ImGuiCol.SliderGrab, SliderGrab); _pushedInputColors++;
-        ImGui.PushStyleColor(ImGuiCol.SliderGrabActive, SliderGrabActive); _pushedInputColors++;
-        ImGui.PushStyleVar(ImGuiStyleVar.FrameRounding, Radius()); _pushedInputVars++;
-        ImGui.PushStyleVar(ImGuiStyleVar.ItemSpacing, new Vector2(Gap(), Gap(0.6f))); _pushedInputVars++;
+        ImGui.PushStyleColor(ImGuiCol.FrameBg, FrameBg);
+        ImGui.PushStyleColor(ImGuiCol.FrameBgHovered, FrameBgHover);
+        ImGui.PushStyleColor(ImGuiCol.FrameBgActive, FrameBgActive);
+        ImGui.PushStyleColor(ImGuiCol.SliderGrab, SliderGrab);
+        ImGui.PushStyleColor(ImGuiCol.SliderGrabActive, SliderGrabActive);
+        ImGui.PushStyleVar(ImGuiStyleVar.FrameRounding, Radius());
+        ImGui.PushStyleVar(ImGuiStyleVar.ItemSpacing, new Vector2(Gap(), Gap(0.6f)));
     }
 
     public void PopInputScope()
     {
-        if (_pushedInputVars > 0) ImGui.PopStyleVar(_pushedInputVars);
-        if (_pushedInputColors > 0) ImGui.PopStyleColor(_pushedInputColors);
-        _pushedInputVars = _pushedInputColors = 0;
+        ImGui.PopStyleVar(InputVarCount);
+        ImGui.PopStyleColor(InputColorCount);
     }
 
 
@@ -556,7 +623,7 @@ public sealed class UiTheme
         var cbRect = new Vector2(cbPos.X + cbSize, cbPos.Y + cbSize);
 
         var colChkOff = Lerp(FrameBg, Vector4.Zero, 0f) is { W: > 0 } ? FrameBg : new Vector4(0.20f, 0.22f, 0.26f, 1f);
-        var colChkOn = new Vector4(0.35f, 0.75f, 0.45f, 1f);
+        var colChkOn = ColorCheckboxOn;
 
         draw.AddRectFilled(cbPos, cbRect, ImGui.GetColorU32(enabled ? colChkOn : colChkOff), 4f * scale);
         draw.AddRect(cbPos, cbRect, ImGui.GetColorU32(border), 4f * scale);
@@ -686,7 +753,7 @@ public sealed class UiTheme
         if (showCheckbox)
         {
             var colChkOff = FrameBg;
-            var colChkOn = new Vector4(0.35f, 0.75f, 0.45f, 1f);
+            var colChkOn = ColorCheckboxOn;
             draw.AddRectFilled(cbRect.Min, cbRect.Max, ImGui.GetColorU32(enabled ? colChkOn : colChkOff), 4f * scale);
             draw.AddRect(cbRect.Min, cbRect.Max, ImGui.GetColorU32(WindowBorder), 4f * scale);
             if (enabled)
@@ -882,6 +949,7 @@ public sealed class UiTheme
 
             ImGui.SameLine();
             contentStartX = 0;
+            HoverHandIfItem();
         }
         else
         {
@@ -996,13 +1064,14 @@ public sealed class UiTheme
         Action<float>? drawFooter = null,
         Action? drawTopContent = null,
         Action? extraRows = null,
-        float maxTableHeight = 0)
+        float maxTableHeight = 0,
+        bool collapsible = true)
     {
         int count = explicitCount ?? collection.Count();
         title = showCount ? $"{title}: {count}" : title;
 
         float scale = ImGuiHelpers.GlobalScale;
-        float headerHeight = 35f * scale;
+        float headerHeight = CollapsableHeaderHeight * scale;
         if (headerHeight < ImGui.GetFrameHeightWithSpacing()) headerHeight = ImGui.GetFrameHeightWithSpacing();
 
         float padX = PadX(0.9f);
@@ -1025,20 +1094,27 @@ public sealed class UiTheme
         ImGui.TextUnformatted(title);
         ImGui.PopStyleColor();
 
-        ImGui.PushFont(Dalamud.Interface.UiBuilder.IconFont);
-        string icon = expanded ? FontAwesomeIcon.ChevronUp.ToIconString() : FontAwesomeIcon.ChevronDown.ToIconString();
-        var iconSize = ImGui.CalcTextSize(icon);
-        ImGui.SetCursorScreenPos(new Vector2(startPos.X + availW - padX - iconSize.X, titleCenterY));
-        ImGui.TextUnformatted(icon);
-        ImGui.PopFont();
-
-        ImGui.SetCursorScreenPos(startPos);
-        if (InvisibleButton($"##{id}HeaderBtn", new Vector2(availW, headerHeight)))
+        if (collapsible)
         {
-            expanded = !expanded;
+            ImGui.PushFont(Dalamud.Interface.UiBuilder.IconFont);
+            string icon = expanded ? FontAwesomeIcon.ChevronUp.ToIconString() : FontAwesomeIcon.ChevronDown.ToIconString();
+            var iconSize = ImGui.CalcTextSize(icon);
+            ImGui.SetCursorScreenPos(new Vector2(startPos.X + availW - padX - iconSize.X, titleCenterY));
+            ImGui.TextUnformatted(icon);
+            ImGui.PopFont();
+
+            ImGui.SetCursorScreenPos(startPos);
+            if (InvisibleButton($"##{id}HeaderBtn", new Vector2(availW, headerHeight)))
+            {
+                expanded = !expanded;
+            }
+        }
+        else
+        {
+            ImGui.SetCursorScreenPos(new Vector2(startPos.X, startPos.Y + headerHeight));
         }
 
-        if (expanded)
+        if (!collapsible || expanded)
         {
             // Calculate 95% width and centering offset
             float targetWidth = availW * 0.95f;
@@ -1187,7 +1263,7 @@ public sealed class UiTheme
         Action setupCols = () =>
         {
             ImGui.TableSetupColumn(itemName, ImGuiTableColumnFlags.WidthStretch);
-            ImGui.TableSetupColumn("Actions", ImGuiTableColumnFlags.WidthFixed, 80f * ImGuiHelpers.GlobalScale);
+            ImGui.TableSetupColumn("Actions", ImGuiTableColumnFlags.WidthFixed, ScaledActionsWidth);
         };
 
         var postDrawActions = new List<Action>();
@@ -1223,21 +1299,17 @@ public sealed class UiTheme
             // Actions Column
             if (isEditing)
             {
-                ImGui.PushFont(Dalamud.Interface.UiBuilder.IconFont);
-                if (Button($"{FontAwesomeIcon.Check.ToIconString()}##save-{id}-{idx}"))
+                if(SuccessIconButton($"##save-{id}-{idx}", FontAwesomeIcon.Check, tooltip:"Save"))
                 {
                     list[idx] = _stringEditStates[editKey].Value;
                     _stringEditStates.Remove(editKey);
                     onListModified();
                 }
-                ImGui.PopFont();
-                if (ImGui.IsItemHovered()) ImGui.SetTooltip("Save");
 
                 ImGui.SameLine();
-                ImGui.PushFont(Dalamud.Interface.UiBuilder.IconFont);
-                if (Button($"{FontAwesomeIcon.Times.ToIconString()}##cancel-{id}-{idx}"))
+
+                if(SecondaryIconButton($"##cancel-{id}-{idx}", FontAwesomeIcon.Times, tooltip:"Cancel"))
                 {
-                    // If canceling a new empty item, remove it
                     if (string.IsNullOrEmpty(list[idx]))
                     {
                         postDrawActions.Add(() =>
@@ -1248,28 +1320,17 @@ public sealed class UiTheme
                     }
                     _stringEditStates.Remove(editKey);
                 }
-                ImGui.PopFont();
-                if (ImGui.IsItemHovered()) ImGui.SetTooltip("Cancel");
             }
             else
             {
-                ImGui.PushFont(Dalamud.Interface.UiBuilder.IconFont);
-                ImGui.PushStyleColor(ImGuiCol.Button, new Vector4(0, 0, 0, 0));
-                if (Button($"{FontAwesomeIcon.Pen.ToIconString()}##edit-{id}-{idx}"))
+                
+                if(SecondaryIconButton($"##edit-{id}-{idx}", FontAwesomeIcon.Edit, tooltip:"Edit Pattern"))
                 {
                     _stringEditStates[editKey] = (idx, item);
                 }
-                ImGui.PopStyleColor();
-                ImGui.PopFont();
-
-                if (ImGui.IsItemHovered()) ImGui.SetTooltip("Edit");
-
                 ImGui.SameLine();
-                ImGui.PushFont(Dalamud.Interface.UiBuilder.IconFont);
-                ImGui.PushStyleColor(ImGuiCol.Button, new Vector4(0.56f, 0f, 0f, 1f));
-                ImGui.PushStyleColor(ImGuiCol.ButtonHovered, new Vector4(0.7f, 0.1f, 0.1f, 1f));
-                ImGui.PushStyleColor(ImGuiCol.ButtonActive, new Vector4(0.4f, 0f, 0f, 1f));
-                if (Button($"{FontAwesomeIcon.Trash.ToIconString()}##del-{id}-{idx}"))
+
+                if(DangerIconButton($"##del-{id}-{idx}", FontAwesomeIcon.Trash, tooltip:"Delete Pattern"))
                 {
                     postDrawActions.Add(() =>
                     {
@@ -1280,10 +1341,6 @@ public sealed class UiTheme
                             _stringEditStates.Remove(editKey);
                     });
                 }
-                ImGui.PopStyleColor(3);
-                ImGui.PopFont();
-
-                if (ImGui.IsItemHovered()) ImGui.SetTooltip("Delete");
             }
         };
 
@@ -1294,7 +1351,7 @@ public sealed class UiTheme
                 float avail = ImGui.GetContentRegionAvail().X;
                 float width = avail * 0.95f;
                 ImGui.SetCursorPosX(ImGui.GetCursorPosX() + ((avail - width) * 0.5f));
-                if (Button($"Add new {itemName}##{id}", new Vector2(width, 0)))
+                if (SecondaryButton($"Add new {itemName}##{id}", new Vector2(width, 0)))
                 {
                     list.Add("");
                     _stringEditStates[id] = (list.Count - 1, "");
@@ -1334,7 +1391,8 @@ public sealed class UiTheme
         Func<string, string, string>? getDisplayValue = null,
         DrawDictionaryEditUI? drawEditUI = null,
         Action<float>? drawFooter = null,
-        bool allowAdd = false)
+        bool allowAdd = false,
+        bool collapsible = true)
     {
         var list = dictionary.ToList();
         var postDrawActions = new List<Action>();
@@ -1388,46 +1446,31 @@ public sealed class UiTheme
 
             if (isEditing)
             {
-                ImGui.PushFont(Dalamud.Interface.UiBuilder.IconFont);
-                if (Button($"{FontAwesomeIcon.Check.ToIconString()}##save-{id}-{idx}"))
+                if (SuccessIconButton($"##save-{id}-{idx}", FontAwesomeIcon.Check, "Save"))
                 {
                     dictionary[key] = state.Value;
                     _dictEditStates.Remove(editKey);
                     onModified();
                 }
-                ImGui.PopFont();
-                if (ImGui.IsItemHovered()) ImGui.SetTooltip("Save");
 
                 ImGui.SameLine();
-                ImGui.PushFont(Dalamud.Interface.UiBuilder.IconFont);
-                if (Button($"{FontAwesomeIcon.Times.ToIconString()}##cancel-{id}-{idx}"))
+
+                if (SecondaryIconButton($"##cancel-{id}-{idx}", FontAwesomeIcon.Times, "Cancel"))
                 {
                     _dictEditStates.Remove(editKey);
                 }
-                ImGui.PopFont();
-                if (ImGui.IsItemHovered()) ImGui.SetTooltip("Cancel");
             }
             else
             {
-                ImGui.PushFont(Dalamud.Interface.UiBuilder.IconFont);
-                ImGui.PushStyleColor(ImGuiCol.Button, new Vector4(0, 0, 0, 0));
-                if (Button($"{FontAwesomeIcon.Pen.ToIconString()}##edit-{id}-{idx}"))
+                if (SecondaryIconButton($"##edit-{id}-{idx}", FontAwesomeIcon.Pen, "Edit"))
                 {
                     _dictEditStates[editKey] = (key, value);
                     _dictAddStates.Remove(id);
                 }
-                ImGui.PopStyleColor();
-                ImGui.PopFont();
-
-                if (ImGui.IsItemHovered()) ImGui.SetTooltip("Edit");
 
                 ImGui.SameLine();
-                ImGui.PushFont(Dalamud.Interface.UiBuilder.IconFont);
-                ImGui.PushStyleColor(ImGuiCol.Button, new Vector4(0.56f, 0f, 0f, 1f));
-                ImGui.PushStyleColor(ImGuiCol.ButtonHovered, new Vector4(0.7f, 0.1f, 0.1f, 1f));
-                ImGui.PushStyleColor(ImGuiCol.ButtonActive, new Vector4(0.4f, 0f, 0f, 1f));
 
-                if (Button($"{FontAwesomeIcon.Trash.ToIconString()}##del-{id}-{idx}"))
+                if (DangerIconButton($"##del-{id}-{idx}", FontAwesomeIcon.Trash, "Delete"))
                 {
                     postDrawActions.Add(() =>
                     {
@@ -1437,10 +1480,6 @@ public sealed class UiTheme
                             _dictEditStates.Remove(editKey);
                     });
                 }
-                ImGui.PopStyleColor(3);
-                ImGui.PopFont();
-
-                if (ImGui.IsItemHovered()) ImGui.SetTooltip("Delete");
             }
         };
 
@@ -1456,7 +1495,7 @@ public sealed class UiTheme
                 if (_dictAddStates.TryGetValue(id, out var addState))
                 {
                     float pad = PadX(0.6f);
-                    float actionsWidth = 80f * ImGuiHelpers.GlobalScale; // Reserve space for buttons aligned with table actions
+                    float actionsWidth = ScaledActionsWidth;
                     float inputsTotalWidth = avail - actionsWidth - pad;
                     float keyWidth = inputsTotalWidth * 0.35f;
                     float valWidth = inputsTotalWidth - keyWidth - Gap();
@@ -1478,9 +1517,8 @@ public sealed class UiTheme
                     _dictAddStates[id] = (nKey, nVal);
 
                     ImGui.SameLine();
-                    ImGui.PushFont(Dalamud.Interface.UiBuilder.IconFont);
-                    var saved = Button($"{FontAwesomeIcon.Check.ToIconString()}##mod-save-{id}");
-                    ImGui.PopFont();
+                    var saved = SuccessIconButton($"##mod-save-{id}", FontAwesomeIcon.Check,
+                        dictionary.ContainsKey(nKey) ? "Key already exists" : "Add");
                     if (saved)
                     {
                         if (!string.IsNullOrWhiteSpace(nKey) && !dictionary.ContainsKey(nKey))
@@ -1490,13 +1528,9 @@ public sealed class UiTheme
                             onModified();
                         }
                     }
-                    if (ImGui.IsItemHovered()) ImGui.SetTooltip(dictionary.ContainsKey(nKey) ? "Key already exists" : "Add");
 
                     ImGui.SameLine();
-                    ImGui.PushFont(Dalamud.Interface.UiBuilder.IconFont);
-                    var canceled = Button($"{FontAwesomeIcon.Times.ToIconString()}##cancel-{id}");
-                    ImGui.PopFont();
-                    if (canceled)
+                    if (SecondaryIconButton($"##cancel-{id}", FontAwesomeIcon.Times, "Cancel"))
                     {
                         _dictAddStates.Remove(id);
                     }
@@ -1523,7 +1557,8 @@ public sealed class UiTheme
             headers,
             explicitCount: list.Count,
             setupColumns: setupColumns,
-            drawFooter: internalFooter
+            drawFooter: internalFooter,
+            collapsible: collapsible
         );
 
         foreach (var action in postDrawActions) action();
@@ -1561,7 +1596,7 @@ public sealed class UiTheme
             else preview = currentId;
         }
 
-        ImGui.SetNextItemWidth(ImGui.GetContentRegionAvail().X);
+        ImGui.SetNextItemWidth(ImGui.GetContentRegionAvail().X - ImGui.GetStyle().FramePadding.X*2);
         if (ImGui.BeginCombo($"##{id}", preview))
         {
             if (ImGui.Selectable(defaultLabel, string.IsNullOrEmpty(currentId)))
@@ -1611,7 +1646,7 @@ public sealed class UiTheme
         {
             ImGui.TableSetupColumn("Player", ImGuiTableColumnFlags.WidthStretch);
             ImGui.TableSetupColumn("Last Seen", ImGuiTableColumnFlags.WidthFixed, 220f * ImGuiHelpers.GlobalScale);
-            ImGui.TableSetupColumn("Actions", ImGuiTableColumnFlags.WidthFixed, 80f * ImGuiHelpers.GlobalScale);
+            ImGui.TableSetupColumn("Actions", ImGuiTableColumnFlags.WidthFixed, ScaledActionsWidth);
         };
 
         Action<RememberedPlayerEntry, int> drawRow = (player, idx) =>
@@ -1655,21 +1690,18 @@ public sealed class UiTheme
 
             if (isEditing)
             {
-                if (ImGuiComponents.IconButton($"##save_{editKey}", FontAwesomeIcon.Check))
+                if (SuccessIconButton($"##save_{editKey}", FontAwesomeIcon.Check, "Save"))
                 {
                     onSaveNote?.Invoke(player, state.Value);
                     _playerNoteEditStates.Remove(editKey);
                 }
-                HoverHandIfItem();
-                if (ImGui.IsItemHovered()) ImGui.SetTooltip("Save");
 
                 ImGui.SameLine();
-                if (ImGuiComponents.IconButton($"##cancel_{editKey}", FontAwesomeIcon.Times))
+
+                if (SecondaryIconButton($"##cancel_{editKey}", FontAwesomeIcon.Times, "Cancel"))
                 {
                     _playerNoteEditStates.Remove(editKey);
                 }
-                HoverHandIfItem();
-                if (ImGui.IsItemHovered()) ImGui.SetTooltip("Cancel");
             }
             else
             {
@@ -1677,38 +1709,28 @@ public sealed class UiTheme
 
                 if (onSaveNote != null)
                 {
-                    if (ImGuiComponents.IconButton($"##edit_{editKey}", FontAwesomeIcon.Edit))
+                    if (SecondaryIconButton($"##edit_{editKey}", FontAwesomeIcon.Edit, "Edit Note"))
                     {
                         _playerNoteEditStates[editKey] = (player.FullName, player.Notes);
                     }
-                    HoverHandIfItem();
-                    if (ImGui.IsItemHovered()) ImGui.SetTooltip("Edit Note");
                     shownAction = true;
                 }
                 else if (onShowGlamour != null && player.Glamour != null)
                 {
-                    if (ImGuiComponents.IconButton($"##glamour_{editKey}", FontAwesomeIcon.Tshirt))
+                    if (SecondaryIconButton($"##glamour_{editKey}", FontAwesomeIcon.Tshirt, "Show Glamour"))
                     {
                         onShowGlamour(player);
                     }
-                    HoverHandIfItem();
-                    if (ImGui.IsItemHovered()) ImGui.SetTooltip("Show Glamour");
                     shownAction = true;
                 }
 
                 if (shownAction) ImGui.SameLine();
 
-                ImGui.PushStyleColor(ImGuiCol.Button, new Vector4(0.56f, 0f, 0f, 1f));
-                ImGui.PushStyleColor(ImGuiCol.ButtonHovered, new Vector4(0.7f, 0.1f, 0.1f, 1f));
-                ImGui.PushStyleColor(ImGuiCol.ButtonActive, new Vector4(0.4f, 0f, 0f, 1f));
-                if (ImGuiComponents.IconButton($"##del_{editKey}", FontAwesomeIcon.Trash))
+                if (DangerIconButton($"##del_{editKey}", FontAwesomeIcon.Trash, "Delete"))
                 {
                     onDelete(player);
                     if (isEditing) _playerNoteEditStates.Remove(editKey);
                 }
-                ImGui.PopStyleColor(3);
-                HoverHandIfItem();
-                if (ImGui.IsItemHovered()) ImGui.SetTooltip("Delete");
             }
         };
 
@@ -1753,7 +1775,7 @@ public sealed class UiTheme
 
                 // Column 2: Actions (Save/Cancel)
                 ImGui.TableSetColumnIndex(2);
-                if (ImGuiComponents.IconButton($"##saveAdd_{id}", FontAwesomeIcon.Check))
+                if (SuccessIconButton($"##saveAdd_{id}", FontAwesomeIcon.Check, "Add Player"))
                 {
                     if (!string.IsNullOrWhiteSpace(newNameWorld))
                     {
@@ -1761,16 +1783,13 @@ public sealed class UiTheme
                         _playerAddStates.Remove(id);
                     }
                 }
-                HoverHandIfItem();
-                if (ImGui.IsItemHovered()) ImGui.SetTooltip("Add Player");
 
                 ImGui.SameLine();
-                if (ImGuiComponents.IconButton($"##cancelAdd_{id}", FontAwesomeIcon.Times))
+
+                if (SecondaryIconButton($"##cancelAdd_{id}", FontAwesomeIcon.Times, "Cancel"))
                 {
                     _playerAddStates.Remove(id);
                 }
-                HoverHandIfItem();
-                if (ImGui.IsItemHovered()) ImGui.SetTooltip("Cancel");
             };
         }
 

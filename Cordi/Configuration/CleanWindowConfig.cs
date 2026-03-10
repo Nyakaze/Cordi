@@ -3,6 +3,14 @@ using Newtonsoft.Json;
 
 namespace Cordi.Configuration;
 
+public enum OutputSize
+{
+    Native = 0,
+    _1440p = 1440,
+    _1080p = 1080,
+    _720p = 720,
+}
+
 [Serializable]
 public class CleanWindowConfig
 {
@@ -28,8 +36,8 @@ public class CleanWindowConfig
     /// <summary>Render target index for the game view WITHOUT UI. Default from MaskedCarnivale: 71.</summary>
     public int RenderIndexWithoutUI { get; set; } = 71;
 
-    /// <summary>Target height for the output window (e.g., 1080). 0 means match game resolution exactly.</summary>
-    public int OutputHeight { get; set; } = 0;
+    /// <summary>Target height for the output window. Native means match game resolution exactly.</summary>
+    public OutputSize OutputSize { get; set; } = OutputSize.Native;
 
     /// <summary>Whether the window is movable and resizable.</summary>
     public bool MovableWindow { get; set; } = false;
