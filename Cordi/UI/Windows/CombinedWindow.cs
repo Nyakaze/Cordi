@@ -1,6 +1,7 @@
 using System.Numerics;
 using Dalamud.Interface.Windowing;
 using Dalamud.Bindings.ImGui;
+using Dalamud.Interface.Utility.Raii;
 
 using Cordi.Core;
 using Cordi.UI.Panels;
@@ -51,54 +52,60 @@ public class CombinedWindow : Window
         _theme.ApplyFontScale();
         var swap = _plugin.Config.CombinedWindow.SwapPanels;
 
-        if (ImGui.BeginTable("##CombinedTable", 2,
+        using (var table = ImRaii.Table("##CombinedTable", 2,
                 ImGuiTableFlags.Resizable | ImGuiTableFlags.BordersInnerV | ImGuiTableFlags.SizingStretchSame,
                 ImGui.GetContentRegionAvail()))
         {
-            ImGui.TableSetupColumn("LeftCol", ImGuiTableColumnFlags.None);
-            ImGui.TableSetupColumn("RightCol", ImGuiTableColumnFlags.None);
+            if (table)
+            {
+                ImGui.TableSetupColumn("LeftCol", ImGuiTableColumnFlags.None);
+                ImGui.TableSetupColumn("RightCol", ImGuiTableColumnFlags.None);
 
-            ImGui.PushStyleColor(ImGuiCol.TableHeaderBg, _theme.WindowBg);
-            ImGui.TableNextRow(ImGuiTableRowFlags.Headers);
-            ImGui.PopStyleColor();
+                using (ImRaii.PushColor(ImGuiCol.TableHeaderBg, _theme.WindowBg))
+                {
+                    ImGui.TableNextRow(ImGuiTableRowFlags.Headers);
+                }
 
-            ImGui.TableSetColumnIndex(0);
-            var text0 = swap ? "Peeper" : "Emote Log";
-            var posX0 = (ImGui.GetContentRegionAvail().X - ImGui.CalcTextSize(text0).X) / 2;
-            if (posX0 > 0) ImGui.SetCursorPosX(ImGui.GetCursorPosX() + posX0);
-            ImGui.PushStyleColor(ImGuiCol.Text, _theme.MutedText);
-            ImGui.TextUnformatted(text0);
-            ImGui.PopStyleColor();
+                ImGui.TableSetColumnIndex(0);
+                var text0 = swap ? "Peeper" : "Emote Log";
+                var posX0 = (ImGui.GetContentRegionAvail().X - ImGui.CalcTextSize(text0).X) / 2;
+                if (posX0 > 0) ImGui.SetCursorPosX(ImGui.GetCursorPosX() + posX0);
+                using (ImRaii.PushColor(ImGuiCol.Text, _theme.MutedText))
+                {
+                    ImGui.TextUnformatted(text0);
+                }
 
-            ImGui.TableSetColumnIndex(1);
-            var text1 = swap ? "Emote Log" : "Peeper";
-            var posX1 = (ImGui.GetContentRegionAvail().X - ImGui.CalcTextSize(text1).X) / 2;
-            if (posX1 > 0) ImGui.SetCursorPosX(ImGui.GetCursorPosX() + posX1);
-            ImGui.PushStyleColor(ImGuiCol.Text, _theme.MutedText);
-            ImGui.TextUnformatted(text1);
-            ImGui.PopStyleColor();
+                ImGui.TableSetColumnIndex(1);
+                var text1 = swap ? "Emote Log" : "Peeper";
+                var posX1 = (ImGui.GetContentRegionAvail().X - ImGui.CalcTextSize(text1).X) / 2;
+                if (posX1 > 0) ImGui.SetCursorPosX(ImGui.GetCursorPosX() + posX1);
+                using (ImRaii.PushColor(ImGuiCol.Text, _theme.MutedText))
+                {
+                    ImGui.TextUnformatted(text1);
+                }
 
-            ImGui.TableNextRow();
+                ImGui.TableNextRow();
 
-            // Left column
-            ImGui.TableSetColumnIndex(0);
-            ImGui.BeginChild("##LeftPanel", new Vector2(0, 0), false);
-            if (swap)
-                _peepPanel.Draw();
-            else
-                _emoteLogPanel.Draw();
-            ImGui.EndChild();
+                // Left column
+                ImGui.TableSetColumnIndex(0);
+                using (ImRaii.Child("##LeftPanel", new Vector2(0, 0), false))
+                {
+                    if (swap)
+                        _peepPanel.Draw();
+                    else
+                        _emoteLogPanel.Draw();
+                }
 
-            // Right column
-            ImGui.TableSetColumnIndex(1);
-            ImGui.BeginChild("##RightPanel", new Vector2(0, 0), false);
-            if (swap)
-                _emoteLogPanel.Draw();
-            else
-                _peepPanel.Draw();
-            ImGui.EndChild();
-
-            ImGui.EndTable();
+                // Right column
+                ImGui.TableSetColumnIndex(1);
+                using (ImRaii.Child("##RightPanel", new Vector2(0, 0), false))
+                {
+                    if (swap)
+                        _emoteLogPanel.Draw();
+                    else
+                        _peepPanel.Draw();
+                }
+            }
         }
     }
 }

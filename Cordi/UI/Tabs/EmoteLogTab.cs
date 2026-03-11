@@ -8,6 +8,7 @@ using System.Linq;
 using System.Collections.Generic;
 using DSharpPlus;
 using DSharpPlus.Entities;
+using Dalamud.Interface.Utility.Raii;
 using ECommons.ImGuiMethods;
 
 using Cordi.Core;
@@ -111,62 +112,64 @@ public class EmoteLogTab : ConfigTabBase
             {
                 float half = avail / 2f - theme.Gap(1f);
 
-                ImGui.BeginGroup();
-                bool windowOpen = plugin.EmoteLogWindow.IsOpen;
-                theme.ConfigCheckbox("Enable Window", ref windowOpen, () =>
+                using (var g1 = ImRaii.Group())
                 {
-                    plugin.EmoteLogWindow.IsOpen = windowOpen;
-                    plugin.Config.EmoteLog.WindowEnabled = windowOpen;
-                    plugin.Config.Save();
-                    plugin.UpdateCommandVisibility();
-                });
-                theme.HoverHandIfItem();
+                    bool windowOpen = plugin.EmoteLogWindow.IsOpen;
+                    theme.ConfigCheckbox("Enable Window", ref windowOpen, () =>
+                    {
+                        plugin.EmoteLogWindow.IsOpen = windowOpen;
+                        plugin.Config.EmoteLog.WindowEnabled = windowOpen;
+                        plugin.Config.Save();
+                        plugin.UpdateCommandVisibility();
+                    });
+                    theme.HoverHandIfItem();
 
-                var openOnLogin = plugin.Config.EmoteLog.WindowOpenOnLogin;
-                theme.ConfigCheckbox("Open on Login", ref openOnLogin, () =>
-                {
-                    plugin.Config.EmoteLog.WindowOpenOnLogin = openOnLogin;
-                    plugin.Config.Save();
-                });
-                theme.HoverHandIfItem();
+                    var openOnLogin = plugin.Config.EmoteLog.WindowOpenOnLogin;
+                    theme.ConfigCheckbox("Open on Login", ref openOnLogin, () =>
+                    {
+                        plugin.Config.EmoteLog.WindowOpenOnLogin = openOnLogin;
+                        plugin.Config.Save();
+                    });
+                    theme.HoverHandIfItem();
 
-                var lockPos = plugin.Config.EmoteLog.WindowLockPosition;
-                theme.ConfigCheckbox("Lock Position", ref lockPos, () =>
-                {
-                    plugin.Config.EmoteLog.WindowLockPosition = lockPos;
-                    plugin.Config.Save();
-                });
-                theme.HoverHandIfItem();
-                ImGui.EndGroup();
+                    var lockPos = plugin.Config.EmoteLog.WindowLockPosition;
+                    theme.ConfigCheckbox("Lock Position", ref lockPos, () =>
+                    {
+                        plugin.Config.EmoteLog.WindowLockPosition = lockPos;
+                        plugin.Config.Save();
+                    });
+                    theme.HoverHandIfItem();
+                }
 
                 ImGui.SameLine();
                 ImGui.SetCursorPosX(ImGui.GetCursorPosX() + theme.Gap(2f));
 
-                ImGui.BeginGroup();
-                var lockSize = plugin.Config.EmoteLog.WindowLockSize;
-                theme.ConfigCheckbox("Lock Size", ref lockSize, () =>
+                using (var g2 = ImRaii.Group())
                 {
-                    plugin.Config.EmoteLog.WindowLockSize = lockSize;
-                    plugin.Config.Save();
-                });
-                theme.HoverHandIfItem();
+                    var lockSize = plugin.Config.EmoteLog.WindowLockSize;
+                    theme.ConfigCheckbox("Lock Size", ref lockSize, () =>
+                    {
+                        plugin.Config.EmoteLog.WindowLockSize = lockSize;
+                        plugin.Config.Save();
+                    });
+                    theme.HoverHandIfItem();
 
-                var ignoreEsc = plugin.Config.EmoteLog.IgnoreEsc;
-                theme.ConfigCheckbox("Ignore ESC", ref ignoreEsc, () =>
-                {
-                    plugin.Config.EmoteLog.IgnoreEsc = ignoreEsc;
-                    plugin.Config.Save();
-                });
-                theme.HoverHandIfItem();
+                    var ignoreEsc = plugin.Config.EmoteLog.IgnoreEsc;
+                    theme.ConfigCheckbox("Ignore ESC", ref ignoreEsc, () =>
+                    {
+                        plugin.Config.EmoteLog.IgnoreEsc = ignoreEsc;
+                        plugin.Config.Save();
+                    });
+                    theme.HoverHandIfItem();
 
-                var showReply = plugin.Config.EmoteLog.ShowReplyButton;
-                theme.ConfigCheckbox("Show Reply Button", ref showReply, () =>
-                {
-                    plugin.Config.EmoteLog.ShowReplyButton = showReply;
-                    plugin.Config.Save();
-                });
-                theme.HoverHandIfItem();
-                ImGui.EndGroup();
+                    var showReply = plugin.Config.EmoteLog.ShowReplyButton;
+                    theme.ConfigCheckbox("Show Reply Button", ref showReply, () =>
+                    {
+                        plugin.Config.EmoteLog.ShowReplyButton = showReply;
+                        plugin.Config.Save();
+                    });
+                    theme.HoverHandIfItem();
+                }
 
                 theme.SpacerY(0.7f);
 
@@ -189,28 +192,30 @@ public class EmoteLogTab : ConfigTabBase
             enabled: ref enabled,
             drawContent: (avail) =>
             {
-                ImGui.BeginGroup();
-                var includeSelf = plugin.Config.EmoteLog.IncludeSelf;
-                theme.ConfigCheckbox("Include Self", ref includeSelf, () =>
+                using (var g3 = ImRaii.Group())
                 {
-                    plugin.Config.EmoteLog.IncludeSelf = includeSelf;
-                    plugin.Config.Save();
-                });
-                theme.HoverHandIfItem();
-                ImGui.EndGroup();
+                    var includeSelf = plugin.Config.EmoteLog.IncludeSelf;
+                    theme.ConfigCheckbox("Include Self", ref includeSelf, () =>
+                    {
+                        plugin.Config.EmoteLog.IncludeSelf = includeSelf;
+                        plugin.Config.Save();
+                    });
+                    theme.HoverHandIfItem();
+                }
 
                 ImGui.SameLine();
                 ImGui.SetCursorPosX(ImGui.GetCursorPosX() + theme.Gap(2f));
 
-                ImGui.BeginGroup();
-                var collapse = plugin.Config.EmoteLog.CollapseDuplicates;
-                theme.ConfigCheckbox("Collapse Duplicates", ref collapse, () =>
+                using (var g4 = ImRaii.Group())
                 {
-                    plugin.Config.EmoteLog.CollapseDuplicates = collapse;
-                    plugin.Config.Save();
-                });
-                theme.HoverHandIfItem();
-                ImGui.EndGroup();
+                    var collapse = plugin.Config.EmoteLog.CollapseDuplicates;
+                    theme.ConfigCheckbox("Collapse Duplicates", ref collapse, () =>
+                    {
+                        plugin.Config.EmoteLog.CollapseDuplicates = collapse;
+                        plugin.Config.Save();
+                    });
+                    theme.HoverHandIfItem();
+                }
             }
         );
 
@@ -266,39 +271,41 @@ public class EmoteLogTab : ConfigTabBase
                 }
                 else
                 {
-                    if (ImGui.BeginTable("##emoteBlacklistTable", 3, ImGuiTableFlags.RowBg | ImGuiTableFlags.BordersInnerV))
+                    using (var table = ImRaii.Table("##emoteBlacklistTable", 3, ImGuiTableFlags.RowBg | ImGuiTableFlags.BordersInnerV))
                     {
-                        ImGui.TableSetupColumn("Character", ImGuiTableColumnFlags.WidthStretch);
-                        ImGui.TableSetupColumn("No Discord", ImGuiTableColumnFlags.WidthFixed, 80f);
-                        ImGui.TableSetupColumn("Actions", ImGuiTableColumnFlags.WidthFixed, 60f);
-                        ImGui.TableHeadersRow();
-
-                        for (int i = 0; i < plugin.Config.EmoteLog.Blacklist.Count; i++)
+                        if (table)
                         {
-                            var entry = plugin.Config.EmoteLog.Blacklist[i];
-                            ImGui.TableNextRow();
-                            ImGui.TableNextColumn();
-                            ImGui.AlignTextToFramePadding();
-                            ImGui.Text($"{entry.Name}@{entry.World}");
+                            ImGui.TableSetupColumn("Character", ImGuiTableColumnFlags.WidthStretch);
+                            ImGui.TableSetupColumn("No Discord", ImGuiTableColumnFlags.WidthFixed, 80f);
+                            ImGui.TableSetupColumn("Actions", ImGuiTableColumnFlags.WidthFixed, 60f);
+                            ImGui.TableHeadersRow();
 
-                            ImGui.TableNextColumn();
-                            bool noDiscord = entry.DisableDiscord;
-                            theme.ConfigCheckbox($"##emoteBlDiscord{i}", ref noDiscord, () =>
+                            for (int i = 0; i < plugin.Config.EmoteLog.Blacklist.Count; i++)
                             {
-                                entry.DisableDiscord = noDiscord;
-                                plugin.Config.Save();
-                            });
+                                var entry = plugin.Config.EmoteLog.Blacklist[i];
+                                ImGui.TableNextRow();
+                                ImGui.TableNextColumn();
+                                ImGui.AlignTextToFramePadding();
+                                ImGui.Text($"{entry.Name}@{entry.World}");
 
-                            ImGui.TableNextColumn();
-                            if (ImGui.Button($"Remove##remEmoteBl{i}", new Vector2(-1, 0)))
-                            {
-                                plugin.Config.EmoteLog.Blacklist.RemoveAt(i);
-                                plugin.Config.Save();
-                                i--;
+                                ImGui.TableNextColumn();
+                                bool noDiscord = entry.DisableDiscord;
+                                theme.ConfigCheckbox($"##emoteBlDiscord{i}", ref noDiscord, () =>
+                                {
+                                    entry.DisableDiscord = noDiscord;
+                                    plugin.Config.Save();
+                                });
+
+                                ImGui.TableNextColumn();
+                                if (ImGui.Button($"Remove##remEmoteBl{i}", new Vector2(-1, 0)))
+                                {
+                                    plugin.Config.EmoteLog.Blacklist.RemoveAt(i);
+                                    plugin.Config.Save();
+                                    i--;
+                                }
+                                theme.HoverHandIfItem();
                             }
-                            theme.HoverHandIfItem();
                         }
-                        ImGui.EndTable();
                     }
                 }
             }

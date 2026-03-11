@@ -4,6 +4,7 @@ using Cordi.Configuration;
 using Cordi.Core;
 using Cordi.UI.Themes;
 using Dalamud.Bindings.ImGui;
+using Dalamud.Interface.Utility.Raii;
 
 namespace Cordi.UI.Tabs;
 
@@ -50,13 +51,14 @@ public class MiscellaneousTab : ConfigTabBase
 
                     ImGui.TextColored(theme.Text, "Detection Threshold");
                     int threshold = config.ScoreThreshold;
-                    ImGui.PushItemWidth(200);
-                    if (ImGui.SliderInt("##threshold", ref threshold, 1, 10))
+                    using (var width = ImRaii.ItemWidth(200))
                     {
-                        config.ScoreThreshold = threshold;
-                        plugin.Config.Save();
+                        if (ImGui.SliderInt("##threshold", ref threshold, 1, 10))
+                        {
+                            config.ScoreThreshold = threshold;
+                            plugin.Config.Save();
+                        }
                     }
-                    ImGui.PopItemWidth();
                     if (ImGui.IsItemHovered())
                     {
                         ImGui.SetTooltip("Lower = more strict filtering. Default: 3");

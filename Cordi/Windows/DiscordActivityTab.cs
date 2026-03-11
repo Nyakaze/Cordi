@@ -10,6 +10,7 @@ using DSharpPlus.Entities;
 using Cordi.Core;
 using Cordi.UI.Themes;
 using Cordi.Configuration;
+using Dalamud.Interface.Utility.Raii;
 
 namespace Cordi.Windows;
 
@@ -118,9 +119,11 @@ public class DiscordActivityTab
                 string? newKeyVal = null;
 
                 float tableHeight = 150f * ImGuiHelpers.GlobalScale;
-                if (ImGui.BeginChild("ReplacementsList", new Vector2(0, tableHeight), true))
+                using (var child = ImRaii.Child("ReplacementsList", new Vector2(0, tableHeight), true))
+                if (child)
                 {
-                    if (ImGui.BeginTable("RepTable", 3, ImGuiTableFlags.SizingStretchProp))
+                    using (var table = ImRaii.Table("RepTable", 3, ImGuiTableFlags.SizingStretchProp))
+                    if (table)
                     {
                         ImGui.TableSetupColumn("Original Text");
                         ImGui.TableSetupColumn("Replacement");
@@ -153,10 +156,8 @@ public class DiscordActivityTab
                             if (ImGui.Button($"X##Del_{i}")) keyToDelete = key;
                             _theme.HoverHandIfItem();
                         }
-                        ImGui.EndTable();
                     }
                 }
-                ImGui.EndChild();
 
                 if (keyToRename != null && newKeyVal != null && keyToRename != newKeyVal)
                 {
@@ -236,13 +237,14 @@ public class DiscordActivityTab
 
                 if (enabled != conf.Enabled) { conf.Enabled = enabled; localChanged = true; }
 
-                ImGui.BeginGroup();
-                ImGui.TextColored(_theme.MutedText, "Priority: ");
-                ImGui.SameLine();
-                int prio = conf.Priority;
-                ImGui.SetNextItemWidth(80f * ImGuiHelpers.GlobalScale);
-                if (ImGui.InputInt($"##Prio_{type}", ref prio)) { conf.Priority = prio; localChanged = true; }
-                ImGui.EndGroup();
+                using (var group = ImRaii.Group())
+                {
+                    ImGui.TextColored(_theme.MutedText, "Priority: ");
+                    ImGui.SameLine();
+                    int prio = conf.Priority;
+                    ImGui.SetNextItemWidth(80f * ImGuiHelpers.GlobalScale);
+                    if (ImGui.InputInt($"##Prio_{type}", ref prio)) { conf.Priority = prio; localChanged = true; }
+                }
 
                 _theme.SpacerY(0.5f);
 
@@ -261,59 +263,59 @@ public class DiscordActivityTab
 
                 if (cycle)
                 {
-                    ImGui.Indent();
-
-                    if (conf.CycleFormats == null) conf.CycleFormats = new();
-
-                    ImGui.Text("Add formats to cycle through (including the base format if desired):");
-
-                    if (ImGui.BeginTable($"##CycleFmts_{type}", 2, ImGuiTableFlags.SizingStretchProp | ImGuiTableFlags.BordersInnerV))
+                    using (ImRaii.PushIndent())
                     {
-                        ImGui.TableSetupColumn("Format String", ImGuiTableColumnFlags.WidthStretch);
-                        ImGui.TableSetupColumn("##Action", ImGuiTableColumnFlags.WidthFixed, 30);
+                        if (conf.CycleFormats == null) conf.CycleFormats = new();
 
-                        int formatToDelete = -1;
-                        for (int i = 0; i < conf.CycleFormats.Count; i++)
+                        ImGui.Text("Add formats to cycle through (including the base format if desired):");
+
+                        using (var table = ImRaii.Table($"##CycleFmts_{type}", 2, ImGuiTableFlags.SizingStretchProp | ImGuiTableFlags.BordersInnerV))
+                        if (table)
                         {
-                            ImGui.TableNextRow();
-                            ImGui.TableNextColumn();
-                            string fmtStr = conf.CycleFormats[i];
-                            ImGui.SetNextItemWidth(-1);
-                            if (ImGui.InputText($"##CycleFmt_{type}_{i}", ref fmtStr, 128))
+                            ImGui.TableSetupColumn("Format String", ImGuiTableColumnFlags.WidthStretch);
+                            ImGui.TableSetupColumn("##Action", ImGuiTableColumnFlags.WidthFixed, 30);
+
+                            int formatToDelete = -1;
+                            for (int i = 0; i < conf.CycleFormats.Count; i++)
                             {
-                                conf.CycleFormats[i] = fmtStr;
+                                ImGui.TableNextRow();
+                                ImGui.TableNextColumn();
+                                string fmtStr = conf.CycleFormats[i];
+                                ImGui.SetNextItemWidth(-1);
+                                if (ImGui.InputText($"##CycleFmt_{type}_{i}", ref fmtStr, 128))
+                                {
+                                    conf.CycleFormats[i] = fmtStr;
+                                    localChanged = true;
+                                }
+
+                                ImGui.TableNextColumn();
+                                if (ImGui.Button($"X##DelCycleFmt_{type}_{i}"))
+                                {
+                                    formatToDelete = i;
+                                }
+                            }
+
+                            if (formatToDelete != -1)
+                            {
+                                conf.CycleFormats.RemoveAt(formatToDelete);
                                 localChanged = true;
                             }
 
-                            ImGui.TableNextColumn();
-                            if (ImGui.Button($"X##DelCycleFmt_{type}_{i}"))
-                            {
-                                formatToDelete = i;
-                            }
                         }
 
-                        if (formatToDelete != -1)
+                        if (_theme.SecondaryButton($"+ Add Cycle Format##{type}"))
                         {
-                            conf.CycleFormats.RemoveAt(formatToDelete);
+                            conf.CycleFormats.Add("");
                             localChanged = true;
                         }
 
-                        ImGui.EndTable();
+                        _theme.SpacerY(0.5f);
+                        ImGui.Text("Switch Interval (s)");
+                        int interval = conf.CycleIntervalSeconds;
+                        ImGui.SetNextItemWidth(100f * ImGuiHelpers.GlobalScale);
+                        if (ImGui.DragInt($"##Int_{type}", ref interval, 1, 3, 300)) { conf.CycleIntervalSeconds = interval; localChanged = true; }
+                        _theme.HoverHandIfItem();
                     }
-
-                    if (_theme.SecondaryButton($"+ Add Cycle Format##{type}"))
-                    {
-                        conf.CycleFormats.Add("");
-                        localChanged = true;
-                    }
-
-                    _theme.SpacerY(0.5f);
-                    ImGui.Text("Switch Interval (s)");
-                    int interval = conf.CycleIntervalSeconds;
-                    ImGui.SetNextItemWidth(100f * ImGuiHelpers.GlobalScale);
-                    if (ImGui.DragInt($"##Int_{type}", ref interval, 1, 3, 300)) { conf.CycleIntervalSeconds = interval; localChanged = true; }
-                    ImGui.Unindent();
-                    _theme.HoverHandIfItem();
                 }
 
                 if (type == ActivityType.ListeningTo)
@@ -323,24 +325,25 @@ public class DiscordActivityTab
                     _theme.SpacerY(0.5f);
                     ImGui.Text("Truncation Limits (0 = Unlimited)");
 
-                    ImGui.BeginGroup();
-                    ImGui.Text("Track");
-                    ImGui.SameLine();
-                    int tLim = conf.TrackLimit;
-                    ImGui.SetNextItemWidth(80f * ImGuiHelpers.GlobalScale);
-                    if (ImGui.InputInt($"##TLim_{type}", ref tLim)) { conf.TrackLimit = Math.Max(0, tLim); localChanged = true; }
+                    using (var lgGroup = ImRaii.Group())
+                    {
+                        ImGui.Text("Track");
+                        ImGui.SameLine();
+                        int tLim = conf.TrackLimit;
+                        ImGui.SetNextItemWidth(80f * ImGuiHelpers.GlobalScale);
+                        if (ImGui.InputInt($"##TLim_{type}", ref tLim)) { conf.TrackLimit = Math.Max(0, tLim); localChanged = true; }
 
 
-                    ImGui.SameLine();
-                    _theme.SpacerX(1f);
-                    ImGui.SameLine();
+                        ImGui.SameLine();
+                        _theme.SpacerX(1f);
+                        ImGui.SameLine();
 
-                    ImGui.Text("Artist");
-                    ImGui.SameLine();
-                    int aLim = conf.ArtistLimit;
-                    ImGui.SetNextItemWidth(80f * ImGuiHelpers.GlobalScale);
-                    if (ImGui.InputInt($"##ALim_{type}", ref aLim)) { conf.ArtistLimit = Math.Max(0, aLim); localChanged = true; }
-                    ImGui.EndGroup();
+                        ImGui.Text("Artist");
+                        ImGui.SameLine();
+                        int aLim = conf.ArtistLimit;
+                        ImGui.SetNextItemWidth(80f * ImGuiHelpers.GlobalScale);
+                        if (ImGui.InputInt($"##ALim_{type}", ref aLim)) { conf.ArtistLimit = Math.Max(0, aLim); localChanged = true; }
+                    }
                     if (ImGui.IsItemHovered()) ImGui.SetTooltip("Limits the character count of {details} (Track) and {state} (Artist) before insertion.");
                 }
 
@@ -350,51 +353,52 @@ public class DiscordActivityTab
 
                 ImGui.Text("Title Colors");
 
-                ImGui.BeginGroup();
-                Vector3? cVal = conf.Color;
-                bool hasColor = cVal.HasValue;
-                if (ImGui.Checkbox($"Override Color##{type}", ref hasColor))
+                using (var colGroup = ImRaii.Group())
                 {
-                    conf.Color = hasColor ? new Vector3(1, 1, 1) : null;
-                    localChanged = true;
-                }
-                _theme.HoverHandIfItem();
-                if (hasColor)
-                {
-                    ImGui.SameLine();
-                    Vector3 col = conf.Color ?? new Vector3(1, 1, 1);
-                    if (ImGui.ColorEdit3($"##ColPick_{type}", ref col, ImGuiColorEditFlags.NoInputs))
+                    Vector3? cVal = conf.Color;
+                    bool hasColor = cVal.HasValue;
+                    if (ImGui.Checkbox($"Override Color##{type}", ref hasColor))
                     {
-                        conf.Color = col;
+                        conf.Color = hasColor ? new Vector3(1, 1, 1) : null;
                         localChanged = true;
                     }
                     _theme.HoverHandIfItem();
-                }
-
-                ImGui.SameLine();
-                _theme.SpacerX(2f);
-                ImGui.SameLine();
-
-                Vector3? gVal = conf.Glow;
-                bool hasGlow = gVal.HasValue;
-                if (ImGui.Checkbox($"Override Glow##{type}", ref hasGlow))
-                {
-                    conf.Glow = hasGlow ? new Vector3(1, 1, 1) : null;
-                    localChanged = true;
-                }
-                _theme.HoverHandIfItem();
-                if (hasGlow)
-                {
-                    ImGui.SameLine();
-                    Vector3 glo = conf.Glow ?? new Vector3(1, 1, 1);
-                    if (ImGui.ColorEdit3($"##GlowPick_{type}", ref glo, ImGuiColorEditFlags.NoInputs))
+                    if (hasColor)
                     {
-                        conf.Glow = glo;
+                        ImGui.SameLine();
+                        Vector3 col = conf.Color ?? new Vector3(1, 1, 1);
+                        if (ImGui.ColorEdit3($"##ColPick_{type}", ref col, ImGuiColorEditFlags.NoInputs))
+                        {
+                            conf.Color = col;
+                            localChanged = true;
+                        }
+                        _theme.HoverHandIfItem();
+                    }
+
+                    ImGui.SameLine();
+                    _theme.SpacerX(2f);
+                    ImGui.SameLine();
+
+                    Vector3? gVal = conf.Glow;
+                    bool hasGlow = gVal.HasValue;
+                    if (ImGui.Checkbox($"Override Glow##{type}", ref hasGlow))
+                    {
+                        conf.Glow = hasGlow ? new Vector3(1, 1, 1) : null;
                         localChanged = true;
                     }
                     _theme.HoverHandIfItem();
+                    if (hasGlow)
+                    {
+                        ImGui.SameLine();
+                        Vector3 glo = conf.Glow ?? new Vector3(1, 1, 1);
+                        if (ImGui.ColorEdit3($"##GlowPick_{type}", ref glo, ImGuiColorEditFlags.NoInputs))
+                        {
+                            conf.Glow = glo;
+                            localChanged = true;
+                        }
+                        _theme.HoverHandIfItem();
+                    }
                 }
-                ImGui.EndGroup();
 
                 _theme.SpacerY(0.5f);
                 ImGui.Separator();
@@ -403,7 +407,8 @@ public class DiscordActivityTab
                 ImGui.Text("Exclusion Filters");
                 _theme.MutedLabel("If a filter matches, the activity is hidden.");
 
-                if (ImGui.BeginTable($"##FiltersTbl_{type}", 4, ImGuiTableFlags.Borders | ImGuiTableFlags.SizingFixedFit))
+                using (var filterTable = ImRaii.Table($"##FiltersTbl_{type}", 4, ImGuiTableFlags.Borders | ImGuiTableFlags.SizingFixedFit))
+                if (filterTable)
                 {
                     ImGui.TableSetupColumn("Placeholder", ImGuiTableColumnFlags.WidthFixed, 100f * ImGuiHelpers.GlobalScale);
                     ImGui.TableSetupColumn("Mode", ImGuiTableColumnFlags.WidthFixed, 120f * ImGuiHelpers.GlobalScale);

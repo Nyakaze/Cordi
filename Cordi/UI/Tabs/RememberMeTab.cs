@@ -5,6 +5,7 @@ using Cordi.Configuration;
 using Cordi.Core;
 using Cordi.UI.Themes;
 using Dalamud.Bindings.ImGui;
+using Dalamud.Interface.Utility.Raii;
 
 namespace Cordi.UI.Tabs;
 
@@ -89,46 +90,47 @@ public class RememberMeTab : ConfigTabBase
                 ImGui.TextUnformatted("Party size: "); ImGui.SameLine(0, 0); ImGui.TextUnformatted(partyList.Count.ToString()); ImGui.SameLine(0, 0); ImGui.TextUnformatted("/8");
                 theme.SpacerY(0.5f);
 
-                if (ImGui.BeginTable("##currentPartyTable", 3, ImGuiTableFlags.NoBordersInBody | ImGuiTableFlags.RowBg))
+                using (var table = ImRaii.Table("##currentPartyTable", 3, ImGuiTableFlags.NoBordersInBody | ImGuiTableFlags.RowBg))
                 {
-                    ImGui.TableSetupColumn("Player", ImGuiTableColumnFlags.WidthFixed, 180f);
-                    ImGui.TableSetupColumn("Job", ImGuiTableColumnFlags.WidthFixed, 60f);
-                    ImGui.TableSetupColumn("Notes", ImGuiTableColumnFlags.WidthStretch);
-                    ImGui.TableHeadersRow();
-
-                    for (int i = 0; i < partyList.Count; i++)
+                    if (table)
                     {
-                        var member = partyList[i];
-                        if (member == null) continue;
+                        ImGui.TableSetupColumn("Player", ImGuiTableColumnFlags.WidthFixed, 180f);
+                        ImGui.TableSetupColumn("Job", ImGuiTableColumnFlags.WidthFixed, 60f);
+                        ImGui.TableSetupColumn("Notes", ImGuiTableColumnFlags.WidthStretch);
+                        ImGui.TableHeadersRow();
 
-                        var name = member.Name;
-                        var world = member.World;
-
-                        ImGui.TableNextRow();
-
-                        ImGui.TableSetColumnIndex(0);
-                        ImGui.TextUnformatted(name); ImGui.SameLine(0, 0); ImGui.TextUnformatted("@"); ImGui.SameLine(0, 0); ImGui.TextUnformatted(world);
-
-                        ImGui.TableSetColumnIndex(1);
-                        var classJobId = member.JobId;
-                        var classJobSheet = Service.DataManager.GetExcelSheet<Lumina.Excel.Sheets.ClassJob>();
-                        var classJob = classJobSheet?.GetRow(classJobId);
-                        var classJobAbbr = classJob?.Abbreviation.ToString() ?? "?";
-                        ImGui.Text(classJobAbbr);
-
-                        ImGui.TableSetColumnIndex(2);
-                        var rememberedPlayer = plugin.RememberMe.FindPlayer(name, world);
-                        if (rememberedPlayer != null && !string.IsNullOrWhiteSpace(rememberedPlayer.Notes))
+                        for (int i = 0; i < partyList.Count; i++)
                         {
-                            ImGui.TextWrapped(rememberedPlayer.Notes);
-                        }
-                        else
-                        {
-                            ImGui.TextDisabled("(No notes)");
+                            var member = partyList[i];
+                            if (member == null) continue;
+
+                            var name = member.Name;
+                            var world = member.World;
+
+                            ImGui.TableNextRow();
+
+                            ImGui.TableSetColumnIndex(0);
+                            ImGui.TextUnformatted(name); ImGui.SameLine(0, 0); ImGui.TextUnformatted("@"); ImGui.SameLine(0, 0); ImGui.TextUnformatted(world);
+
+                            ImGui.TableSetColumnIndex(1);
+                            var classJobId = member.JobId;
+                            var classJobSheet = Service.DataManager.GetExcelSheet<Lumina.Excel.Sheets.ClassJob>();
+                            var classJob = classJobSheet?.GetRow(classJobId);
+                            var classJobAbbr = classJob?.Abbreviation.ToString() ?? "?";
+                            ImGui.Text(classJobAbbr);
+
+                            ImGui.TableSetColumnIndex(2);
+                            var rememberedPlayer = plugin.RememberMe.FindPlayer(name, world);
+                            if (rememberedPlayer != null && !string.IsNullOrWhiteSpace(rememberedPlayer.Notes))
+                            {
+                                ImGui.TextWrapped(rememberedPlayer.Notes);
+                            }
+                            else
+                            {
+                                ImGui.TextDisabled("(No notes)");
+                            }
                         }
                     }
-
-                    ImGui.EndTable();
                 }
             }
         );

@@ -1,9 +1,10 @@
 
 
 using System;
-using Dalamud.Interface.Windowing;
 using System.Numerics;
+using Dalamud.Interface.Windowing;
 using Dalamud.Bindings.ImGui;
+using Dalamud.Interface.Utility.Raii;
 
 
 using Cordi.Core;
@@ -35,42 +36,41 @@ public sealed class DiscordWindow : Window, IDisposable
     public override void Draw()
     {
         theme.ApplyFontScale();
-        theme.BeginCard("wooowi");
-        ImGui.Text("Allgemein");
-        ImGui.Separator();
-        theme.SpacerY(0.25f);
+        using (var card = theme.CardScope("wooowi"))
+        {
+            ImGui.Text("Allgemein");
+            ImGui.Separator();
+            theme.SpacerY(0.25f);
 
-
-
-        if (theme.PrimaryButton("Speichern")) cfg.Config.Save();
-        theme.SameLineGap();
-        if (theme.SecondaryButton("Zurücksetzen")) { cfg.Config.Save(); }
-
-        theme.EndCard();
+            if (theme.PrimaryButton("Speichern")) cfg.Config.Save();
+            theme.SameLineGap();
+            if (theme.SecondaryButton("Zurücksetzen")) { cfg.Config.Save(); }
+        }
 
         theme.SpacerY();
 
-        if (theme.BeginTabBar("settings-tabs"))
+        using (ImRaii.PushColor(ImGuiCol.Tab, theme.Tab)
+               .Push(ImGuiCol.TabActive, theme.TabActive)
+               .Push(ImGuiCol.TabHovered, theme.TabHovered))
+        using (ImRaii.PushStyle(ImGuiStyleVar.TabRounding, theme.Radius()))
+        using (var tabBar = ImRaii.TabBar("settings-tabs"))
+        if (tabBar)
         {
-            if (theme.BeginTabItem("Erweitert"))
+            using (var tabItemErweitert = ImRaii.TabItem("Erweitert"))
+            if (tabItemErweitert)
             {
                 theme.MutedLabel("Erweiterte Optionen…");
                 theme.SpacerY(0.5f);
 
                 theme.SameLineGap();
                 theme.Badge("Beta");
-
-                theme.EndTabItem();
             }
-            if (theme.BeginTabItem("Theming"))
+            using (var tabItemTheming = ImRaii.TabItem("Theming"))
+            if (tabItemTheming)
             {
                 theme.MutedLabel("Akzentfarbe & Presets:");
                 theme.SpacerY(0.5f);
-
-
-                theme.EndTabItem();
             }
-            theme.EndTabBar();
         }
     }
 

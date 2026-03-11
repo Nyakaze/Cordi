@@ -2,6 +2,7 @@ using System;
 using System.Numerics;
 using Cordi.Services;
 using Dalamud.Bindings.ImGui;
+using Dalamud.Interface.Utility.Raii;
 using FFXIVClientStructs.FFXIV.Client.UI.Agent;
 
 using Cordi.Configuration;
@@ -128,17 +129,10 @@ public class CordiPeepPanel
         bool showTarget = config.ShowCurrentTarget && !string.IsNullOrEmpty(peeper.CurrentTargetName) && !isTargetLocalPlayer;
         float rowHeight = ImGui.GetTextLineHeight() + style.FramePadding.Y * 2;
 
-        if (isActive)
-        {
-            ImGui.PushStyleColor(ImGuiCol.Text, new Vector4(1f, 0.5f, 0.5f, 1f));
-        }
-        else
-        {
-            ImGui.PushStyleColor(ImGuiCol.Text, ImGui.GetStyle().Colors[(int)ImGuiCol.TextDisabled]);
-        }
+        using var textColorRaii = ImRaii.PushColor(ImGuiCol.Text, isActive ? new Vector4(1f, 0.5f, 0.5f, 1f) : ImGui.GetStyle().Colors[(int)ImGuiCol.TextDisabled]);
 
-        ImGui.PushStyleColor(ImGuiCol.HeaderHovered, new Vector4(0f, 0f, 0f, 0f));
-        ImGui.PushStyleColor(ImGuiCol.HeaderActive, new Vector4(0f, 0f, 0f, 0f));
+        using var headerHoveredRaii = ImRaii.PushColor(ImGuiCol.HeaderHovered, new Vector4(0f, 0f, 0f, 0f));
+        using var headerActiveRaii = ImRaii.PushColor(ImGuiCol.HeaderActive, new Vector4(0f, 0f, 0f, 0f));
 
         if (ImGui.Selectable($"##{peeper.GameObjectId}_{peeper.StartTime.Ticks}", false, ImGuiSelectableFlags.None, new Vector2(0, rowHeight)))
         {
@@ -157,47 +151,46 @@ public class CordiPeepPanel
         var peeperItemMin = ImGui.GetItemRectMin();
         var peeperItemMax = ImGui.GetItemRectMax();
 
-        ImGui.PopStyleColor(2);
-        ImGui.PopStyleColor();
-
         // Context menu
-        if (ImGui.BeginPopupContextItem($"ctx_{peeper.GameObjectId}_{peeper.StartTime.Ticks}"))
+        using (var popup = ImRaii.ContextPopupItem($"ctx_{peeper.GameObjectId}_{peeper.StartTime.Ticks}"))
         {
-            if (MenuItem("Target"))
+            if (popup)
             {
-                var obj = FindPeeper(peeper);
-                if (obj != null) Service.TargetManager.Target = obj;
-            }
-            if (MenuItem("Focus Target"))
-            {
-                var obj = FindPeeper(peeper);
-                if (obj != null) Service.TargetManager.FocusTarget = obj;
-            }
-            if (MenuItem("Examine"))
-            {
-                var obj = FindPeeper(peeper);
-                if (obj != null) Examine(obj.GameObjectId);
-            }
-            if (MenuItem("Adventure Plate"))
-            {
-                var obj = FindPeeper(peeper);
-                if (obj != null) OpenAdventurePlate(obj.GameObjectId);
-            }
-
-            ImGui.Separator();
-            var isBlacklisted = config.Blacklist.Exists(x => x.Name == peeper.Name && x.World == peeper.World);
-            if (!isBlacklisted && MenuItem("Blacklist"))
-            {
-                config.Blacklist.Add(new Configuration.CordiPeepBlacklistEntry
+                if (MenuItem("Target"))
                 {
-                    Name = peeper.Name,
-                    World = peeper.World,
-                    DisableSound = true,
-                    DisableDiscord = true,
-                });
-                _plugin.Config.Save();
+                    var obj = FindPeeper(peeper);
+                    if (obj != null) Service.TargetManager.Target = obj;
+                }
+                if (MenuItem("Focus Target"))
+                {
+                    var obj = FindPeeper(peeper);
+                    if (obj != null) Service.TargetManager.FocusTarget = obj;
+                }
+                if (MenuItem("Examine"))
+                {
+                    var obj = FindPeeper(peeper);
+                    if (obj != null) Examine(obj.GameObjectId);
+                }
+                if (MenuItem("Adventure Plate"))
+                {
+                    var obj = FindPeeper(peeper);
+                    if (obj != null) OpenAdventurePlate(obj.GameObjectId);
+                }
+
+                ImGui.Separator();
+                var isBlacklisted = config.Blacklist.Exists(x => x.Name == peeper.Name && x.World == peeper.World);
+                if (!isBlacklisted && MenuItem("Blacklist"))
+                {
+                    config.Blacklist.Add(new Configuration.CordiPeepBlacklistEntry
+                    {
+                        Name = peeper.Name,
+                        World = peeper.World,
+                        DisableSound = true,
+                        DisableDiscord = true,
+                    });
+                    _plugin.Config.Save();
+                }
             }
-            ImGui.EndPopup();
         }
 
         bool targetHovered = false;
@@ -207,8 +200,8 @@ public class CordiPeepPanel
         {
             float targetRowHeight = ImGui.GetTextLineHeight();
 
-            ImGui.PushStyleColor(ImGuiCol.HeaderHovered, new Vector4(0f, 0f, 0f, 0f));
-            ImGui.PushStyleColor(ImGuiCol.HeaderActive, new Vector4(0f, 0f, 0f, 0f));
+            using var targetHeaderHoveredRaii = ImRaii.PushColor(ImGuiCol.HeaderHovered, new Vector4(0f, 0f, 0f, 0f));
+            using var targetHeaderActiveRaii = ImRaii.PushColor(ImGuiCol.HeaderActive, new Vector4(0f, 0f, 0f, 0f));
 
             if (ImGui.Selectable($"##target_{peeper.GameObjectId}_{peeper.StartTime.Ticks}", false, ImGuiSelectableFlags.None, new Vector2(0, targetRowHeight)))
             {
@@ -223,32 +216,32 @@ public class CordiPeepPanel
             if (targetHovered) ImGui.SetMouseCursor(ImGuiMouseCursor.Hand);
             targetItemMin = ImGui.GetItemRectMin();
 
-            ImGui.PopStyleColor(2);
-
-            if (ImGui.BeginPopupContextItem($"ctx_target_{peeper.GameObjectId}_{peeper.StartTime.Ticks}"))
+            using (var popup = ImRaii.ContextPopupItem($"ctx_target_{peeper.GameObjectId}_{peeper.StartTime.Ticks}"))
             {
-                var targetName = peeper.CurrentTargetName ?? "Target";
-                if (MenuItem($"Target: {targetName}"))
+                if (popup)
                 {
-                    var tObj = Service.ObjectTable.SearchById(peeper.CurrentTargetId);
-                    if (tObj != null) Service.TargetManager.Target = tObj;
+                    var targetName = peeper.CurrentTargetName ?? "Target";
+                    if (MenuItem($"Target: {targetName}"))
+                    {
+                        var tObj = Service.ObjectTable.SearchById(peeper.CurrentTargetId);
+                        if (tObj != null) Service.TargetManager.Target = tObj;
+                    }
+                    if (MenuItem($"Focus: {targetName}"))
+                    {
+                        var tObj = Service.ObjectTable.SearchById(peeper.CurrentTargetId);
+                        if (tObj != null) Service.TargetManager.FocusTarget = tObj;
+                    }
+                    if (MenuItem($"Examine: {targetName}"))
+                    {
+                        var tObj = Service.ObjectTable.SearchById(peeper.CurrentTargetId);
+                        if (tObj != null) Examine(tObj.GameObjectId);
+                    }
+                    if (MenuItem($"Plate: {targetName}"))
+                    {
+                        var tObj = Service.ObjectTable.SearchById(peeper.CurrentTargetId);
+                        if (tObj != null) OpenAdventurePlate(tObj.GameObjectId);
+                    }
                 }
-                if (MenuItem($"Focus: {targetName}"))
-                {
-                    var tObj = Service.ObjectTable.SearchById(peeper.CurrentTargetId);
-                    if (tObj != null) Service.TargetManager.FocusTarget = tObj;
-                }
-                if (MenuItem($"Examine: {targetName}"))
-                {
-                    var tObj = Service.ObjectTable.SearchById(peeper.CurrentTargetId);
-                    if (tObj != null) Examine(tObj.GameObjectId);
-                }
-                if (MenuItem($"Plate: {targetName}"))
-                {
-                    var tObj = Service.ObjectTable.SearchById(peeper.CurrentTargetId);
-                    if (tObj != null) OpenAdventurePlate(tObj.GameObjectId);
-                }
-                ImGui.EndPopup();
             }
         }
 

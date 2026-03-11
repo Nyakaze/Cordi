@@ -5,6 +5,7 @@ using Cordi.Configuration;
 using Cordi.Core;
 using Cordi.UI.Themes;
 using Dalamud.Bindings.ImGui;
+using Dalamud.Interface.Utility.Raii;
 
 namespace Cordi.UI.Tabs;
 
@@ -47,12 +48,13 @@ public class SettingsTab : ConfigTabBase
                 theme.SpacerY(0.25f);
 
                 var flags = _botTokenInputActive ? ImGuiInputTextFlags.None : ImGuiInputTextFlags.Password;
-                ImGui.PushItemWidth(avail);
-                if (ImGui.InputText("##bot-token-input", ref _botToken, 256, flags))
+                using (var width1 = ImRaii.ItemWidth(avail))
                 {
+                    if (ImGui.InputText("##bot-token-input", ref _botToken, 256, flags))
+                    {
+                    }
+                    _botTokenInputActive = ImGui.IsItemActive();
                 }
-                _botTokenInputActive = ImGui.IsItemActive();
-                ImGui.PopItemWidth();
 
                 theme.SpacerY(0.5f);
 
@@ -93,24 +95,25 @@ public class SettingsTab : ConfigTabBase
                 theme.SpacerY(0.25f);
 
                 float scale = _tempFontScale ?? fontConfig.GlobalScale;
-                ImGui.PushItemWidth(200);
-                if (ImGui.SliderFloat("##fontScale", ref scale, 0.7f, 2.0f, $"{scale:F2}x"))
+                using (var width2 = ImRaii.ItemWidth(200))
                 {
-                    _tempFontScale = scale;
-                }
+                    if (ImGui.SliderFloat("##fontScale", ref scale, 0.7f, 2.0f, $"{scale:F2}x"))
+                    {
+                        _tempFontScale = scale;
+                    }
 
-                if (ImGui.IsItemDeactivatedAfterEdit())
-                {
-                    fontConfig.GlobalScale = _tempFontScale ?? scale;
-                    UiTheme.GlobalFontScale = fontConfig.GlobalScale;
-                    plugin.Config.Save();
-                }
+                    if (ImGui.IsItemDeactivatedAfterEdit())
+                    {
+                        fontConfig.GlobalScale = _tempFontScale ?? scale;
+                        UiTheme.GlobalFontScale = fontConfig.GlobalScale;
+                        plugin.Config.Save();
+                    }
 
-                if (ImGui.IsItemDeactivated())
-                {
-                    _tempFontScale = null;
+                    if (ImGui.IsItemDeactivated())
+                    {
+                        _tempFontScale = null;
+                    }
                 }
-                ImGui.PopItemWidth();
 
                 ImGui.SameLine();
                 ImGui.TextColored(theme.MutedText, "Scale multiplier");

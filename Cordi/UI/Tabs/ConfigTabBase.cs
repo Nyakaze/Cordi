@@ -5,6 +5,7 @@ using Cordi.Core;
 using Cordi.UI.Themes;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Interface.Utility;
+using Dalamud.Interface.Utility.Raii;
 
 namespace Cordi.UI.Tabs;
 
@@ -36,30 +37,28 @@ public abstract class ConfigTabBase
 
         theme.SpacerY(1f);
 
-        ImGui.PushStyleVar(ImGuiStyleVar.FrameRounding, theme.Radius());
-        ImGui.PushStyleVar(ImGuiStyleVar.ItemSpacing, new Vector2(theme.Gap(0.5f), theme.Gap(0.5f)));
-
-        float btnW = ImGui.GetContentRegionAvail().X / subTabs.Count - theme.Gap(0.5f);
-        float btnH = 32f * ImGuiHelpers.GlobalScale * UiTheme.GlobalFontScale;
-
-        for (int i = 0; i < subTabs.Count; i++)
+        using (ImRaii.PushStyle(ImGuiStyleVar.FrameRounding, theme.Radius()))
+        using (ImRaii.PushStyle(ImGuiStyleVar.ItemSpacing, new Vector2(theme.Gap(0.5f), theme.Gap(0.5f))))
         {
-            if (i > 0)
-                ImGui.SameLine();
+            float btnW = ImGui.GetContentRegionAvail().X / subTabs.Count - theme.Gap(0.5f);
+            float btnH = 32f * ImGuiHelpers.GlobalScale * UiTheme.GlobalFontScale;
 
-            bool isActive = selectedSubTab == i;
-            ImGui.PushStyleColor(ImGuiCol.Button, isActive ? theme.Accent : theme.FrameBg);
-            ImGui.PushStyleColor(ImGuiCol.ButtonHovered, isActive ? theme.Accent : theme.FrameBgHover);
-            ImGui.PushStyleColor(ImGuiCol.ButtonActive, isActive ? theme.Accent : theme.FrameBgActive);
+            for (int i = 0; i < subTabs.Count; i++)
+            {
+                if (i > 0)
+                    ImGui.SameLine();
 
-            if (ImGui.Button(subTabs[i].Label, new Vector2(btnW, btnH)))
-                selectedSubTab = i;
-            theme.HoverHandIfItem();
-
-            ImGui.PopStyleColor(3);
+                bool isActive = selectedSubTab == i;
+                using (ImRaii.PushColor(ImGuiCol.Button, isActive ? theme.Accent : theme.FrameBg))
+                using (ImRaii.PushColor(ImGuiCol.ButtonHovered, isActive ? theme.Accent : theme.FrameBgHover))
+                using (ImRaii.PushColor(ImGuiCol.ButtonActive, isActive ? theme.Accent : theme.FrameBgActive))
+                {
+                    if (ImGui.Button(subTabs[i].Label, new Vector2(btnW, btnH)))
+                        selectedSubTab = i;
+                    theme.HoverHandIfItem();
+                }
+            }
         }
-
-        ImGui.PopStyleVar(2);
 
         theme.SpacerY(1f);
 
@@ -87,8 +86,9 @@ public abstract class ConfigTabBase
 
         theme.SpacerY(1f);
 
-        ImGui.Indent(theme.Gap());
-        subTabs[selectedSubTab].Draw();
-        ImGui.Unindent(theme.Gap());
+        using (ImRaii.PushIndent(theme.Gap()))
+        {
+            subTabs[selectedSubTab].Draw();
+        }
     }
 }

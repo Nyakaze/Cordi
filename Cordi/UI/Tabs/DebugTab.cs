@@ -7,6 +7,7 @@ using Dalamud.Game.Text;
 using Dalamud.Interface;
 using Dalamud.Interface.Colors;
 using Dalamud.Interface.Utility;
+using Dalamud.Interface.Utility.Raii;
 using DSharpPlus;
 using DSharpPlus.Entities;
 using Dalamud.Bindings.ImGui;
@@ -208,41 +209,43 @@ public class DebugTab : ConfigTabBase
                 bool isConnected = client != null && botStarted;
 
 
-                ImGui.BeginGroup();
-                ImGui.TextColored(theme.MutedText, "Discord Connection");
-                if (botStarted)
+                using (var group1 = ImRaii.Group())
                 {
-                    if (isConnected)
+                    ImGui.TextColored(theme.MutedText, "Discord Connection");
+                    if (botStarted)
                     {
-                        ImGui.TextColored(UiTheme.ColorSuccessText, "Connected (Ping: "); ImGui.SameLine(0, 0); ImGui.TextColored(UiTheme.ColorSuccessText, (client?.Ping ?? 0).ToString()); ImGui.SameLine(0, 0); ImGui.TextColored(UiTheme.ColorSuccessText, "ms)");
-                        ImGui.SameLine();
-                        ImGui.TextColored(theme.MutedText, "| Gateway: v"); ImGui.SameLine(0, 0); ImGui.TextColored(theme.MutedText, (client?.GatewayVersion ?? 0).ToString());
+                        if (isConnected)
+                        {
+                            ImGui.TextColored(UiTheme.ColorSuccessText, "Connected (Ping: "); ImGui.SameLine(0, 0); ImGui.TextColored(UiTheme.ColorSuccessText, (client?.Ping ?? 0).ToString()); ImGui.SameLine(0, 0); ImGui.TextColored(UiTheme.ColorSuccessText, "ms)");
+                            ImGui.SameLine();
+                            ImGui.TextColored(theme.MutedText, "| Gateway: v"); ImGui.SameLine(0, 0); ImGui.TextColored(theme.MutedText, (client?.GatewayVersion ?? 0).ToString());
+                        }
+                        else
+                        {
+                            ImGui.TextColored(new Vector4(1f, 0.64f, 0f, 1f), "Initializing / Connecting...");
+                        }
                     }
                     else
                     {
-                        ImGui.TextColored(new Vector4(1f, 0.64f, 0f, 1f), "Initializing / Connecting...");
+                        ImGui.TextColored(UiTheme.ColorDangerText, "Stopped");
                     }
                 }
-                else
-                {
-                    ImGui.TextColored(UiTheme.ColorDangerText, "Stopped");
-                }
-                ImGui.EndGroup();
 
                 ImGui.SameLine(avail / 2f);
 
-                ImGui.BeginGroup();
-                ImGui.TextColored(theme.MutedText, "Current User");
-                if (isConnected && client?.CurrentUser != null)
+                using (var group2 = ImRaii.Group())
                 {
-                    ImGui.TextUnformatted(client.CurrentUser.Username); ImGui.SameLine(0, 0); ImGui.TextUnformatted("#"); ImGui.SameLine(0, 0); ImGui.TextUnformatted(client.CurrentUser.Discriminator ?? "0000");
-                    ImGui.TextColored(theme.MutedText, "ID: "); ImGui.SameLine(0, 0); ImGui.TextColored(theme.MutedText, client.CurrentUser.Id.ToString());
+                    ImGui.TextColored(theme.MutedText, "Current User");
+                    if (isConnected && client?.CurrentUser != null)
+                    {
+                        ImGui.TextUnformatted(client.CurrentUser.Username); ImGui.SameLine(0, 0); ImGui.TextUnformatted("#"); ImGui.SameLine(0, 0); ImGui.TextUnformatted(client.CurrentUser.Discriminator ?? "0000");
+                        ImGui.TextColored(theme.MutedText, "ID: "); ImGui.SameLine(0, 0); ImGui.TextColored(theme.MutedText, client.CurrentUser.Id.ToString());
+                    }
+                    else
+                    {
+                        ImGui.Text("-");
+                    }
                 }
-                else
-                {
-                    ImGui.Text("-");
-                }
-                ImGui.EndGroup();
 
                 theme.SpacerY(1f);
 
@@ -281,7 +284,8 @@ public class DebugTab : ConfigTabBase
                 theme.SpacerY(0.5f);
 
                 ImGui.SetNextItemWidth(200f);
-                if (ImGui.BeginCombo("##dbgChatType", selectedChatType.ToString()))
+                using (var combo = ImRaii.Combo("##dbgChatType", selectedChatType.ToString()))
+                if (combo)
                 {
                     foreach (var val in Enum.GetValues<XivChatType>())
                     {
@@ -290,7 +294,6 @@ public class DebugTab : ConfigTabBase
                             selectedChatType = val;
                         }
                     }
-                    ImGui.EndCombo();
                 }
                 ImGui.SameLine();
                 ImGui.TextColored(theme.MutedText, "Chat Type");
@@ -299,19 +302,21 @@ public class DebugTab : ConfigTabBase
 
                 float half = avail / 2f - ImGui.GetStyle().ItemSpacing.X;
 
-                ImGui.BeginGroup();
-                ImGui.Text("Sender (Name@World)");
-                ImGui.SetNextItemWidth(half);
-                ImGui.InputText("##dbgSendUser", ref sendUser, 64);
-                ImGui.EndGroup();
+                using (var group3 = ImRaii.Group())
+                {
+                    ImGui.Text("Sender (Name@World)");
+                    ImGui.SetNextItemWidth(half);
+                    ImGui.InputText("##dbgSendUser", ref sendUser, 64);
+                }
 
                 ImGui.SameLine();
 
-                ImGui.BeginGroup();
-                ImGui.Text("Message Content");
-                ImGui.SetNextItemWidth(half);
-                ImGui.InputText("##dbgSendMsg", ref sendTestMessage, 128);
-                ImGui.EndGroup();
+                using (var group4 = ImRaii.Group())
+                {
+                    ImGui.Text("Message Content");
+                    ImGui.SetNextItemWidth(half);
+                    ImGui.InputText("##dbgSendMsg", ref sendTestMessage, 128);
+                }
 
                 theme.SpacerY(1f);
 
@@ -358,262 +363,271 @@ public class DebugTab : ConfigTabBase
                 theme.SpacerY(1f);
 
 
-                if (ImGui.BeginTabBar("##throughputTabs"))
+                using (var tabBar = ImRaii.TabBar("##throughputTabs"))
                 {
-                    if (ImGui.BeginTabItem("Game Chat Types"))
+                    if (tabBar)
                     {
-
-                        float tableHeight = 200f * ImGuiHelpers.GlobalScale;
-
-                        Dictionary<XivChatType, long> snapshot;
-                        lock (stats)
+                        using (var tab1 = ImRaii.TabItem("Game Chat Types"))
                         {
-                            snapshot = new Dictionary<XivChatType, long>(stats.ChatTypeStats);
-                        }
-
-                        if (snapshot.Count == 0)
-                        {
-                            ImGui.TextColored(theme.MutedText, "No data yet.");
-                        }
-                        else
-                        {
-                            if (ImGui.BeginChild("##thruChatChild", new Vector2(0, tableHeight), false))
+                            if (tab1)
                             {
-                                ImGui.Indent(theme.PadX(0.5f));
-                                if (ImGui.BeginTable("##thruChatTable_v2", 2, ImGuiTableFlags.NoBordersInBody | ImGuiTableFlags.RowBg | ImGuiTableFlags.SizingStretchProp | ImGuiTableFlags.Sortable))
+
+                                float tableHeight = 200f * ImGuiHelpers.GlobalScale;
+
+                                Dictionary<XivChatType, long> snapshot;
+                                lock (stats)
                                 {
-                                    ImGui.TableSetupColumn("Chat Type");
-                                    ImGui.TableSetupColumn("Count", ImGuiTableColumnFlags.WidthFixed | ImGuiTableColumnFlags.DefaultSort | ImGuiTableColumnFlags.PreferSortDescending, 80f);
-                                    ImGui.TableHeadersRow();
-
-                                    var sortSpecs = ImGui.TableGetSortSpecs();
-                                    if (sortSpecs.SpecsDirty)
-                                    {
-                                        sortSpecs.SpecsDirty = false;
-                                    }
-
-                                    var sortedSnapshot = snapshot.AsEnumerable();
-                                    if (sortSpecs.SpecsCount > 0)
-                                    {
-                                        var spec = sortSpecs.Specs;
-                                        if (spec.ColumnIndex == 0)
-                                            sortedSnapshot = spec.SortDirection == ImGuiSortDirection.Ascending ? sortedSnapshot.OrderBy(x => x.Key.ToString()) : sortedSnapshot.OrderByDescending(x => x.Key.ToString());
-                                        else
-                                            sortedSnapshot = spec.SortDirection == ImGuiSortDirection.Ascending ? sortedSnapshot.OrderBy(x => x.Value) : sortedSnapshot.OrderByDescending(x => x.Value);
-                                    }
-                                    else
-                                    {
-                                        sortedSnapshot = sortedSnapshot.OrderByDescending(x => x.Value);
-                                    }
-
-                                    foreach (var kvp in sortedSnapshot)
-                                    {
-                                        ImGui.TableNextRow();
-                                        ImGui.TableNextColumn();
-                                        ImGui.TextUnformatted(kvp.Key.ToString());
-                                        ImGui.TableNextColumn();
-                                        ImGui.TextUnformatted(kvp.Value.ToString());
-                                    }
-                                    ImGui.EndTable();
+                                    snapshot = new Dictionary<XivChatType, long>(stats.ChatTypeStats);
                                 }
-                                ImGui.Unindent(theme.PadX(0.5f));
+
+                                if (snapshot.Count == 0)
+                                {
+                                    ImGui.TextColored(theme.MutedText, "No data yet.");
+                                }
+                                else
+                                {
+                                    using (ImRaii.Child("##thruChatChild", new Vector2(0, tableHeight), false))
+                                    {
+                                        using (ImRaii.PushIndent(theme.PadX(0.5f)))
+                                        {
+                                            using (var table1 = ImRaii.Table("##thruChatTable_v2", 2, ImGuiTableFlags.NoBordersInBody | ImGuiTableFlags.RowBg | ImGuiTableFlags.SizingStretchProp | ImGuiTableFlags.Sortable))
+                                            if (table1)
+                                            {
+                                                ImGui.TableSetupColumn("Chat Type");
+                                                ImGui.TableSetupColumn("Count", ImGuiTableColumnFlags.WidthFixed | ImGuiTableColumnFlags.DefaultSort | ImGuiTableColumnFlags.PreferSortDescending, 80f);
+                                                ImGui.TableHeadersRow();
+
+                                                var sortSpecs = ImGui.TableGetSortSpecs();
+                                                if (sortSpecs.SpecsDirty)
+                                                {
+                                                    sortSpecs.SpecsDirty = false;
+                                                }
+
+                                                var sortedSnapshot = snapshot.AsEnumerable();
+                                                if (sortSpecs.SpecsCount > 0)
+                                                {
+                                                    var spec = sortSpecs.Specs;
+                                                    if (spec.ColumnIndex == 0)
+                                                        sortedSnapshot = spec.SortDirection == ImGuiSortDirection.Ascending ? sortedSnapshot.OrderBy(x => x.Key.ToString()) : sortedSnapshot.OrderByDescending(x => x.Key.ToString());
+                                                    else
+                                                        sortedSnapshot = spec.SortDirection == ImGuiSortDirection.Ascending ? sortedSnapshot.OrderBy(x => x.Value) : sortedSnapshot.OrderByDescending(x => x.Value);
+                                                }
+                                                else
+                                                {
+                                                    sortedSnapshot = sortedSnapshot.OrderByDescending(x => x.Value);
+                                                }
+
+                                                foreach (var kvp in sortedSnapshot)
+                                                {
+                                                    ImGui.TableNextRow();
+                                                    ImGui.TableNextColumn();
+                                                    ImGui.TextUnformatted(kvp.Key.ToString());
+                                                    ImGui.TableNextColumn();
+                                                    ImGui.TextUnformatted(kvp.Value.ToString());
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
                             }
-                            ImGui.EndChild();
-                        }
-                        ImGui.EndTabItem();
-                    }
-
-                    if (ImGui.BeginTabItem("Tell Targets"))
-                    {
-                        float tableHeight = 200f * ImGuiHelpers.GlobalScale;
-                        Dictionary<string, long> snapshot;
-                        lock (stats)
-                        {
-                            snapshot = new Dictionary<string, long>(stats.TellStats);
                         }
 
-                        if (snapshot.Count == 0)
+                        using (var tab2 = ImRaii.TabItem("Tell Targets"))
                         {
-                            ImGui.TextColored(theme.MutedText, "No data yet.");
-                        }
-                        else
-                        {
-                            if (ImGui.BeginChild("##thruTellChild", new Vector2(0, tableHeight), false))
+                            if (tab2)
                             {
-                                ImGui.Indent(theme.PadX(0.5f));
-                                if (ImGui.BeginTable("##thruTellTable_v2", 2, ImGuiTableFlags.NoBordersInBody | ImGuiTableFlags.RowBg | ImGuiTableFlags.SizingStretchProp | ImGuiTableFlags.Sortable))
+                                float tableHeight = 200f * ImGuiHelpers.GlobalScale;
+                                Dictionary<string, long> snapshot;
+                                lock (stats)
                                 {
-                                    ImGui.TableSetupColumn("Target");
-                                    ImGui.TableSetupColumn("Count", ImGuiTableColumnFlags.WidthFixed | ImGuiTableColumnFlags.DefaultSort | ImGuiTableColumnFlags.PreferSortDescending, 80f);
-                                    ImGui.TableHeadersRow();
-
-                                    var sortSpecs = ImGui.TableGetSortSpecs();
-                                    if (sortSpecs.SpecsDirty)
-                                    {
-                                        sortSpecs.SpecsDirty = false;
-                                    }
-                                    var sortedSnapshot = snapshot.AsEnumerable();
-                                    if (sortSpecs.SpecsCount > 0)
-                                    {
-                                        var spec = sortSpecs.Specs;
-                                        if (spec.ColumnIndex == 0)
-                                            sortedSnapshot = spec.SortDirection == ImGuiSortDirection.Ascending ? sortedSnapshot.OrderBy(x => x.Key) : sortedSnapshot.OrderByDescending(x => x.Key);
-                                        else
-                                            sortedSnapshot = spec.SortDirection == ImGuiSortDirection.Ascending ? sortedSnapshot.OrderBy(x => x.Value) : sortedSnapshot.OrderByDescending(x => x.Value);
-                                    }
-                                    else
-                                    {
-                                        sortedSnapshot = sortedSnapshot.OrderByDescending(x => x.Value);
-                                    }
-
-                                    foreach (var kvp in sortedSnapshot)
-                                    {
-                                        ImGui.TableNextRow();
-                                        ImGui.TableNextColumn();
-                                        ImGui.Text(kvp.Key);
-                                        ImGui.TableNextColumn();
-                                        ImGui.Text($"{kvp.Value}");
-                                    }
-                                    ImGui.EndTable();
+                                    snapshot = new Dictionary<string, long>(stats.TellStats);
                                 }
-                                ImGui.Unindent(theme.PadX(0.5f));
+
+                                if (snapshot.Count == 0)
+                                {
+                                    ImGui.TextColored(theme.MutedText, "No data yet.");
+                                }
+                                else
+                                {
+                                    using (ImRaii.Child("##thruTellChild", new Vector2(0, tableHeight), false))
+                                    {
+                                        using (ImRaii.PushIndent(theme.PadX(0.5f)))
+                                        {
+                                            using (var table2 = ImRaii.Table("##thruTellTable_v2", 2, ImGuiTableFlags.NoBordersInBody | ImGuiTableFlags.RowBg | ImGuiTableFlags.SizingStretchProp | ImGuiTableFlags.Sortable))
+                                            if (table2)
+                                            {
+                                                ImGui.TableSetupColumn("Target");
+                                                ImGui.TableSetupColumn("Count", ImGuiTableColumnFlags.WidthFixed | ImGuiTableColumnFlags.DefaultSort | ImGuiTableColumnFlags.PreferSortDescending, 80f);
+                                                ImGui.TableHeadersRow();
+
+                                                var sortSpecs = ImGui.TableGetSortSpecs();
+                                                if (sortSpecs.SpecsDirty)
+                                                {
+                                                    sortSpecs.SpecsDirty = false;
+                                                }
+                                                var sortedSnapshot = snapshot.AsEnumerable();
+                                                if (sortSpecs.SpecsCount > 0)
+                                                {
+                                                    var spec = sortSpecs.Specs;
+                                                    if (spec.ColumnIndex == 0)
+                                                        sortedSnapshot = spec.SortDirection == ImGuiSortDirection.Ascending ? sortedSnapshot.OrderBy(x => x.Key) : sortedSnapshot.OrderByDescending(x => x.Key);
+                                                    else
+                                                        sortedSnapshot = spec.SortDirection == ImGuiSortDirection.Ascending ? sortedSnapshot.OrderBy(x => x.Value) : sortedSnapshot.OrderByDescending(x => x.Value);
+                                                }
+                                                else
+                                                {
+                                                    sortedSnapshot = sortedSnapshot.OrderByDescending(x => x.Value);
+                                                }
+
+                                                foreach (var kvp in sortedSnapshot)
+                                                {
+                                                    ImGui.TableNextRow();
+                                                    ImGui.TableNextColumn();
+                                                    ImGui.Text(kvp.Key);
+                                                    ImGui.TableNextColumn();
+                                                    ImGui.Text($"{kvp.Value}");
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
                             }
-                            ImGui.EndChild();
-                        }
-                        ImGui.EndTabItem();
-                    }
-
-                    if (ImGui.BeginTabItem("Peeps"))
-                    {
-                        float tableHeight = 200f * ImGuiHelpers.GlobalScale;
-                        Dictionary<string, PeeperStats> snapshot;
-                        lock (stats)
-                        {
-                            snapshot = new Dictionary<string, PeeperStats>(stats.PeepStats);
                         }
 
-                        if (snapshot.Count == 0)
+                        using (var tab3 = ImRaii.TabItem("Peeps"))
                         {
-                            ImGui.TextColored(theme.MutedText, "No data yet.");
-                        }
-                        else
-                        {
-                            if (ImGui.BeginChild("##thruPeepChild", new Vector2(0, tableHeight), false))
+                            if (tab3)
                             {
-                                ImGui.Indent(theme.PadX(0.5f));
-                                if (ImGui.BeginTable("##thruPeepTable_v2", 3, ImGuiTableFlags.NoBordersInBody | ImGuiTableFlags.RowBg | ImGuiTableFlags.SizingStretchProp | ImGuiTableFlags.ScrollY | ImGuiTableFlags.Sortable))
+                                float tableHeight = 200f * ImGuiHelpers.GlobalScale;
+                                Dictionary<string, PeeperStats> snapshot;
+                                lock (stats)
                                 {
-                                    ImGui.TableSetupColumn("Player");
-                                    ImGui.TableSetupColumn("Count", ImGuiTableColumnFlags.WidthFixed | ImGuiTableColumnFlags.DefaultSort | ImGuiTableColumnFlags.PreferSortDescending, 80f);
-                                    ImGui.TableSetupColumn("Last Seen", ImGuiTableColumnFlags.WidthFixed, 140f);
-                                    ImGui.TableHeadersRow();
-
-                                    var sortSpecs = ImGui.TableGetSortSpecs();
-                                    if (sortSpecs.SpecsDirty)
-                                    {
-                                        sortSpecs.SpecsDirty = false;
-                                    }
-                                    var sortedSnapshot = snapshot.AsEnumerable();
-                                    if (sortSpecs.SpecsCount > 0)
-                                    {
-                                        var spec = sortSpecs.Specs;
-                                        if (spec.ColumnIndex == 0)
-                                            sortedSnapshot = spec.SortDirection == ImGuiSortDirection.Ascending ? sortedSnapshot.OrderBy(x => x.Value.Name).ThenBy(x => x.Value.World) : sortedSnapshot.OrderByDescending(x => x.Value.Name).ThenByDescending(x => x.Value.World);
-                                        else if (spec.ColumnIndex == 1)
-                                            sortedSnapshot = spec.SortDirection == ImGuiSortDirection.Ascending ? sortedSnapshot.OrderBy(x => x.Value.Count) : sortedSnapshot.OrderByDescending(x => x.Value.Count);
-                                        else
-                                            sortedSnapshot = spec.SortDirection == ImGuiSortDirection.Ascending ? sortedSnapshot.OrderBy(x => x.Value.LastSeen) : sortedSnapshot.OrderByDescending(x => x.Value.LastSeen);
-                                    }
-                                    else
-                                    {
-                                        sortedSnapshot = sortedSnapshot.OrderByDescending(x => x.Value.Count);
-                                    }
-
-                                    foreach (var kvp in sortedSnapshot)
-                                    {
-                                        ImGui.TableNextRow();
-                                        ImGui.TableNextColumn();
-                                        ImGui.TextUnformatted(kvp.Value.Name); ImGui.SameLine(0, 0); ImGui.TextUnformatted("@"); ImGui.SameLine(0, 0); ImGui.TextUnformatted(kvp.Value.World);
-                                        ImGui.TableNextColumn();
-                                        ImGui.TextUnformatted(kvp.Value.Count.ToString());
-                                        ImGui.TableNextColumn();
-                                        ImGui.TextUnformatted(kvp.Value.LastSeen.ToString("yyyy-MM-dd HH:mm:ss"));
-                                    }
-                                    ImGui.EndTable();
+                                    snapshot = new Dictionary<string, PeeperStats>(stats.PeepStats);
                                 }
-                                ImGui.Unindent(theme.PadX(0.5f));
+
+                                if (snapshot.Count == 0)
+                                {
+                                    ImGui.TextColored(theme.MutedText, "No data yet.");
+                                }
+                                else
+                                {
+                                    using (ImRaii.Child("##thruPeepChild", new Vector2(0, tableHeight), false))
+                                    {
+                                        using (ImRaii.PushIndent(theme.PadX(0.5f)))
+                                        {
+                                            using (var table3 = ImRaii.Table("##thruPeepTable_v2", 3, ImGuiTableFlags.NoBordersInBody | ImGuiTableFlags.RowBg | ImGuiTableFlags.SizingStretchProp | ImGuiTableFlags.ScrollY | ImGuiTableFlags.Sortable))
+                                            if (table3)
+                                            {
+                                                ImGui.TableSetupColumn("Player");
+                                                ImGui.TableSetupColumn("Count", ImGuiTableColumnFlags.WidthFixed | ImGuiTableColumnFlags.DefaultSort | ImGuiTableColumnFlags.PreferSortDescending, 80f);
+                                                ImGui.TableSetupColumn("Last Seen", ImGuiTableColumnFlags.WidthFixed, 140f);
+                                                ImGui.TableHeadersRow();
+
+                                                var sortSpecs = ImGui.TableGetSortSpecs();
+                                                if (sortSpecs.SpecsDirty)
+                                                {
+                                                    sortSpecs.SpecsDirty = false;
+                                                }
+                                                var sortedSnapshot = snapshot.AsEnumerable();
+                                                if (sortSpecs.SpecsCount > 0)
+                                                {
+                                                    var spec = sortSpecs.Specs;
+                                                    if (spec.ColumnIndex == 0)
+                                                        sortedSnapshot = spec.SortDirection == ImGuiSortDirection.Ascending ? sortedSnapshot.OrderBy(x => x.Value.Name).ThenBy(x => x.Value.World) : sortedSnapshot.OrderByDescending(x => x.Value.Name).ThenByDescending(x => x.Value.World);
+                                                    else if (spec.ColumnIndex == 1)
+                                                        sortedSnapshot = spec.SortDirection == ImGuiSortDirection.Ascending ? sortedSnapshot.OrderBy(x => x.Value.Count) : sortedSnapshot.OrderByDescending(x => x.Value.Count);
+                                                    else
+                                                        sortedSnapshot = spec.SortDirection == ImGuiSortDirection.Ascending ? sortedSnapshot.OrderBy(x => x.Value.LastSeen) : sortedSnapshot.OrderByDescending(x => x.Value.LastSeen);
+                                                }
+                                                else
+                                                {
+                                                    sortedSnapshot = sortedSnapshot.OrderByDescending(x => x.Value.Count);
+                                                }
+
+                                                foreach (var kvp in sortedSnapshot)
+                                                {
+                                                    ImGui.TableNextRow();
+                                                    ImGui.TableNextColumn();
+                                                    ImGui.TextUnformatted(kvp.Value.Name); ImGui.SameLine(0, 0); ImGui.TextUnformatted("@"); ImGui.SameLine(0, 0); ImGui.TextUnformatted(kvp.Value.World);
+                                                    ImGui.TableNextColumn();
+                                                    ImGui.TextUnformatted(kvp.Value.Count.ToString());
+                                                    ImGui.TableNextColumn();
+                                                    ImGui.TextUnformatted(kvp.Value.LastSeen.ToString("yyyy-MM-dd HH:mm:ss"));
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
                             }
-                            ImGui.EndChild();
-                        }
-                        ImGui.EndTabItem();
-                    }
-
-                    if (ImGui.BeginTabItem("Emotes"))
-                    {
-                        float tableHeight = 200f * ImGuiHelpers.GlobalScale;
-                        Dictionary<string, PeeperStats> snapshot;
-                        lock (stats)
-                        {
-                            snapshot = new Dictionary<string, PeeperStats>(stats.EmoteStats);
                         }
 
-                        if (snapshot.Count == 0)
+                        using (var tab4 = ImRaii.TabItem("Emotes"))
                         {
-                            ImGui.TextColored(theme.MutedText, "No data yet.");
-                        }
-                        else
-                        {
-                            if (ImGui.BeginChild("##thruEmoteChild", new Vector2(0, tableHeight), false))
+                            if (tab4)
                             {
-                                ImGui.Indent(theme.PadX(0.5f));
-                                if (ImGui.BeginTable("##thruEmoteTable_v2", 3, ImGuiTableFlags.NoBordersInBody | ImGuiTableFlags.RowBg | ImGuiTableFlags.SizingStretchProp | ImGuiTableFlags.ScrollY | ImGuiTableFlags.Sortable))
+                                float tableHeight = 200f * ImGuiHelpers.GlobalScale;
+                                Dictionary<string, PeeperStats> snapshot;
+                                lock (stats)
                                 {
-                                    ImGui.TableSetupColumn("Player");
-                                    ImGui.TableSetupColumn("Count", ImGuiTableColumnFlags.WidthFixed | ImGuiTableColumnFlags.DefaultSort | ImGuiTableColumnFlags.PreferSortDescending, 80f);
-                                    ImGui.TableSetupColumn("Last Seen", ImGuiTableColumnFlags.WidthFixed, 140f);
-                                    ImGui.TableHeadersRow();
-
-                                    var sortSpecs = ImGui.TableGetSortSpecs();
-                                    if (sortSpecs.SpecsDirty)
-                                    {
-                                        sortSpecs.SpecsDirty = false;
-                                    }
-                                    var sortedSnapshot = snapshot.AsEnumerable();
-                                    if (sortSpecs.SpecsCount > 0)
-                                    {
-                                        var spec = sortSpecs.Specs;
-                                        if (spec.ColumnIndex == 0)
-                                            sortedSnapshot = spec.SortDirection == ImGuiSortDirection.Ascending ? sortedSnapshot.OrderBy(x => x.Value.Name).ThenBy(x => x.Value.World) : sortedSnapshot.OrderByDescending(x => x.Value.Name).ThenByDescending(x => x.Value.World);
-                                        else if (spec.ColumnIndex == 1)
-                                            sortedSnapshot = spec.SortDirection == ImGuiSortDirection.Ascending ? sortedSnapshot.OrderBy(x => x.Value.Count) : sortedSnapshot.OrderByDescending(x => x.Value.Count);
-                                        else
-                                            sortedSnapshot = spec.SortDirection == ImGuiSortDirection.Ascending ? sortedSnapshot.OrderBy(x => x.Value.LastSeen) : sortedSnapshot.OrderByDescending(x => x.Value.LastSeen);
-                                    }
-                                    else
-                                    {
-                                        sortedSnapshot = sortedSnapshot.OrderByDescending(x => x.Value.Count);
-                                    }
-
-                                    foreach (var kvp in sortedSnapshot)
-                                    {
-                                        ImGui.TableNextRow();
-                                        ImGui.TableNextColumn();
-                                        ImGui.Text($"{kvp.Value.Name}@{kvp.Value.World}");
-                                        ImGui.TableNextColumn();
-                                        ImGui.Text($"{kvp.Value.Count}");
-                                        ImGui.TableNextColumn();
-                                        ImGui.Text($"{kvp.Value.LastSeen:yyyy-MM-dd HH:mm:ss}");
-                                    }
-                                    ImGui.EndTable();
+                                    snapshot = new Dictionary<string, PeeperStats>(stats.EmoteStats);
                                 }
-                                ImGui.Unindent(theme.PadX(0.5f));
-                            }
-                            ImGui.EndChild();
-                        }
-                        ImGui.EndTabItem();
-                    }
 
-                    ImGui.EndTabBar();
+                                if (snapshot.Count == 0)
+                                {
+                                    ImGui.TextColored(theme.MutedText, "No data yet.");
+                                }
+                                else
+                                {
+                                    using (ImRaii.Child("##thruEmoteChild", new Vector2(0, tableHeight), false))
+                                    {
+                                        using (ImRaii.PushIndent(theme.PadX(0.5f)))
+                                        {
+                                            using (var table4 = ImRaii.Table("##thruEmoteTable_v2", 3, ImGuiTableFlags.NoBordersInBody | ImGuiTableFlags.RowBg | ImGuiTableFlags.SizingStretchProp | ImGuiTableFlags.ScrollY | ImGuiTableFlags.Sortable))
+                                            if (table4)
+                                            {
+                                                ImGui.TableSetupColumn("Player");
+                                                ImGui.TableSetupColumn("Count", ImGuiTableColumnFlags.WidthFixed | ImGuiTableColumnFlags.DefaultSort | ImGuiTableColumnFlags.PreferSortDescending, 80f);
+                                                ImGui.TableSetupColumn("Last Seen", ImGuiTableColumnFlags.WidthFixed, 140f);
+                                                ImGui.TableHeadersRow();
+
+                                                var sortSpecs = ImGui.TableGetSortSpecs();
+                                                if (sortSpecs.SpecsDirty)
+                                                {
+                                                    sortSpecs.SpecsDirty = false;
+                                                }
+                                                var sortedSnapshot = snapshot.AsEnumerable();
+                                                if (sortSpecs.SpecsCount > 0)
+                                                {
+                                                    var spec = sortSpecs.Specs;
+                                                    if (spec.ColumnIndex == 0)
+                                                        sortedSnapshot = spec.SortDirection == ImGuiSortDirection.Ascending ? sortedSnapshot.OrderBy(x => x.Value.Name).ThenBy(x => x.Value.World) : sortedSnapshot.OrderByDescending(x => x.Value.Name).ThenByDescending(x => x.Value.World);
+                                                    else if (spec.ColumnIndex == 1)
+                                                        sortedSnapshot = spec.SortDirection == ImGuiSortDirection.Ascending ? sortedSnapshot.OrderBy(x => x.Value.Count) : sortedSnapshot.OrderByDescending(x => x.Value.Count);
+                                                    else
+                                                        sortedSnapshot = spec.SortDirection == ImGuiSortDirection.Ascending ? sortedSnapshot.OrderBy(x => x.Value.LastSeen) : sortedSnapshot.OrderByDescending(x => x.Value.LastSeen);
+                                                }
+                                                else
+                                                {
+                                                    sortedSnapshot = sortedSnapshot.OrderByDescending(x => x.Value.Count);
+                                                }
+
+                                                foreach (var kvp in sortedSnapshot)
+                                                {
+                                                    ImGui.TableNextRow();
+                                                    ImGui.TableNextColumn();
+                                                    ImGui.Text($"{kvp.Value.Name}@{kvp.Value.World}");
+                                                    ImGui.TableNextColumn();
+                                                    ImGui.Text($"{kvp.Value.Count}");
+                                                    ImGui.TableNextColumn();
+                                                    ImGui.Text($"{kvp.Value.LastSeen:yyyy-MM-dd HH:mm:ss}");
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }
         );
@@ -649,14 +663,17 @@ public class DebugTab : ConfigTabBase
                 else
                 {
                     float tableHeight = 200f * ImGuiHelpers.GlobalScale;
-                    if (ImGui.BeginChild("##lodestoneCache", new Vector2(0, tableHeight), false))
+                    using (var child = ImRaii.Child("##lodestoneCache", new Vector2(0, tableHeight), false))
+                    if (child)
                     {
-                        ImGui.Indent(theme.PadX(0.5f));
-                        if (ImGui.BeginTable("##lodestoneCacheTable", 2, ImGuiTableFlags.NoBordersInBody | ImGuiTableFlags.RowBg | ImGuiTableFlags.SizingStretchProp | ImGuiTableFlags.ScrollY))
+                        using (ImRaii.PushIndent(theme.PadX(0.5f)))
                         {
-                            ImGui.TableSetupColumn("Character", ImGuiTableColumnFlags.WidthStretch);
-                            ImGui.TableSetupColumn("Lodestone ID", ImGuiTableColumnFlags.WidthFixed, 120f);
-                            ImGui.TableHeadersRow();
+                            using (var table = ImRaii.Table("##lodestoneCacheTable", 2, ImGuiTableFlags.NoBordersInBody | ImGuiTableFlags.RowBg | ImGuiTableFlags.SizingStretchProp | ImGuiTableFlags.ScrollY))
+                            if (table)
+                            {
+                                ImGui.TableSetupColumn("Character", ImGuiTableColumnFlags.WidthStretch);
+                                ImGui.TableSetupColumn("Lodestone ID", ImGuiTableColumnFlags.WidthFixed, 120f);
+                                ImGui.TableHeadersRow();
 
                             foreach (var kvp in cache.OrderBy(x => x.Key))
                             {
@@ -666,11 +683,9 @@ public class DebugTab : ConfigTabBase
                                 ImGui.TableNextColumn();
                                 ImGui.Text(kvp.Value);
                             }
-                            ImGui.EndTable();
+                            }
                         }
-                        ImGui.Unindent(theme.PadX(0.5f));
                     }
-                    ImGui.EndChild();
                 }
             }
         );
@@ -680,236 +695,247 @@ public class DebugTab : ConfigTabBase
     {
         if (ImGui.CollapsingHeader("Internal State Inspector"))
         {
-            ImGui.Indent();
-
-            if (ImGui.TreeNode("Active Channel Mappings"))
+            using (ImRaii.PushIndent())
             {
-                if (plugin.Config.Chat.Mappings.Count == 0)
+                using (var tree1 = ImRaii.TreeNode("Active Channel Mappings"))
                 {
-                    ImGui.TextColored(theme.MutedText, "No mappings configured.");
-                }
-                else
-                {
-                    if (ImGui.BeginTable("##dbgMapTable", 2, ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg))
+                    if (tree1)
                     {
-                        ImGui.TableSetupColumn("Game Chat Type");
-                        ImGui.TableSetupColumn("Discord Channel ID");
-                        ImGui.TableHeadersRow();
-
-                        foreach (var map in plugin.Config.Chat.Mappings)
+                        if (plugin.Config.Chat.Mappings.Count == 0)
                         {
-                            ImGui.TableNextRow();
-                            ImGui.TableNextColumn();
-                            ImGui.Text(map.GameChatType.ToString());
-                            ImGui.TableNextColumn();
-                            ImGui.Text(map.DiscordChannelId);
+                            ImGui.TextColored(theme.MutedText, "No mappings configured.");
                         }
-                        ImGui.EndTable();
-                    }
-                }
-                ImGui.TreePop();
-            }
-
-
-            if (ImGui.TreeNode("Tell Thread Mappings"))
-            {
-                if (plugin.Config.Chat.TellThreadMappings.Count == 0)
-                {
-                    ImGui.TextColored(theme.MutedText, "No tell threads active.");
-                }
-                else
-                {
-                    if (ImGui.BeginTable("##dbgTellTable", 2, ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg))
-                    {
-                        ImGui.TableSetupColumn("Correspondent");
-                        ImGui.TableSetupColumn("Thread ID");
-                        ImGui.TableHeadersRow();
-
-                        foreach (var kvp in plugin.Config.Chat.TellThreadMappings)
+                        else
                         {
-                            ImGui.TableNextRow();
-                            ImGui.TableNextColumn();
-                            ImGui.Text(kvp.Key);
-                            ImGui.TableNextColumn();
-                            ImGui.Text(kvp.Value);
-                        }
-                        ImGui.EndTable();
-                    }
-                }
-                ImGui.TreePop();
-            }
-
-
-            if (ImGui.TreeNode("Custom Avatars"))
-            {
-                if (plugin.Config.Chat.CustomAvatars.Count == 0)
-                {
-                    ImGui.TextColored(theme.MutedText, "No custom avatars defined.");
-                }
-                else
-                {
-                    if (ImGui.BeginTable("##dbgAvatarTable", 2, ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg))
-                    {
-                        ImGui.TableSetupColumn("Key");
-                        ImGui.TableSetupColumn("URL");
-                        ImGui.TableHeadersRow();
-
-                        foreach (var kvp in plugin.Config.Chat.CustomAvatars)
-                        {
-                            ImGui.TableNextRow();
-                            ImGui.TableNextColumn();
-                            ImGui.Text(kvp.Key);
-                            ImGui.TableNextColumn();
-                            ImGui.Text(kvp.Value);
-                        }
-                        ImGui.EndTable();
-                    }
-                }
-                ImGui.TreePop();
-            }
-
-
-            if (ImGui.TreeNode("Discord Guilds"))
-            {
-
-                if (DateTime.Now - _lastGuildFetch > _cacheInterval || _cachedGuilds.Count == 0)
-                {
-                    _lastGuildFetch = DateTime.Now;
-                    if (plugin.Discord.Client != null)
-                    {
-                        _cachedGuilds = plugin.Discord.Client.Guilds.Values.ToList();
-                    }
-                    else
-                    {
-                        _cachedGuilds.Clear();
-                    }
-                }
-
-                if (plugin.Discord.Client != null)
-                {
-                    foreach (var guild in _cachedGuilds)
-                    {
-                        ImGui.TextUnformatted(guild.Name); ImGui.SameLine(0, 0); ImGui.TextUnformatted(" (ID: "); ImGui.SameLine(0, 0); ImGui.TextUnformatted(guild.Id.ToString()); ImGui.SameLine(0, 0); ImGui.TextUnformatted(") - Members: "); ImGui.SameLine(0, 0); ImGui.TextUnformatted(guild.MemberCount.ToString());
-                    }
-                }
-                else
-                {
-                    ImGui.TextColored(theme.MutedText, "Client not connected.");
-                }
-                ImGui.TreePop();
-            }
-
-
-            if (ImGui.TreeNode("Avatar Cache"))
-            {
-                var cache = plugin.Lodestone.AvatarCache;
-                ImGui.TextUnformatted("Cached Entries: "); ImGui.SameLine(0, 0); ImGui.TextUnformatted(cache.Count.ToString());
-
-                theme.SpacerY(1f);
-
-                ImGui.BeginGroup();
-                ImGui.Text("Name");
-                ImGui.SetNextItemWidth(120);
-                ImGui.InputText("##acName", ref newAvatarName, 32);
-                ImGui.EndGroup();
-
-                ImGui.SameLine();
-
-                ImGui.BeginGroup();
-                ImGui.Text("World");
-                ImGui.SetNextItemWidth(120);
-                ImGui.InputText("##acWorld", ref newAvatarWorld, 32);
-                ImGui.EndGroup();
-
-                ImGui.SameLine();
-
-                ImGui.BeginGroup();
-                ImGui.Text("Avatar URL");
-                ImGui.SetNextItemWidth(250);
-                ImGui.InputText("##acUrl", ref newAvatarUrl, 256);
-                ImGui.EndGroup();
-
-                ImGui.SameLine();
-
-
-                ImGui.SetCursorPosY(ImGui.GetCursorPosY() + ImGui.GetTextLineHeightWithSpacing());
-                if (ImGui.Button("Add/Update"))
-                {
-                    if (!string.IsNullOrWhiteSpace(newAvatarName) && !string.IsNullOrWhiteSpace(newAvatarWorld) && !string.IsNullOrWhiteSpace(newAvatarUrl))
-                    {
-                        var key = $"{newAvatarName}@{newAvatarWorld}";
-                        plugin.Lodestone.UpdateAvatarCache(key, newAvatarUrl);
-                        newAvatarName = "";
-                        newAvatarWorld = "";
-                        newAvatarUrl = "";
-                    }
-                }
-
-                theme.SpacerY(1f);
-
-                if (ImGui.Button("Clear Entire Cache"))
-                {
-                    plugin.Lodestone.ClearCache();
-                }
-
-                theme.SpacerY(1f);
-
-                if (cache.Count > 0)
-                {
-                    if (ImGui.BeginTable("##dbgRunAvatarTable", 3, ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.SizingStretchProp))
-                    {
-                        ImGui.TableSetupColumn("Key", ImGuiTableColumnFlags.WidthFixed, 150f);
-                        ImGui.TableSetupColumn("URL");
-                        ImGui.TableSetupColumn("Action", ImGuiTableColumnFlags.WidthFixed, 50f);
-                        ImGui.TableHeadersRow();
-
-
-                        var keys = cache.Keys.ToList();
-
-                        foreach (var key in keys)
-                        {
-                            ImGui.TableNextRow();
-                            ImGui.TableNextColumn();
-                            ImGui.Text(key);
-                            ImGui.TableNextColumn();
-                            if (cache.TryGetValue(key, out var url))
+                            using (var table = ImRaii.Table("##dbgMapTable", 2, ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg))
+                            if (table)
                             {
-                                ImGui.PushStyleColor(ImGuiCol.Text, theme.SliderGrab);
-                                ImGui.Text(url);
-                                if (ImGui.IsItemClicked())
+                                ImGui.TableSetupColumn("Game Chat Type");
+                                ImGui.TableSetupColumn("Discord Channel ID");
+                                ImGui.TableHeadersRow();
+
+                                foreach (var map in plugin.Config.Chat.Mappings)
                                 {
-                                    ImGui.SetClipboardText(url);
-                                    plugin.NotificationManager.Add(
-                                        "Cordi",
-                                        "Avatar URL copied to clipboard",
-                                        CordiNotificationType.Success
-                                    );
+                                    ImGui.TableNextRow();
+                                    ImGui.TableNextColumn();
+                                    ImGui.Text(map.GameChatType.ToString());
+                                    ImGui.TableNextColumn();
+                                    ImGui.Text(map.DiscordChannelId);
                                 }
-                                if (ImGui.IsItemHovered())
-                                {
-                                    ImGui.SetTooltip("Click to copy URL");
-                                    ImGui.SetMouseCursor(ImGuiMouseCursor.Hand);
-                                }
-                                ImGui.PopStyleColor();
-                            }
-                            ImGui.TableNextColumn();
-                            if (ImGui.Button($"X##rem{key}"))
-                            {
-                                plugin.Lodestone.InvalidateAvatarCache(key);
                             }
                         }
-                        ImGui.EndTable();
                     }
                 }
-                else
+
+
+                using (var tree2 = ImRaii.TreeNode("Tell Thread Mappings"))
                 {
-                    ImGui.TextColored(theme.MutedText, "Cache is empty.");
+                    if (tree2)
+                    {
+                        if (plugin.Config.Chat.TellThreadMappings.Count == 0)
+                        {
+                            ImGui.TextColored(theme.MutedText, "No tell threads active.");
+                        }
+                        else
+                        {
+                            using (var table = ImRaii.Table("##dbgTellTable", 2, ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg))
+                            if (table)
+                            {
+                                ImGui.TableSetupColumn("Correspondent");
+                                ImGui.TableSetupColumn("Thread ID");
+                                ImGui.TableHeadersRow();
+
+                                foreach (var kvp in plugin.Config.Chat.TellThreadMappings)
+                                {
+                                    ImGui.TableNextRow();
+                                    ImGui.TableNextColumn();
+                                    ImGui.Text(kvp.Key);
+                                    ImGui.TableNextColumn();
+                                    ImGui.Text(kvp.Value);
+                                }
+                            }
+                        }
+                    }
                 }
 
-                ImGui.TreePop();
-            }
 
-            ImGui.Unindent();
+                using (var tree3 = ImRaii.TreeNode("Custom Avatars"))
+                {
+                    if (tree3)
+                    {
+                        if (plugin.Config.Chat.CustomAvatars.Count == 0)
+                        {
+                            ImGui.TextColored(theme.MutedText, "No custom avatars defined.");
+                        }
+                        else
+                        {
+                            using (var table = ImRaii.Table("##dbgAvatarTable", 2, ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg))
+                            if (table)
+                            {
+                                ImGui.TableSetupColumn("Key");
+                                ImGui.TableSetupColumn("URL");
+                                ImGui.TableHeadersRow();
+
+                                foreach (var kvp in plugin.Config.Chat.CustomAvatars)
+                                {
+                                    ImGui.TableNextRow();
+                                    ImGui.TableNextColumn();
+                                    ImGui.Text(kvp.Key);
+                                    ImGui.TableNextColumn();
+                                    ImGui.Text(kvp.Value);
+                                }
+                            }
+                        }
+                    }
+                }
+
+
+                using (var tree4 = ImRaii.TreeNode("Discord Guilds"))
+                {
+                    if (tree4)
+                    {
+                        if (DateTime.Now - _lastGuildFetch > _cacheInterval || _cachedGuilds.Count == 0)
+                        {
+                            _lastGuildFetch = DateTime.Now;
+                            if (plugin.Discord.Client != null)
+                            {
+                                _cachedGuilds = plugin.Discord.Client.Guilds.Values.ToList();
+                            }
+                            else
+                            {
+                                _cachedGuilds.Clear();
+                            }
+                        }
+
+                        if (plugin.Discord.Client != null)
+                        {
+                            foreach (var guild in _cachedGuilds)
+                            {
+                                ImGui.TextUnformatted(guild.Name); ImGui.SameLine(0, 0); ImGui.TextUnformatted(" (ID: "); ImGui.SameLine(0, 0); ImGui.TextUnformatted(guild.Id.ToString()); ImGui.SameLine(0, 0); ImGui.TextUnformatted(") - Members: "); ImGui.SameLine(0, 0); ImGui.TextUnformatted(guild.MemberCount.ToString());
+                            }
+                        }
+                        else
+                        {
+                            ImGui.TextColored(theme.MutedText, "Client not connected.");
+                        }
+                    }
+                }
+
+
+                using (var tree5 = ImRaii.TreeNode("Avatar Cache"))
+                {
+                    if (tree5)
+                    {
+                        var cache = plugin.Lodestone.AvatarCache;
+                        ImGui.TextUnformatted("Cached Entries: "); ImGui.SameLine(0, 0); ImGui.TextUnformatted(cache.Count.ToString());
+
+                        theme.SpacerY(1f);
+
+                        using (ImRaii.Group())
+                        {
+                            ImGui.Text("Name");
+                            ImGui.SetNextItemWidth(120);
+                            ImGui.InputText("##acName", ref newAvatarName, 32);
+                        }
+
+                        ImGui.SameLine();
+
+                        using (ImRaii.Group())
+                        {
+                            ImGui.Text("World");
+                            ImGui.SetNextItemWidth(120);
+                            ImGui.InputText("##acWorld", ref newAvatarWorld, 32);
+                        }
+
+                        ImGui.SameLine();
+
+                        using (ImRaii.Group())
+                        {
+                            ImGui.Text("Avatar URL");
+                            ImGui.SetNextItemWidth(250);
+                            ImGui.InputText("##acUrl", ref newAvatarUrl, 256);
+                        }
+
+                        ImGui.SameLine();
+
+
+                        ImGui.SetCursorPosY(ImGui.GetCursorPosY() + ImGui.GetTextLineHeightWithSpacing());
+                        if (ImGui.Button("Add/Update"))
+                        {
+                            if (!string.IsNullOrWhiteSpace(newAvatarName) && !string.IsNullOrWhiteSpace(newAvatarWorld) && !string.IsNullOrWhiteSpace(newAvatarUrl))
+                            {
+                                var key = $"{newAvatarName}@{newAvatarWorld}";
+                                plugin.Lodestone.UpdateAvatarCache(key, newAvatarUrl);
+                                newAvatarName = "";
+                                newAvatarWorld = "";
+                                newAvatarUrl = "";
+                            }
+                        }
+
+                        theme.SpacerY(1f);
+
+                        if (ImGui.Button("Clear Entire Cache"))
+                        {
+                            plugin.Lodestone.ClearCache();
+                        }
+
+                        theme.SpacerY(1f);
+
+                        if (cache.Count > 0)
+                        {
+                            using (var table = ImRaii.Table("##dbgRunAvatarTable", 3, ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.SizingStretchProp))
+                            if (table)
+                            {
+                                ImGui.TableSetupColumn("Key", ImGuiTableColumnFlags.WidthFixed, 150f);
+                                ImGui.TableSetupColumn("URL");
+                                ImGui.TableSetupColumn("Action", ImGuiTableColumnFlags.WidthFixed, 50f);
+                                ImGui.TableHeadersRow();
+
+
+                                var keys = cache.Keys.ToList();
+
+                                foreach (var key in keys)
+                                {
+                                    ImGui.TableNextRow();
+                                    ImGui.TableNextColumn();
+                                    ImGui.Text(key);
+                                    ImGui.TableNextColumn();
+                                    if (cache.TryGetValue(key, out var url))
+                                    {
+                                        using (ImRaii.PushColor(ImGuiCol.Text, theme.SliderGrab))
+                                        {
+                                            ImGui.Text(url);
+                                            if (ImGui.IsItemClicked())
+                                            {
+                                                ImGui.SetClipboardText(url);
+                                                plugin.NotificationManager.Add(
+                                                    "Cordi",
+                                                    "Avatar URL copied to clipboard",
+                                                    CordiNotificationType.Success
+                                                );
+                                            }
+                                            if (ImGui.IsItemHovered())
+                                            {
+                                                ImGui.SetTooltip("Click to copy URL");
+                                                ImGui.SetMouseCursor(ImGuiMouseCursor.Hand);
+                                            }
+                                        }
+                                    }
+                                    ImGui.TableNextColumn();
+                                    if (ImGui.Button($"X##rem{key}"))
+                                    {
+                                        plugin.Lodestone.InvalidateAvatarCache(key);
+                                    }
+                                }
+                            }
+                        }
+                        else
+                        {
+                            ImGui.TextColored(theme.MutedText, "Cache is empty.");
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -930,42 +956,48 @@ public class DebugTab : ConfigTabBase
 
                 theme.SpacerY(0.5f);
 
-                if (ImGui.BeginTabBar("##emoteLogDebugTabs"))
+                using (var tabBar = ImRaii.TabBar("##emoteLogDebugTabs"))
+                if (tabBar)
                 {
 
-                    if (ImGui.BeginTabItem("Simulation"))
+                    using (var tabItem1 = ImRaii.TabItem("Simulation"))
+                    if (tabItem1)
                     {
                         ImGui.Text("Simulate Incoming Emote (as if from another player)");
 
-                        ImGui.BeginGroup();
-                        ImGui.Text("Peeper Name");
-                        ImGui.SetNextItemWidth(150);
-                        ImGui.InputText("##dmgEmPName", ref _debugName, 64);
-                        ImGui.EndGroup();
+                        using (var group1 = ImRaii.Group())
+                        {
+                            ImGui.Text("Peeper Name");
+                            ImGui.SetNextItemWidth(150);
+                            ImGui.InputText("##dmgEmPName", ref _debugName, 64);
+                        }
 
                         ImGui.SameLine();
 
-                        ImGui.BeginGroup();
-                        ImGui.Text("Peeper World");
-                        ImGui.SetNextItemWidth(150);
-                        ImGui.InputText("##dbgEmPWorld", ref _debugWorld, 64);
-                        ImGui.EndGroup();
+                        using (var group2 = ImRaii.Group())
+                        {
+                            ImGui.Text("Peeper World");
+                            ImGui.SetNextItemWidth(150);
+                            ImGui.InputText("##dbgEmPWorld", ref _debugWorld, 64);
+                        }
 
                         theme.SpacerY(0.5f);
 
-                        ImGui.BeginGroup();
-                        ImGui.Text("Emote Name");
-                        ImGui.SetNextItemWidth(150);
-                        ImGui.InputText("##dbgEmName", ref _debugEmoteName, 64);
-                        ImGui.EndGroup();
+                        using (var group3 = ImRaii.Group())
+                        {
+                            ImGui.Text("Emote Name");
+                            ImGui.SetNextItemWidth(150);
+                            ImGui.InputText("##dbgEmName", ref _debugEmoteName, 64);
+                        }
 
                         ImGui.SameLine();
 
-                        ImGui.BeginGroup();
-                        ImGui.Text("Command");
-                        ImGui.SetNextItemWidth(150);
-                        ImGui.InputText("##dbgEmCmd", ref _debugEmoteCommand, 64);
-                        ImGui.EndGroup();
+                        using (var group4_inner = ImRaii.Group()) // Renamed to avoid conflict with outer group4
+                        {
+                            ImGui.Text("Command");
+                            ImGui.SetNextItemWidth(150);
+                            ImGui.InputText("##dbgEmCmd", ref _debugEmoteCommand, 64);
+                        }
 
                         theme.SpacerY(0.5f);
 
@@ -973,17 +1005,17 @@ public class DebugTab : ConfigTabBase
                         {
                             plugin.EmoteLog.SimulateEmote(_debugName, _debugWorld, _debugEmoteName, _debugEmoteCommand);
                         }
-
-                        ImGui.EndTabItem();
                     }
 
 
-                    if (ImGui.BeginTabItem("Active Discord Emotes"))
+                    using (var tabItem2 = ImRaii.TabItem("Active Discord Emotes"))
+                    if (tabItem2)
                     {
                         var active = plugin.EmoteLog.ActiveDiscordEmotes;
                         ImGui.TextUnformatted("Active Tracking Count: "); ImGui.SameLine(0, 0); ImGui.TextUnformatted(active.Count.ToString());
 
-                        if (ImGui.BeginTable("##dbgActiveEmotes", 5, ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.SizingStretchProp))
+                        using (var table1 = ImRaii.Table("##dbgActiveEmotes", 5, ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.SizingStretchProp))
+                        if (table1)
                         {
                             ImGui.TableSetupColumn("Key");
                             ImGui.TableSetupColumn("User");
@@ -1006,17 +1038,17 @@ public class DebugTab : ConfigTabBase
                                 ImGui.TableNextColumn();
                                 ImGui.Text(kvp.Value.MessageId.ToString());
                             }
-                            ImGui.EndTable();
                         }
-                        ImGui.EndTabItem();
                     }
 
-                    if (ImGui.BeginTabItem("Message ID Cache"))
+                    using (var tabItem3 = ImRaii.TabItem("Message ID Cache"))
+                    if (tabItem3)
                     {
                         var cache = plugin.EmoteLog.MessageIdCache;
                         ImGui.TextUnformatted("Cache Size: "); ImGui.SameLine(0, 0); ImGui.TextUnformatted(cache.Count.ToString());
 
-                        if (ImGui.BeginTable("##dbgMsgCache", 4, ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.SizingStretchProp))
+                        using (var table2 = ImRaii.Table("##dbgMsgCache", 4, ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.SizingStretchProp))
+                        if (table2)
                         {
                             ImGui.TableSetupColumn("Message ID");
                             ImGui.TableSetupColumn("User");
@@ -1037,12 +1069,8 @@ public class DebugTab : ConfigTabBase
                                 ImGui.Text(kvp.Value.EmotedBack ? "YES" : "NO");
                                 if (kvp.Value.EmotedBack) ImGui.TextColored(UiTheme.ColorSuccessText, "Done");
                             }
-                            ImGui.EndTable();
                         }
-                        ImGui.EndTabItem();
                     }
-
-                    ImGui.EndTabBar();
                 }
             }
         );

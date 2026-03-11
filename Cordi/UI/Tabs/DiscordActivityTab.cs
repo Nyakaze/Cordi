@@ -6,6 +6,7 @@ using Dalamud.Interface.Utility;
 using System.Linq;
 using System.Collections.Generic;
 using Dalamud.Bindings.ImGui;
+using Dalamud.Interface.Utility.Raii;
 using DSharpPlus.Entities;
 
 using Cordi.Configuration;
@@ -101,43 +102,43 @@ public class DiscordActivityTab : ConfigTabBase
             theme.MutedLabel("Define special formats for specific games by name.");
             theme.SpacerY(0.5f);
 
-            if (ImGui.BeginTable("GamesTable", 2, ImGuiTableFlags.SizingStretchProp))
+            using (var table = ImRaii.Table("GamesTable", 2, ImGuiTableFlags.SizingStretchProp))
             {
-                ImGui.TableSetupColumn("Game Name", ImGuiTableColumnFlags.WidthStretch);
-                ImGui.TableSetupColumn("##Action", ImGuiTableColumnFlags.WidthFixed, 100f * ImGuiHelpers.GlobalScale);
-
-                string gameToRemove = null;
-                List<string> games = config.GameConfigs.Keys.ToList();
-
-                for (int i = 0; i < games.Count; i++)
+                if (table)
                 {
-                    var game = games[i];
-                    ImGui.TableNextRow();
-                    ImGui.TableNextColumn();
-                    bool nodeOpen = ImGui.TreeNodeEx($"##GameNode_{i}", ImGuiTreeNodeFlags.SpanAvailWidth, game);
+                    ImGui.TableSetupColumn("Game Name", ImGuiTableColumnFlags.WidthStretch);
+                    ImGui.TableSetupColumn("##Action", ImGuiTableColumnFlags.WidthFixed, 100f * ImGuiHelpers.GlobalScale);
 
-                    ImGui.TableNextColumn();
-                    if (ImGui.Button($"Delete##DelGame_{i}")) gameToRemove = game;
+                    string gameToRemove = null;
+                    List<string> games = config.GameConfigs.Keys.ToList();
 
-                    if (nodeOpen)
+                    for (int i = 0; i < games.Count; i++)
                     {
+                        var game = games[i];
                         ImGui.TableNextRow();
                         ImGui.TableNextColumn();
-                        // Spanning both columns for the editor
-                        ImGui.TableSetColumnIndex(0);
+                        using var node = ImRaii.TreeNode($"{game}###GameNode_{i}", ImGuiTreeNodeFlags.SpanAvailWidth);
 
-                        var gameConf = config.GameConfigs[game];
-                        DrawTypeCardInner(gameConf, $"Settings: {game}", ref changed, showLimits: false);
+                        ImGui.TableNextColumn();
+                        if (ImGui.Button($"Delete##DelGame_{i}")) gameToRemove = game;
 
-                        ImGui.TreePop();
+                        if (node)
+                        {
+                            ImGui.TableNextRow();
+                            ImGui.TableNextColumn();
+                            // Spanning both columns for the editor
+                            ImGui.TableSetColumnIndex(0);
+
+                            var gameConf = config.GameConfigs[game];
+                            DrawTypeCardInner(gameConf, $"Settings: {game}", ref changed, showLimits: false);
+                        }
                     }
-                }
-                ImGui.EndTable();
 
-                if (gameToRemove != null)
-                {
-                    config.GameConfigs.Remove(gameToRemove);
-                    changed = true;
+                    if (gameToRemove != null)
+                    {
+                        config.GameConfigs.Remove(gameToRemove);
+                        changed = true;
+                    }
                 }
             }
 
@@ -196,46 +197,47 @@ public class DiscordActivityTab : ConfigTabBase
                 string? newKeyVal = null;
 
                 float tableHeight = 150f * ImGuiHelpers.GlobalScale;
-                if (ImGui.BeginChild("ReplacementsList", new Vector2(0, tableHeight), true))
+                using (var child = ImRaii.Child("ReplacementsList", new Vector2(0, tableHeight), true))
                 {
-
-                    if (ImGui.BeginTable("RepTable", 3, ImGuiTableFlags.SizingStretchProp))
+                    if (child)
                     {
-                        ImGui.TableSetupColumn("Original Text");
-                        ImGui.TableSetupColumn("Replacement");
-                        ImGui.TableSetupColumn("##Del", ImGuiTableColumnFlags.WidthFixed, 30f);
-
-                        for (int i = 0; i < keys.Count; i++)
+                        using var table = ImRaii.Table("RepTable", 3, ImGuiTableFlags.SizingStretchProp);
+                        if (table)
                         {
-                            var key = keys[i];
-                            ImGui.TableNextRow();
+                            ImGui.TableSetupColumn("Original Text");
+                            ImGui.TableSetupColumn("Replacement");
+                            ImGui.TableSetupColumn("##Del", ImGuiTableColumnFlags.WidthFixed, 30f);
 
-                            ImGui.TableNextColumn();
-                            string k = key;
-                            ImGui.SetNextItemWidth(-1);
-                            if (ImGui.InputText($"##Key_{i}", ref k, 50))
+                            for (int i = 0; i < keys.Count; i++)
                             {
-                                keyToRename = key;
-                                newKeyVal = k;
-                            }
+                                var key = keys[i];
+                                ImGui.TableNextRow();
 
-                            ImGui.TableNextColumn();
-                            string val = config.Replacements[key];
-                            ImGui.SetNextItemWidth(-1);
-                            if (ImGui.InputText($"##Val_{i}", ref val, 50))
-                            {
-                                config.Replacements[key] = val;
-                                changed = true;
-                            }
+                                ImGui.TableNextColumn();
+                                string k = key;
+                                ImGui.SetNextItemWidth(-1);
+                                if (ImGui.InputText($"##Key_{i}", ref k, 50))
+                                {
+                                    keyToRename = key;
+                                    newKeyVal = k;
+                                }
 
-                            ImGui.TableNextColumn();
-                            if (ImGui.Button($"X##Del_{i}")) keyToDelete = key;
-                            theme.HoverHandIfItem();
+                                ImGui.TableNextColumn();
+                                string val = config.Replacements[key];
+                                ImGui.SetNextItemWidth(-1);
+                                if (ImGui.InputText($"##Val_{i}", ref val, 50))
+                                {
+                                    config.Replacements[key] = val;
+                                    changed = true;
+                                }
+
+                                ImGui.TableNextColumn();
+                                if (ImGui.Button($"X##Del_{i}")) keyToDelete = key;
+                                theme.HoverHandIfItem();
+                            }
                         }
-                        ImGui.EndTable();
                     }
                 }
-                ImGui.EndChild();
 
                 if (keyToRename != null && newKeyVal != null && keyToRename != newKeyVal)
                 {
@@ -348,41 +350,42 @@ public class DiscordActivityTab : ConfigTabBase
 
         if (cycle)
         {
-            ImGui.Indent();
+            using var indent = ImRaii.PushIndent();
             if (conf.CycleFormats == null) conf.CycleFormats = new();
 
-            if (ImGui.BeginTable($"##CycleFmts_{label.GetHashCode()}", 2, ImGuiTableFlags.SizingStretchProp | ImGuiTableFlags.BordersInnerV))
+            using (var table = ImRaii.Table($"##CycleFmts_{label.GetHashCode()}", 2, ImGuiTableFlags.SizingStretchProp | ImGuiTableFlags.BordersInnerV))
             {
-                ImGui.TableSetupColumn("Format String", ImGuiTableColumnFlags.WidthStretch);
-                ImGui.TableSetupColumn("##Action", ImGuiTableColumnFlags.WidthFixed, 30);
-
-                int formatToDelete = -1;
-                for (int i = 0; i < conf.CycleFormats.Count; i++)
+                if (table)
                 {
-                    ImGui.TableNextRow();
-                    ImGui.TableNextColumn();
-                    string fmtStr = conf.CycleFormats[i];
-                    ImGui.SetNextItemWidth(-1);
-                    if (ImGui.InputText($"##CycleFmt_{label.GetHashCode()}_{i}", ref fmtStr, 128))
+                    ImGui.TableSetupColumn("Format String", ImGuiTableColumnFlags.WidthStretch);
+                    ImGui.TableSetupColumn("##Action", ImGuiTableColumnFlags.WidthFixed, 30);
+
+                    int formatToDelete = -1;
+                    for (int i = 0; i < conf.CycleFormats.Count; i++)
                     {
-                        conf.CycleFormats[i] = fmtStr;
+                        ImGui.TableNextRow();
+                        ImGui.TableNextColumn();
+                        string fmtStr = conf.CycleFormats[i];
+                        ImGui.SetNextItemWidth(-1);
+                        if (ImGui.InputText($"##CycleFmt_{label.GetHashCode()}_{i}", ref fmtStr, 128))
+                        {
+                            conf.CycleFormats[i] = fmtStr;
+                            localChanged = true;
+                        }
+
+                        ImGui.TableNextColumn();
+                        if (ImGui.Button($"X##DelCycleFmt_{label.GetHashCode()}_{i}"))
+                        {
+                            formatToDelete = i;
+                        }
+                    }
+
+                    if (formatToDelete != -1)
+                    {
+                        conf.CycleFormats.RemoveAt(formatToDelete);
                         localChanged = true;
                     }
-
-                    ImGui.TableNextColumn();
-                    if (ImGui.Button($"X##DelCycleFmt_{label.GetHashCode()}_{i}"))
-                    {
-                        formatToDelete = i;
-                    }
                 }
-
-                if (formatToDelete != -1)
-                {
-                    conf.CycleFormats.RemoveAt(formatToDelete);
-                    localChanged = true;
-                }
-
-                ImGui.EndTable();
             }
 
             if (theme.SecondaryButton($"+ Add Cycle Format##{label.GetHashCode()}"))
@@ -396,7 +399,6 @@ public class DiscordActivityTab : ConfigTabBase
             int interval = conf.CycleIntervalSeconds;
             ImGui.SetNextItemWidth(100f * ImGuiHelpers.GlobalScale);
             if (ImGui.DragInt($"##Int_{label.GetHashCode()}", ref interval, 1, 3, 300)) { conf.CycleIntervalSeconds = interval; localChanged = true; }
-            ImGui.Unindent();
         }
 
         if (showLimits)
@@ -406,129 +408,130 @@ public class DiscordActivityTab : ConfigTabBase
             theme.SpacerY(0.5f);
 
             ImGui.Text("Lists / Limits");
-            ImGui.BeginGroup();
-            ImGui.Text("Track Limit");
-            ImGui.SameLine();
-            int tLim = conf.TrackLimit;
-            ImGui.SetNextItemWidth(80f * ImGuiHelpers.GlobalScale);
-            if (ImGui.InputInt($"##TLim_{label.GetHashCode()}", ref tLim)) { conf.TrackLimit = Math.Max(0, tLim); localChanged = true; }
+            using (var group1 = ImRaii.Group())
+            {
+                ImGui.Text("Track Limit");
+                ImGui.SameLine();
+                int tLim = conf.TrackLimit;
+                ImGui.SetNextItemWidth(80f * ImGuiHelpers.GlobalScale);
+                if (ImGui.InputInt($"##TLim_{label.GetHashCode()}", ref tLim)) { conf.TrackLimit = Math.Max(0, tLim); localChanged = true; }
 
-            ImGui.SameLine();
-            theme.SpacerX(1f);
-            ImGui.SameLine();
+                ImGui.SameLine();
+                theme.SpacerX(1f);
+                ImGui.SameLine();
 
-            ImGui.Text("Artist Limit");
-            ImGui.SameLine();
-            int aLim = conf.ArtistLimit;
-            ImGui.SetNextItemWidth(80f * ImGuiHelpers.GlobalScale);
-            if (ImGui.InputInt($"##ALim_{label.GetHashCode()}", ref aLim)) { conf.ArtistLimit = Math.Max(0, aLim); localChanged = true; }
-            ImGui.EndGroup();
+                ImGui.Text("Artist Limit");
+                ImGui.SameLine();
+                int aLim = conf.ArtistLimit;
+                ImGui.SetNextItemWidth(80f * ImGuiHelpers.GlobalScale);
+                if (ImGui.InputInt($"##ALim_{label.GetHashCode()}", ref aLim)) { conf.ArtistLimit = Math.Max(0, aLim); localChanged = true; }
+            }
+
+            theme.SpacerY(0.5f);
+            ImGui.Separator();
+            theme.SpacerY(0.5f);
         }
-
-        theme.SpacerY(0.5f);
-        ImGui.Separator();
-        theme.SpacerY(0.5f);
 
         ImGui.Text("Title Colors");
-        ImGui.BeginGroup();
-
-        Vector3? cVal = conf.Color;
-        bool hasColor = cVal.HasValue;
-        if (ImGui.Checkbox($"Override Color##{label.GetHashCode()}", ref hasColor))
+        using (var group2 = ImRaii.Group())
         {
-            conf.Color = hasColor ? new Vector3(1, 1, 1) : null;
-            localChanged = true;
-        }
-        theme.HoverHandIfItem();
-        if (hasColor)
-        {
-            ImGui.SameLine();
-            Vector3 col = conf.Color ?? new Vector3(1, 1, 1);
-            if (ImGui.ColorEdit3($"##ColPick_{label.GetHashCode()}", ref col, ImGuiColorEditFlags.NoInputs))
+            Vector3? cVal = conf.Color;
+            bool hasColor = cVal.HasValue;
+            if (ImGui.Checkbox($"Override Color##{label.GetHashCode()}", ref hasColor))
             {
-                conf.Color = col;
+                conf.Color = hasColor ? new Vector3(1, 1, 1) : null;
                 localChanged = true;
             }
             theme.HoverHandIfItem();
-        }
-
-        ImGui.SameLine();
-        theme.SpacerX(2f);
-        ImGui.SameLine();
-
-        Vector3? gVal = conf.Glow;
-        bool hasGlow = gVal.HasValue;
-        if (ImGui.Checkbox($"Override Glow##{label.GetHashCode()}", ref hasGlow))
-        {
-            conf.Glow = hasGlow ? new Vector3(1, 1, 1) : null;
-            localChanged = true;
-        }
-        theme.HoverHandIfItem();
-        if (hasGlow)
-        {
-            ImGui.SameLine();
-            Vector3 glo = conf.Glow ?? new Vector3(1, 1, 1);
-            if (ImGui.ColorEdit3($"##GlowPick_{label.GetHashCode()}", ref glo, ImGuiColorEditFlags.NoInputs))
+            if (hasColor)
             {
-                conf.Glow = glo;
+                ImGui.SameLine();
+                Vector3 col = conf.Color ?? new Vector3(1, 1, 1);
+                if (ImGui.ColorEdit3($"##ColPick_{label.GetHashCode()}", ref col, ImGuiColorEditFlags.NoInputs))
+                {
+                    conf.Color = col;
+                    localChanged = true;
+                }
+                theme.HoverHandIfItem();
+            }
+
+            ImGui.SameLine();
+            theme.SpacerX(2f);
+            ImGui.SameLine();
+
+            Vector3? gVal = conf.Glow;
+            bool hasGlow = gVal.HasValue;
+            if (ImGui.Checkbox($"Override Glow##{label.GetHashCode()}", ref hasGlow))
+            {
+                conf.Glow = hasGlow ? new Vector3(1, 1, 1) : null;
                 localChanged = true;
             }
             theme.HoverHandIfItem();
+            if (hasGlow)
+            {
+                ImGui.SameLine();
+                Vector3 glo = conf.Glow ?? new Vector3(1, 1, 1);
+                if (ImGui.ColorEdit3($"##GlowPick_{label.GetHashCode()}", ref glo, ImGuiColorEditFlags.NoInputs))
+                {
+                    conf.Glow = glo;
+                    localChanged = true;
+                }
+                theme.HoverHandIfItem();
+            }
         }
-        ImGui.EndGroup();
 
         theme.SpacerY(0.5f);
         ImGui.Separator();
         theme.SpacerY(0.5f);
 
         ImGui.Text("Gradient Title");
-        ImGui.BeginGroup();
-
-        bool hasGradient = conf.GradientColourSet.HasValue;
-        if (ImGui.Checkbox($"Enable Gradient##{label.GetHashCode()}_grad", ref hasGradient))
+        using (var group3 = ImRaii.Group())
         {
-            conf.GradientColourSet = hasGradient ? 0 : null;
-            conf.GradientAnimationStyle = hasGradient ? 0 : null;
-            localChanged = true;
-        }
-        theme.HoverHandIfItem();
-
-        if (hasGradient)
-        {
-            ImGui.SameLine();
-            theme.SpacerX(1f);
-            ImGui.SameLine();
-
-            int preset = conf.GradientColourSet ?? 0;
-            ImGui.Text("Preset");
-            ImGui.SameLine();
-            ImGui.SetNextItemWidth(80f * ImGuiHelpers.GlobalScale);
-            if (ImGui.InputInt($"##GradPreset_{label.GetHashCode()}", ref preset))
+            bool hasGradient = conf.GradientColourSet.HasValue;
+            if (ImGui.Checkbox($"Enable Gradient##{label.GetHashCode()}_grad", ref hasGradient))
             {
-                if (preset < -1) preset = -1;
-                conf.GradientColourSet = preset;
-                localChanged = true;
-            }
-            if (ImGui.IsItemHovered()) ImGui.SetTooltip("Gradient colour set index from Honorific.\n-1 = Two Colour Gradient (uses the Override Color & Glow above as gradient colours).");
-
-            ImGui.SameLine();
-            theme.SpacerX(1f);
-            ImGui.SameLine();
-
-            string[] animStyles = { "Pulse", "Wave", "Static" };
-            int animIdx = conf.GradientAnimationStyle ?? 0;
-            if (animIdx < 0 || animIdx >= animStyles.Length) animIdx = 0;
-            ImGui.Text("Animation");
-            ImGui.SameLine();
-            ImGui.SetNextItemWidth(100f * ImGuiHelpers.GlobalScale);
-            if (ImGui.Combo($"##GradAnim_{label.GetHashCode()}", ref animIdx, animStyles, animStyles.Length))
-            {
-                conf.GradientAnimationStyle = animIdx;
+                conf.GradientColourSet = hasGradient ? 0 : null;
+                conf.GradientAnimationStyle = hasGradient ? 0 : null;
                 localChanged = true;
             }
             theme.HoverHandIfItem();
+
+            if (hasGradient)
+            {
+                ImGui.SameLine();
+                theme.SpacerX(1f);
+                ImGui.SameLine();
+
+                int preset = conf.GradientColourSet ?? 0;
+                ImGui.Text("Preset");
+                ImGui.SameLine();
+                ImGui.SetNextItemWidth(80f * ImGuiHelpers.GlobalScale);
+                if (ImGui.InputInt($"##GradPreset_{label.GetHashCode()}", ref preset))
+                {
+                    if (preset < -1) preset = -1;
+                    conf.GradientColourSet = preset;
+                    localChanged = true;
+                }
+                if (ImGui.IsItemHovered()) ImGui.SetTooltip("Gradient colour set index from Honorific.\n-1 = Two Colour Gradient (uses the Override Color & Glow above as gradient colours).");
+
+                ImGui.SameLine();
+                theme.SpacerX(1f);
+                ImGui.SameLine();
+
+                string[] animStyles = { "Pulse", "Wave", "Static" };
+                int animIdx = conf.GradientAnimationStyle ?? 0;
+                if (animIdx < 0 || animIdx >= animStyles.Length) animIdx = 0;
+                ImGui.Text("Animation");
+                ImGui.SameLine();
+                ImGui.SetNextItemWidth(100f * ImGuiHelpers.GlobalScale);
+                if (ImGui.Combo($"##GradAnim_{label.GetHashCode()}", ref animIdx, animStyles, animStyles.Length))
+                {
+                    conf.GradientAnimationStyle = animIdx;
+                    localChanged = true;
+                }
+                theme.HoverHandIfItem();
+            }
         }
-        ImGui.EndGroup();
 
         if (localChanged) changed = true;
     }

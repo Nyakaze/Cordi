@@ -6,6 +6,7 @@ using System.Numerics;
 using Dalamud.Game.Text;
 using Dalamud.Interface;
 using Dalamud.Interface.Utility;
+using Dalamud.Interface.Utility.Raii;
 using DSharpPlus;
 using DSharpPlus.Entities;
 using Dalamud.Bindings.ImGui;
@@ -160,13 +161,14 @@ public class ChatsTab : ConfigTabBase
                 else
                 {
 
-                    ImGui.PushItemWidth(availWidth);
-                    bool changed = ImGui.InputText("##dsc-default-channel-id", ref defaultChannelId, 32);
-                    ImGui.PopItemWidth();
-                    if (changed)
+                    using (ImRaii.ItemWidth(availWidth))
                     {
-                        plugin.Config.Discord.DefaultChannelId = defaultChannelId;
-                        plugin.Config.Save();
+                        bool changed = ImGui.InputText("##dsc-default-channel-id", ref defaultChannelId, 32);
+                        if (changed)
+                        {
+                            plugin.Config.Discord.DefaultChannelId = defaultChannelId;
+                            plugin.Config.Save();
+                        }
                     }
                 }
                 theme.HoverHandIfItem();
@@ -196,7 +198,8 @@ public class ChatsTab : ConfigTabBase
 
                theme.SpacerY(1f);
 
-               if (ImGui.BeginTable("##extraChatMappingsTable", 4, ImGuiTableFlags.BordersInnerH | ImGuiTableFlags.SizingStretchProp))
+               using (var table = ImRaii.Table("##extraChatMappingsTable", 4, ImGuiTableFlags.BordersInnerH | ImGuiTableFlags.SizingStretchProp))
+               if (table)
                {
                    ImGui.TableSetupColumn("Label (e.g. ECLS1)", ImGuiTableColumnFlags.WidthFixed, 150f);
                    ImGui.TableSetupColumn("Channel", ImGuiTableColumnFlags.WidthFixed, 70f);
@@ -254,21 +257,19 @@ public class ChatsTab : ConfigTabBase
 
                        ImGui.TableNextColumn();
 
-                       ImGui.PushFont(Dalamud.Interface.UiBuilder.IconFont);
-                       ImGui.PushStyleColor(ImGuiCol.Button, new Vector4(0.56f, 0f, 0f, 1f));
-                       ImGui.PushStyleColor(ImGuiCol.ButtonHovered, new Vector4(0.7f, 0.1f, 0.1f, 1f));
-                       ImGui.PushStyleColor(ImGuiCol.ButtonActive, new Vector4(0.4f, 0f, 0f, 1f));
-                       if (theme.Button($"{FontAwesomeIcon.Trash.ToIconString()}##del-{key}"))
+                       using (ImRaii.PushFont(Dalamud.Interface.UiBuilder.IconFont))
+                       using (ImRaii.PushColor(ImGuiCol.Button, new Vector4(0.56f, 0f, 0f, 1f)))
+                       using (ImRaii.PushColor(ImGuiCol.ButtonHovered, new Vector4(0.7f, 0.1f, 0.1f, 1f)))
+                       using (ImRaii.PushColor(ImGuiCol.ButtonActive, new Vector4(0.4f, 0f, 0f, 1f)))
                        {
-                           mappings.Remove(key);
-                           plugin.Config.Save();
+                           if (theme.Button($"{FontAwesomeIcon.Trash.ToIconString()}##del-{key}"))
+                           {
+                               mappings.Remove(key);
+                               plugin.Config.Save();
+                           }
                        }
-                       ImGui.PopStyleColor(3);
-                       ImGui.PopFont();
                        if (ImGui.IsItemHovered()) ImGui.SetTooltip("Remove Mapping");
                    }
-
-                   ImGui.EndTable();
 
                    float availW = ImGui.GetContentRegionAvail().X;
                    float btnW = availW * 0.95f;
@@ -324,7 +325,8 @@ public class ChatsTab : ConfigTabBase
                ImGui.TextColored(theme.MutedText, "Assign Discord channels to Game Chat types.");
                theme.SpacerY(1f);
 
-               if (ImGui.BeginTable("##mappingsTable", 3, ImGuiTableFlags.BordersInnerH | ImGuiTableFlags.SizingStretchProp))
+               using (var mappingsTable = ImRaii.Table("##mappingsTable", 3, ImGuiTableFlags.BordersInnerH | ImGuiTableFlags.SizingStretchProp))
+               if (mappingsTable)
                {
                    ImGui.TableSetupColumn("Chat Type", ImGuiTableColumnFlags.WidthFixed, 150f);
                    ImGui.TableSetupColumn("Discord Channel / Forum", ImGuiTableColumnFlags.WidthStretch);
@@ -407,39 +409,39 @@ public class ChatsTab : ConfigTabBase
 
                    ImGui.TableNextRow();
                    ImGui.TableNextColumn();
-                   bool expandLS = ImGui.TreeNode("Linkshell");
-                   ImGui.TableNextColumn();
-                   if (expandLS)
+                   using (var lsTree = ImRaii.TreeNode("Linkshell"))
                    {
-                       drawRow(XivChatType.Ls1);
-                       drawRow(XivChatType.Ls2);
-                       drawRow(XivChatType.Ls3);
-                       drawRow(XivChatType.Ls4);
-                       drawRow(XivChatType.Ls5);
-                       drawRow(XivChatType.Ls6);
-                       drawRow(XivChatType.Ls7);
-                       drawRow(XivChatType.Ls8);
-                       ImGui.TreePop();
+                       ImGui.TableNextColumn();
+                       if (lsTree)
+                       {
+                           drawRow(XivChatType.Ls1);
+                           drawRow(XivChatType.Ls2);
+                           drawRow(XivChatType.Ls3);
+                           drawRow(XivChatType.Ls4);
+                           drawRow(XivChatType.Ls5);
+                           drawRow(XivChatType.Ls6);
+                           drawRow(XivChatType.Ls7);
+                           drawRow(XivChatType.Ls8);
+                       }
                    }
 
                    ImGui.TableNextRow();
                    ImGui.TableNextColumn();
-                   bool expandCWLS = ImGui.TreeNode("Cross-World Linkshells");
-                   ImGui.TableNextColumn();
-                   if (expandCWLS)
+                   using (var cwlsTree = ImRaii.TreeNode("Cross-World Linkshells"))
                    {
-                       drawRow(XivChatType.CrossLinkShell1);
-                       drawRow(XivChatType.CrossLinkShell2);
-                       drawRow(XivChatType.CrossLinkShell3);
-                       drawRow(XivChatType.CrossLinkShell4);
-                       drawRow(XivChatType.CrossLinkShell5);
-                       drawRow(XivChatType.CrossLinkShell6);
-                       drawRow(XivChatType.CrossLinkShell7);
-                       drawRow(XivChatType.CrossLinkShell8);
-                       ImGui.TreePop();
+                       ImGui.TableNextColumn();
+                       if (cwlsTree)
+                       {
+                           drawRow(XivChatType.CrossLinkShell1);
+                           drawRow(XivChatType.CrossLinkShell2);
+                           drawRow(XivChatType.CrossLinkShell3);
+                           drawRow(XivChatType.CrossLinkShell4);
+                           drawRow(XivChatType.CrossLinkShell5);
+                           drawRow(XivChatType.CrossLinkShell6);
+                           drawRow(XivChatType.CrossLinkShell7);
+                           drawRow(XivChatType.CrossLinkShell8);
+                       }
                    }
-
-                   ImGui.EndTable();
 
                    theme.SpacerY(1f);
                    ImGui.Separator();
@@ -456,37 +458,36 @@ public class ChatsTab : ConfigTabBase
 
                    if (tellNotif)
                    {
-                       ImGui.Indent();
-
-                       ImGui.TextDisabled("This will send a notification to the selected channel when you receive a tell.");
-                       theme.SpacerY(0.5f);
-                       ImGui.Text("Notification Channel:");
-                       string currentNotifId = plugin.Config.Chat.TellNotificationChannelId;
-                       theme.ChannelPicker(
-                           "tell-notif-channel",
-                           currentNotifId,
-                           textChannels,
-                           (newId) =>
-                           {
-                               plugin.Config.Chat.TellNotificationChannelId = newId;
-                               plugin.Config.Save();
-                           },
-                           defaultLabel: "Select a Channel..."
-                       );
-
-                       theme.SpacerY(0.5f);
-                       int cooldown = plugin.Config.Chat.TellNotificationCooldownSeconds;
-                       ImGui.SetNextItemWidth(100f);
-                       if (ImGui.InputInt("Conversation Cooldown (seconds)", ref cooldown))
+                       using (ImRaii.PushIndent())
                        {
-                           if (cooldown < 0) cooldown = 0;
-                           plugin.Config.Chat.TellNotificationCooldownSeconds = cooldown;
-                           plugin.Config.Save();
-                       }
-                       if (ImGui.IsItemHovered())
-                           ImGui.SetTooltip("Time in seconds to wait before sending another notification for the same active conversation.");
+                           ImGui.TextDisabled("This will send a notification to the selected channel when you receive a tell.");
+                           theme.SpacerY(0.5f);
+                           ImGui.Text("Notification Channel:");
+                           string currentNotifId = plugin.Config.Chat.TellNotificationChannelId;
+                           theme.ChannelPicker(
+                               "tell-notif-channel",
+                               currentNotifId,
+                               textChannels,
+                               (newId) =>
+                               {
+                                   plugin.Config.Chat.TellNotificationChannelId = newId;
+                                   plugin.Config.Save();
+                               },
+                               defaultLabel: "Select a Channel..."
+                           );
 
-                       ImGui.Unindent();
+                           theme.SpacerY(0.5f);
+                           int cooldown = plugin.Config.Chat.TellNotificationCooldownSeconds;
+                           ImGui.SetNextItemWidth(100f);
+                           if (ImGui.InputInt("Conversation Cooldown (seconds)", ref cooldown))
+                           {
+                               if (cooldown < 0) cooldown = 0;
+                               plugin.Config.Chat.TellNotificationCooldownSeconds = cooldown;
+                               plugin.Config.Save();
+                           }
+                           if (ImGui.IsItemHovered())
+                               ImGui.SetTooltip("Time in seconds to wait before sending another notification for the same active conversation.");
+                       }
                    }
                }
            },
@@ -538,19 +539,21 @@ public class ChatsTab : ConfigTabBase
                 }
 
                 ImGui.SetNextItemWidth(ImGui.GetContentRegionAvail().X - 50f * ImGuiHelpers.GlobalScale);
-                if (ImGui.BeginCombo($"##threadSelect-{key}", preview))
+                using (var combo = ImRaii.Combo($"##threadSelect-{key}", preview))
                 {
-                    foreach (var thread in availableThreads)
+                    if (combo)
                     {
-                        bool isSelected = thread.Key.ToString() == currentValue;
-                        if (ImGui.Selectable($"#{thread.Value}##{thread.Key}", isSelected))
+                        foreach (var thread in availableThreads)
                         {
-                            currentValue = thread.Key.ToString();
-                            plugin.NotificationManager.Add("Conversation Updated", $"Changed thread for {key}", CordiNotificationType.Success);
+                            bool isSelected = thread.Key.ToString() == currentValue;
+                            if (ImGui.Selectable($"#{thread.Value}##{thread.Key}", isSelected))
+                            {
+                                currentValue = thread.Key.ToString();
+                                plugin.NotificationManager.Add("Conversation Updated", $"Changed thread for {key}", CordiNotificationType.Success);
+                            }
+                            if (isSelected) ImGui.SetItemDefaultFocus();
                         }
-                        if (isSelected) ImGui.SetItemDefaultFocus();
                     }
-                    ImGui.EndCombo();
                 }
             }
             else
@@ -594,13 +597,14 @@ public class ChatsTab : ConfigTabBase
 
                     ImGui.TextColored(theme.Text, "Detection Threshold");
                     int threshold = config.ScoreThreshold;
-                    ImGui.PushItemWidth(200);
-                    if (ImGui.SliderInt("##threshold", ref threshold, 1, 10))
+                    using (ImRaii.ItemWidth(200))
                     {
-                        config.ScoreThreshold = threshold;
-                        plugin.Config.Save();
+                        if (ImGui.SliderInt("##threshold", ref threshold, 1, 10))
+                        {
+                            config.ScoreThreshold = threshold;
+                            plugin.Config.Save();
+                        }
                     }
-                    ImGui.PopItemWidth();
                     if (ImGui.IsItemHovered())
                     {
                         ImGui.SetTooltip("Lower = more strict filtering. Default: 3");

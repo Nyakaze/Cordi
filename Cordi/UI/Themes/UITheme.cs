@@ -7,11 +7,9 @@ using Dalamud.Interface.Utility;
 using Dalamud.Interface;
 using System.Collections.Generic;
 using System.Linq;
-
+using Dalamud.Interface.Utility.Raii;
 
 namespace Cordi.UI.Themes;
-
-
 using Cordi.Configuration;
 using Dalamud.Interface.Components;
 
@@ -132,6 +130,9 @@ public sealed class UiTheme
     private const int WindowColorCount = 4;
     private const int WindowVarCount = 3;
 
+    private IDisposable? _activeWindowColorScope;
+    private IDisposable? _activeWindowStyleScope;
+
     public void ApplyFontScale(float extraMul = 1f)
     {
         ImGui.SetWindowFontScale(GlobalFontScale * extraMul);
@@ -139,71 +140,75 @@ public sealed class UiTheme
 
     public void PushWindow()
     {
-        ImGui.PushStyleColor(ImGuiCol.WindowBg, WindowBg);
-        ImGui.PushStyleColor(ImGuiCol.Border, WindowBorder);
-        ImGui.PushStyleColor(ImGuiCol.TitleBg, TitleBg);
-        ImGui.PushStyleColor(ImGuiCol.TitleBgActive, TitleBgActive);
-
-        ImGui.PushStyleVar(ImGuiStyleVar.WindowRounding, Radius(1.2f));
-        ImGui.PushStyleVar(ImGuiStyleVar.WindowBorderSize, 1f * ImGuiHelpers.GlobalScale);
-        ImGui.PushStyleVar(ImGuiStyleVar.WindowPadding, new Vector2(PadX(), PadY()));
+        _activeWindowColorScope = ImRaii.PushColor(ImGuiCol.WindowBg, WindowBg)
+            .Push(ImGuiCol.Border, WindowBorder)
+            .Push(ImGuiCol.TitleBg, TitleBg)
+            .Push(ImGuiCol.TitleBgActive, TitleBgActive);
+        _activeWindowStyleScope = ImRaii.PushStyle(ImGuiStyleVar.WindowRounding, Radius(1.2f))
+            .Push(ImGuiStyleVar.WindowBorderSize, 1f * ImGuiHelpers.GlobalScale)
+            .Push(ImGuiStyleVar.WindowPadding, new Vector2(PadX(), PadY()));
     }
 
     public void PopWindow()
     {
-        ImGui.PopStyleVar(WindowVarCount);
-        ImGui.PopStyleColor(WindowColorCount);
+        _activeWindowStyleScope?.Dispose();
+        _activeWindowColorScope?.Dispose();
+        _activeWindowStyleScope = null;
+        _activeWindowColorScope = null;
     }
 
 
-    public void BeginCard(string id, Vector2 minSize = default, bool border = true)
+    private sealed class ActionDisposable : IDisposable
+    {
+        private readonly Action _onDispose;
+        public ActionDisposable(Action onDispose) => _onDispose = onDispose;
+        public void Dispose() => _onDispose();
+    }
+
+    public IDisposable CardScope(string id, Vector2 minSize = default, bool border = true)
     {
         var avail = ImGui.GetContentRegionAvail();
         if (minSize.X <= 0) minSize.X = avail.X;
 
-        ImGui.PushStyleVar(ImGuiStyleVar.ChildRounding, Radius());
-        ImGui.PushStyleVar(ImGuiStyleVar.FramePadding, new Vector2(PadX(0.6f), PadY(0.6f)));
-        ImGui.PushStyleColor(ImGuiCol.ChildBg, CardBg);
+        var style = ImRaii.PushStyle(ImGuiStyleVar.ChildRounding, Radius())
+            .Push(ImGuiStyleVar.FramePadding, new Vector2(PadX(0.6f), PadY(0.6f)));
+
+        var color = ImRaii.PushColor(ImGuiCol.ChildBg, CardBg);
         if (border)
-            ImGui.PushStyleColor(ImGuiCol.Border, WindowBorder);
+            color.Push(ImGuiCol.Border, WindowBorder);
 
-        ImGui.BeginChild(id, minSize, border);
-        ImGui.PopStyleColor(border ? 2 : 1);
-        ImGui.PopStyleVar(2);
+        var child = ImRaii.Child(id, minSize, border);
+        float gap = Gap(0.25f);
 
-
-    }
-
-    public void EndCard()
-    {
-        ImGui.Dummy(new Vector2(0, Gap(0.25f)));
-        ImGui.EndChild();
+        return new ActionDisposable(() =>
+        {
+            child.Dispose();
+            color.Dispose();
+            style.Dispose();
+            ImGui.Dummy(new Vector2(0, gap));
+        });
     }
 
 
     public bool PrimaryButton(string label, Vector2 size = default)
     {
-        ImGui.PushStyleColor(ImGuiCol.Button, Accent);
-        ImGui.PushStyleColor(ImGuiCol.ButtonHovered, Lerp(Accent, Vector4.One, 0.08f));
-        ImGui.PushStyleColor(ImGuiCol.ButtonActive, Lerp(Accent, Vector4.Zero, 0.10f));
-        ImGui.PushStyleVar(ImGuiStyleVar.FrameRounding, Radius());
+        using var color = ImRaii.PushColor(ImGuiCol.Button, Accent)
+            .Push(ImGuiCol.ButtonHovered, Lerp(Accent, Vector4.One, 0.08f))
+            .Push(ImGuiCol.ButtonActive, Lerp(Accent, Vector4.Zero, 0.10f));
+        using var style = ImRaii.PushStyle(ImGuiStyleVar.FrameRounding, Radius());
         var clicked = Button(label, size);
         if (ImGui.IsItemHovered()) ImGui.SetMouseCursor(ImGuiMouseCursor.Hand);
-        ImGui.PopStyleVar();
-        ImGui.PopStyleColor(3);
         return clicked;
     }
 
     public bool SecondaryButton(string label, Vector2 size = default)
     {
-        ImGui.PushStyleColor(ImGuiCol.Button, FrameBg);
-        ImGui.PushStyleColor(ImGuiCol.ButtonHovered, FrameBgHover);
-        ImGui.PushStyleColor(ImGuiCol.ButtonActive, FrameBgActive);
-        ImGui.PushStyleVar(ImGuiStyleVar.FrameRounding, Radius());
+        using var color = ImRaii.PushColor(ImGuiCol.Button, FrameBg)
+            .Push(ImGuiCol.ButtonHovered, FrameBgHover)
+            .Push(ImGuiCol.ButtonActive, FrameBgActive);
+        using var style = ImRaii.PushStyle(ImGuiStyleVar.FrameRounding, Radius());
         var clicked = Button(label, size);
         if (ImGui.IsItemHovered()) ImGui.SetMouseCursor(ImGuiMouseCursor.Hand);
-        ImGui.PopStyleVar();
-        ImGui.PopStyleColor(3);
         return clicked;
     }
 
@@ -303,31 +308,28 @@ public sealed class UiTheme
 
     public bool SuccessIconButton(string id, FontAwesomeIcon icon, string tooltip = "")
     {
-        ImGui.PushStyleColor(ImGuiCol.Button, Accent);
-        ImGui.PushStyleColor(ImGuiCol.ButtonHovered, Lerp(Accent, Vector4.One, 0.08f));
-        ImGui.PushStyleColor(ImGuiCol.ButtonActive, Lerp(Accent, Vector4.Zero, 0.10f));
+        using var color = ImRaii.PushColor(ImGuiCol.Button, Accent)
+            .Push(ImGuiCol.ButtonHovered, Lerp(Accent, Vector4.One, 0.08f))
+            .Push(ImGuiCol.ButtonActive, Lerp(Accent, Vector4.Zero, 0.10f));
         var clicked = IconButton(id, icon, tooltip);
-        ImGui.PopStyleColor(3);
         return clicked;
     }
 
     public bool SecondaryIconButton(string id, FontAwesomeIcon icon, string tooltip = "")
     {
-        ImGui.PushStyleColor(ImGuiCol.Button, FrameBg);
-        ImGui.PushStyleColor(ImGuiCol.ButtonHovered, FrameBgHover);
-        ImGui.PushStyleColor(ImGuiCol.ButtonActive, FrameBgActive);
+        using var color = ImRaii.PushColor(ImGuiCol.Button, FrameBg)
+            .Push(ImGuiCol.ButtonHovered, FrameBgHover)
+            .Push(ImGuiCol.ButtonActive, FrameBgActive);
         var clicked = IconButton(id, icon, tooltip);
-        ImGui.PopStyleColor(3);
         return clicked;
     }
 
     public bool DangerIconButton(string id, FontAwesomeIcon icon, string tooltip = "")
     {
-        ImGui.PushStyleColor(ImGuiCol.Button, ColorDanger);
-        ImGui.PushStyleColor(ImGuiCol.ButtonHovered, Lerp(ColorDanger, Vector4.One, 0.08f));
-        ImGui.PushStyleColor(ImGuiCol.ButtonActive, Lerp(ColorDanger, Vector4.Zero, 0.10f));
+        using var color = ImRaii.PushColor(ImGuiCol.Button, ColorDanger)
+            .Push(ImGuiCol.ButtonHovered, Lerp(ColorDanger, Vector4.One, 0.08f))
+            .Push(ImGuiCol.ButtonActive, Lerp(ColorDanger, Vector4.Zero, 0.10f));
         var clicked = IconButton(id, icon, tooltip);
-        ImGui.PopStyleColor(3);
         return clicked;
     }
 
@@ -368,68 +370,25 @@ public sealed class UiTheme
     }
 
 
-    private const int InputColorCount = 5;
-    private const int InputVarCount = 2;
-
+    private IDisposable? _activeInputColorScope;
+    private IDisposable? _activeInputStyleScope;
     public void PushInputScope()
     {
-        ImGui.PushStyleColor(ImGuiCol.FrameBg, FrameBg);
-        ImGui.PushStyleColor(ImGuiCol.FrameBgHovered, FrameBgHover);
-        ImGui.PushStyleColor(ImGuiCol.FrameBgActive, FrameBgActive);
-        ImGui.PushStyleColor(ImGuiCol.SliderGrab, SliderGrab);
-        ImGui.PushStyleColor(ImGuiCol.SliderGrabActive, SliderGrabActive);
-        ImGui.PushStyleVar(ImGuiStyleVar.FrameRounding, Radius());
-        ImGui.PushStyleVar(ImGuiStyleVar.ItemSpacing, new Vector2(Gap(), Gap(0.6f)));
+        _activeInputColorScope = ImRaii.PushColor(ImGuiCol.FrameBg, FrameBg)
+            .Push(ImGuiCol.FrameBgHovered, FrameBgHover)
+            .Push(ImGuiCol.FrameBgActive, FrameBgActive)
+            .Push(ImGuiCol.SliderGrab, SliderGrab)
+            .Push(ImGuiCol.SliderGrabActive, SliderGrabActive);
+        _activeInputStyleScope = ImRaii.PushStyle(ImGuiStyleVar.FrameRounding, Radius())
+            .Push(ImGuiStyleVar.ItemSpacing, new Vector2(Gap(), Gap(0.6f)));
     }
 
     public void PopInputScope()
     {
-        ImGui.PopStyleVar(InputVarCount);
-        ImGui.PopStyleColor(InputColorCount);
-    }
-
-
-    public bool BeginTabBar(string id, ImGuiTabBarFlags flags = ImGuiTabBarFlags.None)
-    {
-        ImGui.PushStyleColor(ImGuiCol.Tab, Tab);
-        ImGui.PushStyleColor(ImGuiCol.TabActive, TabActive);
-        ImGui.PushStyleColor(ImGuiCol.TabHovered, TabHovered);
-        ImGui.PushStyleVar(ImGuiStyleVar.TabRounding, Radius());
-        return ImGui.BeginTabBar(id, flags);
-    }
-    public void EndTabBar()
-    {
-        ImGui.EndTabBar();
-        ImGui.PopStyleVar();
-        ImGui.PopStyleColor(3);
-    }
-
-    public bool BeginTabItem(string label, ref bool open, ImGuiTabItemFlags flags = ImGuiTabItemFlags.None)
-        => ImGui.BeginTabItem(label, ref open, flags);
-    public bool BeginTabItem(string label, ImGuiTabItemFlags flags = ImGuiTabItemFlags.None)
-        => ImGui.BeginTabItem(label, flags);
-    public void EndTabItem() => ImGui.EndTabItem();
-
-
-    public bool BeginTable(string id, int columns, ImGuiTableFlags flags =
-        ImGuiTableFlags.RowBg | ImGuiTableFlags.BordersInnerV | ImGuiTableFlags.SizingStretchProp)
-    {
-        ImGui.PushStyleVar(ImGuiStyleVar.CellPadding, new Vector2(PadX(0.6f), PadY(0.45f)));
-        ImGui.PushStyleColor(ImGuiCol.TableBorderStrong, WindowBorder);
-        var ok = ImGui.BeginTable(id, columns, flags);
-        if (!ok)
-        {
-            ImGui.PopStyleColor();
-            ImGui.PopStyleVar();
-        }
-        return ok;
-    }
-
-    public void EndTable()
-    {
-        ImGui.EndTable();
-        ImGui.PopStyleColor();
-        ImGui.PopStyleVar();
+        _activeInputStyleScope?.Dispose();
+        _activeInputColorScope?.Dispose();
+        _activeInputStyleScope = null;
+        _activeInputColorScope = null;
     }
 
 
@@ -448,9 +407,10 @@ public sealed class UiTheme
         dl.AddRectFilled(p, p + size, ImGui.GetColorU32(bgCol), Radius(0.8f));
         ImGui.SetCursorScreenPos(p + padding);
         var backup = ImGui.GetStyle().Colors[(int)ImGuiCol.Text];
-        ImGui.PushStyleColor(ImGuiCol.Text, fgCol);
-        ImGui.TextUnformatted(label);
-        ImGui.PopStyleColor();
+        using (ImRaii.PushColor(ImGuiCol.Text, fgCol))
+        {
+            ImGui.TextUnformatted(label);
+        }
         ImGui.SetCursorScreenPos(p + size + new Vector2(Gap(0.5f), 0));
     }
 
@@ -514,10 +474,11 @@ public sealed class UiTheme
         }
         iconMax = iconMin + new Vector2(iconBox, iconBox);
 
-        ImGui.PushStyleColor(ImGuiCol.Text, _fg);
-        ImGui.SetCursorScreenPos(textPos);
-        ImGui.TextUnformatted(text);
-        ImGui.PopStyleColor();
+        using (ImRaii.PushColor(ImGuiCol.Text, _fg))
+        {
+            ImGui.SetCursorScreenPos(textPos);
+            ImGui.TextUnformatted(text);
+        }
 
         var center = (iconMin + iconMax) * 0.5f;
 
@@ -655,24 +616,27 @@ public sealed class UiTheme
         float textTop = start.Y + pad;
         float textBottom = start.Y + size.Y - pad;
 
-        ImGui.PushStyleColor(ImGuiCol.Text, TextOr());
-        ImGui.SetCursorScreenPos(new Vector2(textLeft, textTop));
-        ImGui.TextUnformatted(title);
-        ImGui.PopStyleColor();
+        using (ImRaii.PushColor(ImGuiCol.Text, TextOr()))
+        {
+            ImGui.SetCursorScreenPos(new Vector2(textLeft, textTop));
+            ImGui.TextUnformatted(title);
+        }
 
         var muted = MutedOr();
         var authSize = ImGui.CalcTextSize(authorRightAligned);
-        ImGui.PushStyleColor(ImGuiCol.Text, muted);
-        ImGui.SetCursorScreenPos(new Vector2(textRight - authSize.X, textTop));
-        ImGui.TextUnformatted(authorRightAligned);
-        ImGui.PopStyleColor();
+        using (ImRaii.PushColor(ImGuiCol.Text, muted))
+        {
+            ImGui.SetCursorScreenPos(new Vector2(textRight - authSize.X, textTop));
+            ImGui.TextUnformatted(authorRightAligned);
+        }
 
-        ImGui.PushStyleColor(ImGuiCol.Text, muted);
-        ImGui.SetCursorScreenPos(new Vector2(textLeft, textTop + ImGui.GetTextLineHeightWithSpacing()));
-        ImGui.PushTextWrapPos(textRight);
-        ImGui.TextUnformatted(description);
-        ImGui.PopTextWrapPos();
-        ImGui.PopStyleColor();
+        using (ImRaii.PushColor(ImGuiCol.Text, muted))
+        {
+            ImGui.SetCursorScreenPos(new Vector2(textLeft, textTop + ImGui.GetTextLineHeightWithSpacing()));
+            ImGui.PushTextWrapPos(textRight);
+            ImGui.TextUnformatted(description);
+            ImGui.PopTextWrapPos();
+        }
 
         string tag = tagLabel;
         var tagPad = new Vector2(PadX(0.6f), PadY(0.4f));
@@ -686,10 +650,11 @@ public sealed class UiTheme
         draw.AddRectFilled(tagPos, tagRect, ImGui.GetColorU32(tagBgCol), Radius(0.75f));
         draw.AddRect(tagPos, tagRect, ImGui.GetColorU32(border), Radius(0.75f));
 
-        ImGui.PushStyleColor(ImGuiCol.Text, tagTextCol);
-        ImGui.SetCursorScreenPos(tagPos + tagPad);
-        ImGui.TextUnformatted(tag);
-        ImGui.PopStyleColor();
+        using (ImRaii.PushColor(ImGuiCol.Text, tagTextCol))
+        {
+            ImGui.SetCursorScreenPos(tagPos + tagPad);
+            ImGui.TextUnformatted(tag);
+        }
 
         ImGui.SetCursorScreenPos(tagPos);
         ImGui.InvisibleButton(id + "##tag", tagRect - tagPos);
@@ -817,9 +782,10 @@ public sealed class UiTheme
 
         WithCursor(titleRect, () =>
         {
-            ImGui.PushStyleColor(ImGuiCol.Text, Text);
-            ImGui.TextUnformatted(title);
-            ImGui.PopStyleColor();
+            using (ImRaii.PushColor(ImGuiCol.Text, Text))
+            {
+                ImGui.TextUnformatted(title);
+            }
         });
 
         if (drawTopRight is not null)
@@ -830,12 +796,13 @@ public sealed class UiTheme
         {
             WithCursor(topRightRect, () =>
             {
-                ImGui.PushStyleColor(ImGuiCol.Text, MutedText);
-                var txt = defaultTopRightText;
-                var sz = ImGui.CalcTextSize(txt);
-                ImGui.SetCursorScreenPos(new Vector2(topRightRect.Max.X - sz.X, topRightRect.Min.Y));
-                ImGui.TextUnformatted(txt);
-                ImGui.PopStyleColor();
+                using (ImRaii.PushColor(ImGuiCol.Text, MutedText))
+                {
+                    var txt = defaultTopRightText;
+                    var sz = ImGui.CalcTextSize(txt);
+                    ImGui.SetCursorScreenPos(new Vector2(topRightRect.Max.X - sz.X, topRightRect.Min.Y));
+                    ImGui.TextUnformatted(txt);
+                }
             });
         }
 
@@ -847,11 +814,12 @@ public sealed class UiTheme
         {
             WithCursor(bodyRect, () =>
             {
-                ImGui.PushStyleColor(ImGuiCol.Text, MutedText);
-                ImGui.PushTextWrapPos(bodyRect.Max.X);
-                ImGui.TextUnformatted(defaultDescription);
-                ImGui.PopTextWrapPos();
-                ImGui.PopStyleColor();
+                using (ImRaii.PushColor(ImGuiCol.Text, MutedText))
+                {
+                    ImGui.PushTextWrapPos(bodyRect.Max.X);
+                    ImGui.TextUnformatted(defaultDescription);
+                    ImGui.PopTextWrapPos();
+                }
             });
         }
 
@@ -869,12 +837,13 @@ public sealed class UiTheme
 
             draw.AddRectFilled(rect.Min, rect.Max, ImGui.GetColorU32(Accent), Radius(0.75f));
             draw.AddRect(rect.Min, rect.Max, ImGui.GetColorU32(WindowBorder), Radius(0.75f));
-            ImGui.PushStyleColor(ImGuiCol.Text, AccentText);
-            WithCursor(new UiRect(rect.Min + tagPad, rect.Min + tagPad + sz), () =>
+            using (ImRaii.PushColor(ImGuiCol.Text, AccentText))
             {
-                ImGui.TextUnformatted(defaultBottomLeftTag);
-            });
-            ImGui.PopStyleColor();
+                WithCursor(new UiRect(rect.Min + tagPad, rect.Min + tagPad + sz), () =>
+                {
+                    ImGui.TextUnformatted(defaultBottomLeftTag);
+                });
+            }
 
             if (InvisibleBtn(id + "##tag", rect)) tagClicked = true;
         }
@@ -935,74 +904,66 @@ public sealed class UiTheme
         draw.ChannelsSplit(2);
         draw.ChannelsSetCurrent(1);
 
-        ImGui.BeginGroup();
-
-
-
-        ImGui.Dummy(new Vector2(0, padY));
-
-
-
-        float contentStartX = padX;
-
-        if (showCheckbox)
+        using (var group = ImRaii.Group())
         {
+            ImGui.Dummy(new Vector2(0, padY));
 
-            ImGui.SetCursorPosX(ImGui.GetCursorPosX() + padX);
-            bool chk = enabled;
-            if (ImGui.Checkbox($"##chk_{id}", ref chk))
+            float contentStartX = padX;
+
+            if (showCheckbox)
             {
-                enabled = chk;
+                ImGui.SetCursorPosX(ImGui.GetCursorPosX() + padX);
+                bool chk = enabled;
+                if (ImGui.Checkbox($"##chk_{id}", ref chk))
+                {
+                    enabled = chk;
+                }
+
+                ImGui.SameLine();
+                contentStartX = 0;
+                HoverHandIfItem();
+            }
+            else
+            {
+                ImGui.SetCursorPosX(ImGui.GetCursorPosX() + padX);
             }
 
-            ImGui.SameLine();
-            contentStartX = 0;
-            HoverHandIfItem();
+            using (ImRaii.PushColor(ImGuiCol.Text, Text))
+            {
+                ImGui.TextUnformatted(title);
+            }
+
+            if (!string.IsNullOrEmpty(mutedText))
+            {
+                ImGui.SameLine();
+                ImGui.TextColored(MutedText, mutedText);
+            }
+
+            if (drawHeaderRight != null)
+            {
+                ImGui.SameLine();
+                float reservedWidth = 10f * scale; // Reduced to fit "((?))" icon snugly
+                float headerRightCursorX = (startPos.X + availW - padX) - reservedWidth;
+                if (headerRightCursorX < ImGui.GetCursorPosX()) headerRightCursorX = ImGui.GetCursorPosX() + 10f; // Prevent overlap
+                ImGui.SetCursorScreenPos(new Vector2(headerRightCursorX, ImGui.GetCursorScreenPos().Y));
+
+                drawHeaderRight();
+                ImGui.NewLine(); // Ensure subsequent content starts on a new line
+            }
+
+            SpacerY(0.5f);
+
+            using (ImRaii.PushIndent(padX))
+            {
+                float innerWidth = availW - (padX * 2);
+                using (ImRaii.ItemWidth(innerWidth))
+                {
+                    drawContent(innerWidth);
+                }
+            }
+
+            ImGui.Dummy(new Vector2(0, padY));
         }
-        else
-        {
-            ImGui.SetCursorPosX(ImGui.GetCursorPosX() + padX);
-        }
-
-        ImGui.PushStyleColor(ImGuiCol.Text, Text);
-        ImGui.TextUnformatted(title);
-        ImGui.PopStyleColor();
-
-        if (!string.IsNullOrEmpty(mutedText))
-        {
-            ImGui.SameLine();
-            ImGui.TextColored(MutedText, mutedText);
-        }
-
-        if (drawHeaderRight != null)
-        {
-            ImGui.SameLine();
-            float reservedWidth = 10f * scale; // Reduced to fit "((?))" icon snugly
-            float headerRightCursorX = (startPos.X + availW - padX) - reservedWidth;
-            if (headerRightCursorX < ImGui.GetCursorPosX()) headerRightCursorX = ImGui.GetCursorPosX() + 10f; // Prevent overlap
-            ImGui.SetCursorScreenPos(new Vector2(headerRightCursorX, ImGui.GetCursorScreenPos().Y));
-
-            drawHeaderRight();
-            ImGui.NewLine(); // Ensure subsequent content starts on a new line
-        }
-
-
-
-        SpacerY(0.5f);
-
-
-        ImGui.Indent(padX);
-        float innerWidth = availW - (padX * 2);
-        ImGui.PushItemWidth(innerWidth);
-
-        drawContent(innerWidth);
-
-        ImGui.PopItemWidth();
-        ImGui.Unindent(padX);
-
-        ImGui.Dummy(new Vector2(0, padY));
-
-        ImGui.EndGroup();
 
         var itemMin = ImGui.GetItemRectMin();
         var itemMax = ImGui.GetItemRectMax();
@@ -1033,9 +994,10 @@ public sealed class UiTheme
 
     public void MutedLabel(string text)
     {
-        ImGui.PushStyleColor(ImGuiCol.Text, MutedText);
-        ImGui.TextUnformatted(text);
-        ImGui.PopStyleColor();
+        using (ImRaii.PushColor(ImGuiCol.Text, MutedText))
+        {
+            ImGui.TextUnformatted(text);
+        }
     }
     public void SpacerY(float mul = 1f) => ImGui.Dummy(new Vector2(0, Gap(mul)));
     public void SpacerX(float mul = 1f) => ImGui.Dummy(new Vector2(Gap(mul), 0));
@@ -1093,77 +1055,78 @@ public sealed class UiTheme
         draw.ChannelsSplit(2);
         draw.ChannelsSetCurrent(1);
 
-        ImGui.BeginGroup();
-
-        float titleCenterY = startPos.Y + (headerHeight - ImGui.GetTextLineHeight()) * 0.5f;
-        ImGui.SetCursorScreenPos(new Vector2(startPos.X + padX, titleCenterY));
-
-        ImGui.PushStyleColor(ImGuiCol.Text, Text);
-        ImGui.TextUnformatted(title);
-        ImGui.PopStyleColor();
-
-        if (collapsible)
+        using (var group = ImRaii.Group())
         {
-            ImGui.PushFont(Dalamud.Interface.UiBuilder.IconFont);
-            string icon = expanded ? FontAwesomeIcon.ChevronUp.ToIconString() : FontAwesomeIcon.ChevronDown.ToIconString();
-            var iconSize = ImGui.CalcTextSize(icon);
-            ImGui.SetCursorScreenPos(new Vector2(startPos.X + availW - padX - iconSize.X, titleCenterY));
-            ImGui.TextUnformatted(icon);
-            ImGui.PopFont();
+            float titleCenterY = startPos.Y + (headerHeight - ImGui.GetTextLineHeight()) * 0.5f;
+            ImGui.SetCursorScreenPos(new Vector2(startPos.X + padX, titleCenterY));
 
-            ImGui.SetCursorScreenPos(startPos);
-            if (InvisibleButton($"##{id}HeaderBtn", new Vector2(availW, headerHeight)))
+            using (ImRaii.PushColor(ImGuiCol.Text, Text))
             {
-                expanded = !expanded;
+                ImGui.TextUnformatted(title);
             }
-        }
-        else
-        {
-            ImGui.SetCursorScreenPos(new Vector2(startPos.X, startPos.Y + headerHeight));
-        }
 
-        if (!collapsible || expanded)
-        {
-            // Calculate 95% width and centering offset
-            float targetWidth = availW * 0.95f;
-            float xOffset = (availW - targetWidth) / 2.0f;
-            float effectiveStartX = startPos.X + xOffset;
-
-            // Start content Y below header
-            ImGui.SetCursorScreenPos(new Vector2(effectiveStartX, startPos.Y + headerHeight + Gap(0.2f)));
-
-            if (count == 0 && drawFooter == null)
+            if (collapsible)
             {
-                ImGui.TextUnformatted("No items");
+                using (ImRaii.PushFont(Dalamud.Interface.UiBuilder.IconFont))
+                {
+                    string icon = expanded ? FontAwesomeIcon.ChevronUp.ToIconString() : FontAwesomeIcon.ChevronDown.ToIconString();
+                    var iconSize = ImGui.CalcTextSize(icon);
+                    ImGui.SetCursorScreenPos(new Vector2(startPos.X + availW - padX - iconSize.X, titleCenterY));
+                    ImGui.TextUnformatted(icon);
+                }
+
+                ImGui.SetCursorScreenPos(startPos);
+                if (InvisibleButton($"##{id}HeaderBtn", new Vector2(availW, headerHeight)))
+                {
+                    expanded = !expanded;
+                }
             }
             else
             {
-                if (drawTopContent != null)
-                {
-                    ImGui.SetCursorScreenPos(new Vector2(effectiveStartX, ImGui.GetCursorScreenPos().Y));
-                    ImGui.SetNextItemWidth(targetWidth);
-                    drawTopContent();
-                    SpacerY(0.5f);
-                }
-
-                if (count > 0 || extraRows != null)
-                {
-                    ImGui.SetCursorScreenPos(new Vector2(effectiveStartX, ImGui.GetCursorScreenPos().Y));
-                    DrawTable(id, collection, drawRow, headers, setupColumns, showHeaders, new Vector2(targetWidth, maxTableHeight), extraRows);
-                }
-
-                if (drawFooter != null)
-                {
-                    SpacerY(0.5f);
-                    ImGui.SetCursorScreenPos(new Vector2(effectiveStartX, ImGui.GetCursorScreenPos().Y));
-                    drawFooter(targetWidth);
-                }
+                ImGui.SetCursorScreenPos(new Vector2(startPos.X, startPos.Y + headerHeight));
             }
 
-            ImGui.Dummy(new Vector2(0, padY * 0.5f));
-        }
+            if (!collapsible || expanded)
+            {
+                // Calculate 95% width and centering offset
+                float targetWidth = availW * 0.95f;
+                float xOffset = (availW - targetWidth) / 2.0f;
+                float effectiveStartX = startPos.X + xOffset;
 
-        ImGui.EndGroup();
+                // Start content Y below header
+                ImGui.SetCursorScreenPos(new Vector2(effectiveStartX, startPos.Y + headerHeight + Gap(0.2f)));
+
+                if (count == 0 && drawFooter == null)
+                {
+                    ImGui.TextUnformatted("No items");
+                }
+                else
+                {
+                    if (drawTopContent != null)
+                    {
+                        ImGui.SetCursorScreenPos(new Vector2(effectiveStartX, ImGui.GetCursorScreenPos().Y));
+                        ImGui.SetNextItemWidth(targetWidth);
+                        drawTopContent();
+                        SpacerY(0.5f);
+                    }
+
+                    if (count > 0 || extraRows != null)
+                    {
+                        ImGui.SetCursorScreenPos(new Vector2(effectiveStartX, ImGui.GetCursorScreenPos().Y));
+                        DrawTable(id, collection, drawRow, headers, setupColumns, showHeaders, new Vector2(targetWidth, maxTableHeight), extraRows);
+                    }
+
+                    if (drawFooter != null)
+                    {
+                        SpacerY(0.5f);
+                        ImGui.SetCursorScreenPos(new Vector2(effectiveStartX, ImGui.GetCursorScreenPos().Y));
+                        drawFooter(targetWidth);
+                    }
+                }
+
+                ImGui.Dummy(new Vector2(0, padY * 0.5f));
+            }
+        }
         var itemMin = ImGui.GetItemRectMin();
         var itemMax = ImGui.GetItemRectMax();
 
@@ -1205,53 +1168,57 @@ public sealed class UiTheme
         var flags = ImGuiTableFlags.BordersInnerH | ImGuiTableFlags.SizingStretchProp;
         if (outerSize != null && outerSize.Value.Y > 0) flags |= ImGuiTableFlags.ScrollY;
 
-        if (ImGui.BeginTable($"##table_{id}", columns, flags, outerSize ?? Vector2.Zero))
+        using (var table = ImRaii.Table($"##table_{id}", columns, flags, outerSize ?? Vector2.Zero))
         {
-            if (setupColumns != null)
+            if (table)
             {
-                setupColumns();
-            }
-            else if (headers != null)
-            {
-                foreach (var h in headers)
+                if (setupColumns != null)
                 {
-                    ImGui.TableSetupColumn(h);
+                    setupColumns();
                 }
-            }
+                else if (headers != null)
+                {
+                    foreach (var h in headers)
+                    {
+                        ImGui.TableSetupColumn(h);
+                    }
+                }
 
-            if (showHeaders && (headers != null || setupColumns != null))
-            {
-                ImGui.TableHeadersRow();
-            }
+                if (showHeaders && (headers != null || setupColumns != null))
+                {
+                    ImGui.TableHeadersRow();
+                }
 
-            // Snapshot collection to avoid modification errors during iteration
-            var snapshot = collection.ToList();
-            int idx = 0;
-            foreach (var item in snapshot)
-            {
-                ImGui.TableNextRow();
-                ImGui.TableNextColumn();
-                drawRow(item, idx++);
+                // Snapshot collection to avoid modification errors during iteration
+                var snapshot = collection.ToList();
+                int idx = 0;
+                foreach (var item in snapshot)
+                {
+                    ImGui.TableNextRow();
+                    ImGui.TableNextColumn();
+                    drawRow(item, idx++);
+                }
+                extraRows?.Invoke();
             }
-            extraRows?.Invoke();
-            ImGui.EndTable();
         }
     }
 
     public void DrawTable<T>(string id, IEnumerable<T> collection, Action<T, int> drawRow, int columns)
     {
-        if (ImGui.BeginTable($"##table_{id}", columns, ImGuiTableFlags.BordersInnerH | ImGuiTableFlags.SizingStretchProp))
+        using (var table = ImRaii.Table($"##table_{id}", columns, ImGuiTableFlags.BordersInnerH | ImGuiTableFlags.SizingStretchProp))
         {
-            // Snapshot collection here too
-            var snapshot = collection.ToList();
-            int idx = 0;
-            foreach (var item in snapshot)
+            if (table)
             {
-                ImGui.TableNextRow();
-                ImGui.TableNextColumn();
-                drawRow(item, idx++);
+                // Snapshot collection here too
+                var snapshot = collection.ToList();
+                int idx = 0;
+                foreach (var item in snapshot)
+                {
+                    ImGui.TableNextRow();
+                    ImGui.TableNextColumn();
+                    drawRow(item, idx++);
+                }
             }
-            ImGui.EndTable();
         }
     }
 
@@ -1513,14 +1480,16 @@ public sealed class UiTheme
                     string nKey = addState.NewKey;
                     string nVal = addState.NewValue;
 
-                    ImGui.PushItemWidth(keyWidth);
-                    ImGui.InputTextWithHint($"##add-key-{id}", headers.Length > 0 ? headers[0] : "Key", ref nKey, 128);
-                    ImGui.PopItemWidth();
+                    using (ImRaii.ItemWidth(keyWidth))
+                    {
+                        ImGui.InputTextWithHint($"##add-key-{id}", headers.Length > 0 ? headers[0] : "Key", ref nKey, 128);
+                    }
 
                     ImGui.SameLine();
-                    ImGui.PushItemWidth(valWidth);
-                    ImGui.InputTextWithHint($"##add-val-{id}", headers.Length > 1 ? headers[1] : "Value", ref nVal, 512);
-                    ImGui.PopItemWidth();
+                    using (ImRaii.ItemWidth(valWidth))
+                    {
+                        ImGui.InputTextWithHint($"##add-val-{id}", headers.Length > 1 ? headers[1] : "Value", ref nVal, 512);
+                    }
 
                     _dictAddStates[id] = (nKey, nVal);
 
@@ -1605,28 +1574,30 @@ public sealed class UiTheme
         }
 
         ImGui.SetNextItemWidth(ImGui.GetContentRegionAvail().X - ImGui.GetStyle().FramePadding.X*2);
-        if (ImGui.BeginCombo($"##{id}", preview))
+        using (var combo = ImRaii.Combo($"##{id}", preview))
         {
-            if (ImGui.Selectable(defaultLabel, string.IsNullOrEmpty(currentId)))
+            if (combo)
             {
-                onWaitSelection(string.Empty);
-            }
-
-            if (channels != null)
-            {
-                foreach (var channel in channels)
+                if (ImGui.Selectable(defaultLabel, string.IsNullOrEmpty(currentId)))
                 {
-                    bool isSelected = channel.Id.ToString() == currentId;
-                    // Use ID in label to prevent ImGui ID collisions with identical channel names
-                    if (ImGui.Selectable($"#{channel.Name}##{channel.Id}", isSelected))
-                    {
-                        onWaitSelection(channel.Id.ToString());
-                    }
-                    if (isSelected) ImGui.SetItemDefaultFocus();
+                    onWaitSelection(string.Empty);
                 }
-                HoverHandIfItem();
+
+                if (channels != null)
+                {
+                    foreach (var channel in channels)
+                    {
+                        bool isSelected = channel.Id.ToString() == currentId;
+                        // Use ID in label to prevent ImGui ID collisions with identical channel names
+                        if (ImGui.Selectable($"#{channel.Name}##{channel.Id}", isSelected))
+                        {
+                            onWaitSelection(channel.Id.ToString());
+                        }
+                        if (isSelected) ImGui.SetItemDefaultFocus();
+                    }
+                    HoverHandIfItem();
+                }
             }
-            ImGui.EndCombo();
         }
     }
 

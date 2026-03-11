@@ -3,6 +3,7 @@ using System.Numerics;
 using Dalamud.Bindings.ImGui;
 using Cordi.Services;
 using Dalamud.Interface;
+using Dalamud.Interface.Utility.Raii;
 
 using Cordi.Core;
 using Cordi.Extensions;
@@ -45,31 +46,31 @@ public class EmoteLogPanel
                     ImGui.SameLine();
                     ImGui.SetCursorPosX(ImGui.GetCursorPosX() + rightAlignPos - ImGui.GetCursorPosX());
 
-                    ImGui.PushFont(UiBuilder.IconFont);
-                    ImGui.PushStyleVar(ImGuiStyleVar.FramePadding, Vector2.Zero);
-                    bool keepTarget = ImGui.GetIO().KeyShift;
-                    bool keepRotation = ImGui.GetIO().KeyAlt;
-
-                    if (ImGui.Button($"{FontAwesomeIcon.Reply.ToIconString()}##{i}", buttonSize))
+                    using (var font = ImRaii.PushFont(UiBuilder.IconFont))
+                    using (var style = ImRaii.PushStyle(ImGuiStyleVar.FramePadding, Vector2.Zero))
                     {
-                        var cmd = entry.Command;
-                        if (string.IsNullOrEmpty(cmd))
-                        {
-                            cmd = entry.Emote;
-                            if (!cmd.StartsWith("/")) cmd = "/" + cmd;
-                        }
+                        bool keepTarget = ImGui.GetIO().KeyShift;
+                        bool keepRotation = ImGui.GetIO().KeyAlt;
 
-                        _ = _plugin.EmoteLog.PerformEmoteBack(
-                            entry.User,
-                            entry.World,
-                            cmd,
-                            entry.GameObjectId,
-                            keepTarget,
-                            keepRotation
-                        );
+                        if (ImGui.Button($"{FontAwesomeIcon.Reply.ToIconString()}##{i}", buttonSize))
+                        {
+                            var cmd = entry.Command;
+                            if (string.IsNullOrEmpty(cmd))
+                            {
+                                cmd = entry.Emote;
+                                if (!cmd.StartsWith("/")) cmd = "/" + cmd;
+                            }
+
+                            _ = _plugin.EmoteLog.PerformEmoteBack(
+                                entry.User,
+                                entry.World,
+                                cmd,
+                                entry.GameObjectId,
+                                keepTarget,
+                                keepRotation
+                            );
+                        }
                     }
-                    ImGui.PopStyleVar();
-                    ImGui.PopFont();
 
                     if (ImGui.IsItemHovered())
                     {

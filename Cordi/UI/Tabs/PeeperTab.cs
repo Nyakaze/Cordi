@@ -8,6 +8,7 @@ using Dalamud.Interface.Utility;
 using DSharpPlus;
 using DSharpPlus.Entities;
 using Dalamud.Bindings.ImGui;
+using Dalamud.Interface.Utility.Raii;
 
 using Cordi.Core;
 using Cordi.UI.Themes;
@@ -121,69 +122,71 @@ public class CordiPeepTab : ConfigTabBase
 
                 float half = avail / 2f - theme.Gap(1f);
 
-                ImGui.BeginGroup();
-                bool wEnabled = plugin.Config.CordiPeep.WindowEnabled;
-                theme.ConfigCheckbox("Enable Window", ref wEnabled, () =>
+                using (var g1 = ImRaii.Group())
                 {
-                    plugin.Config.CordiPeep.WindowEnabled = wEnabled;
-                    plugin.Config.Save();
-                    plugin.UpdateCommandVisibility();
-                });
-                theme.HoverHandIfItem();
+                    bool wEnabled = plugin.Config.CordiPeep.WindowEnabled;
+                    theme.ConfigCheckbox("Enable Window", ref wEnabled, () =>
+                    {
+                        plugin.Config.CordiPeep.WindowEnabled = wEnabled;
+                        plugin.Config.Save();
+                        plugin.UpdateCommandVisibility();
+                    });
+                    theme.HoverHandIfItem();
 
-                bool openOnLogin = plugin.Config.CordiPeep.OpenOnLogin;
-                theme.ConfigCheckbox("Open on Login", ref openOnLogin, () =>
-                {
-                    plugin.Config.CordiPeep.OpenOnLogin = openOnLogin;
-                    plugin.Config.Save();
-                });
-                theme.HoverHandIfItem();
+                    bool openOnLogin = plugin.Config.CordiPeep.OpenOnLogin;
+                    theme.ConfigCheckbox("Open on Login", ref openOnLogin, () =>
+                    {
+                        plugin.Config.CordiPeep.OpenOnLogin = openOnLogin;
+                        plugin.Config.Save();
+                    });
+                    theme.HoverHandIfItem();
 
-                bool wLocked = plugin.Config.CordiPeep.WindowLocked;
-                theme.ConfigCheckbox("Lock Position", ref wLocked, () =>
-                {
-                    plugin.Config.CordiPeep.WindowLocked = wLocked;
-                    plugin.Config.Save();
-                });
-                theme.HoverHandIfItem();
-                ImGui.EndGroup();
+                    bool wLocked = plugin.Config.CordiPeep.WindowLocked;
+                    theme.ConfigCheckbox("Lock Position", ref wLocked, () =>
+                    {
+                        plugin.Config.CordiPeep.WindowLocked = wLocked;
+                        plugin.Config.Save();
+                    });
+                    theme.HoverHandIfItem();
+                }
 
                 ImGui.SameLine();
                 ImGui.SetCursorPosX(ImGui.GetCursorPosX() + theme.Gap(2f));
 
-                ImGui.BeginGroup();
-                bool wNoResize = plugin.Config.CordiPeep.WindowNoResize;
-                theme.ConfigCheckbox("Lock Size", ref wNoResize, () =>
+                using (var g2 = ImRaii.Group())
                 {
-                    plugin.Config.CordiPeep.WindowNoResize = wNoResize;
-                    plugin.Config.Save();
-                });
-                theme.HoverHandIfItem();
+                    bool wNoResize = plugin.Config.CordiPeep.WindowNoResize;
+                    theme.ConfigCheckbox("Lock Size", ref wNoResize, () =>
+                    {
+                        plugin.Config.CordiPeep.WindowNoResize = wNoResize;
+                        plugin.Config.Save();
+                    });
+                    theme.HoverHandIfItem();
 
-                bool ignoreEsc = plugin.Config.CordiPeep.IgnoreEsc;
-                theme.ConfigCheckbox("Ignore ESC", ref ignoreEsc, () =>
-                {
-                    plugin.Config.CordiPeep.IgnoreEsc = ignoreEsc;
-                    plugin.Config.Save();
-                });
-                theme.HoverHandIfItem();
+                    bool ignoreEsc = plugin.Config.CordiPeep.IgnoreEsc;
+                    theme.ConfigCheckbox("Ignore ESC", ref ignoreEsc, () =>
+                    {
+                        plugin.Config.CordiPeep.IgnoreEsc = ignoreEsc;
+                        plugin.Config.Save();
+                    });
+                    theme.HoverHandIfItem();
 
-                bool wFocusHover = plugin.Config.CordiPeep.FocusOnHover;
-                theme.ConfigCheckbox("Focus on hover", ref wFocusHover, () =>
-                {
-                    plugin.Config.CordiPeep.FocusOnHover = wFocusHover;
-                    plugin.Config.Save();
-                });
-                theme.HoverHandIfItem();
+                    bool wFocusHover = plugin.Config.CordiPeep.FocusOnHover;
+                    theme.ConfigCheckbox("Focus on hover", ref wFocusHover, () =>
+                    {
+                        plugin.Config.CordiPeep.FocusOnHover = wFocusHover;
+                        plugin.Config.Save();
+                    });
+                    theme.HoverHandIfItem();
 
-                bool wAltClick = plugin.Config.CordiPeep.AltClickExamine;
-                theme.ConfigCheckbox("Alt-click Examine", ref wAltClick, () =>
-                {
-                    plugin.Config.CordiPeep.AltClickExamine = wAltClick;
-                    plugin.Config.Save();
-                });
-                theme.HoverHandIfItem();
-                ImGui.EndGroup();
+                    bool wAltClick = plugin.Config.CordiPeep.AltClickExamine;
+                    theme.ConfigCheckbox("Alt-click Examine", ref wAltClick, () =>
+                    {
+                        plugin.Config.CordiPeep.AltClickExamine = wAltClick;
+                        plugin.Config.Save();
+                    });
+                    theme.HoverHandIfItem();
+                }
 
                 theme.SpacerY(1f);
                 ImGui.Separator();
@@ -191,52 +194,54 @@ public class CordiPeepTab : ConfigTabBase
                 ImGui.TextColored(theme.MutedText, "Overlay Display");
                 theme.SpacerY(0.5f);
 
-                ImGui.BeginGroup();
-                bool showDir = plugin.Config.CordiPeep.ShowDirection;
-                theme.ConfigCheckbox("Show Direction Arrow", ref showDir, () =>
+                using (var g3 = ImRaii.Group())
                 {
-                    plugin.Config.CordiPeep.ShowDirection = showDir;
-                    plugin.Config.Save();
-                });
-                theme.HoverHandIfItem();
+                    bool showDir = plugin.Config.CordiPeep.ShowDirection;
+                    theme.ConfigCheckbox("Show Direction Arrow", ref showDir, () =>
+                    {
+                        plugin.Config.CordiPeep.ShowDirection = showDir;
+                        plugin.Config.Save();
+                    });
+                    theme.HoverHandIfItem();
 
-                bool showDist = plugin.Config.CordiPeep.ShowDistance;
-                theme.ConfigCheckbox("Show Distance", ref showDist, () =>
-                {
-                    plugin.Config.CordiPeep.ShowDistance = showDist;
-                    plugin.Config.Save();
-                });
-                theme.HoverHandIfItem();
-                ImGui.EndGroup();
+                    bool showDist = plugin.Config.CordiPeep.ShowDistance;
+                    theme.ConfigCheckbox("Show Distance", ref showDist, () =>
+                    {
+                        plugin.Config.CordiPeep.ShowDistance = showDist;
+                        plugin.Config.Save();
+                    });
+                    theme.HoverHandIfItem();
+                }
 
                 ImGui.SameLine();
                 ImGui.SetCursorPosX(ImGui.GetCursorPosX() + theme.Gap(2f));
 
-                ImGui.BeginGroup();
-                bool showTarget = plugin.Config.CordiPeep.ShowCurrentTarget;
-                theme.ConfigCheckbox("Show Peeper's Target", ref showTarget, () =>
+                using (var g4 = ImRaii.Group())
                 {
-                    plugin.Config.CordiPeep.ShowCurrentTarget = showTarget;
-                    plugin.Config.Save();
-                });
-                theme.HoverHandIfItem();
+                    bool showTarget = plugin.Config.CordiPeep.ShowCurrentTarget;
+                    theme.ConfigCheckbox("Show Peeper's Target", ref showTarget, () =>
+                    {
+                        plugin.Config.CordiPeep.ShowCurrentTarget = showTarget;
+                        plugin.Config.Save();
+                    });
+                    theme.HoverHandIfItem();
 
-                bool showDirHistory = plugin.Config.CordiPeep.ShowDirectionInHistory;
-                theme.ConfigCheckbox("Show Direction in History", ref showDirHistory, () =>
-                {
-                    plugin.Config.CordiPeep.ShowDirectionInHistory = showDirHistory;
-                    plugin.Config.Save();
-                });
-                theme.HoverHandIfItem();
+                    bool showDirHistory = plugin.Config.CordiPeep.ShowDirectionInHistory;
+                    theme.ConfigCheckbox("Show Direction in History", ref showDirHistory, () =>
+                    {
+                        plugin.Config.CordiPeep.ShowDirectionInHistory = showDirHistory;
+                        plugin.Config.Save();
+                    });
+                    theme.HoverHandIfItem();
 
-                bool showDistHistory = plugin.Config.CordiPeep.ShowDistanceInHistory;
-                theme.ConfigCheckbox("Show Distance in History", ref showDistHistory, () =>
-                {
-                    plugin.Config.CordiPeep.ShowDistanceInHistory = showDistHistory;
-                    plugin.Config.Save();
-                });
-                theme.HoverHandIfItem();
-                ImGui.EndGroup();
+                    bool showDistHistory = plugin.Config.CordiPeep.ShowDistanceInHistory;
+                    theme.ConfigCheckbox("Show Distance in History", ref showDistHistory, () =>
+                    {
+                        plugin.Config.CordiPeep.ShowDistanceInHistory = showDistHistory;
+                        plugin.Config.Save();
+                    });
+                    theme.HoverHandIfItem();
+                }
 
                 theme.SpacerY(0.7f);
 
@@ -261,44 +266,46 @@ public class CordiPeepTab : ConfigTabBase
             drawContent: (avail) =>
             {
 
-                ImGui.BeginGroup();
-                bool logParty = plugin.Config.CordiPeep.LogParty;
-                theme.ConfigCheckbox("Log party members", ref logParty, () =>
+                using (var g5 = ImRaii.Group())
                 {
-                    plugin.Config.CordiPeep.LogParty = logParty;
-                    plugin.Config.Save();
-                });
-                theme.HoverHandIfItem();
+                    bool logParty = plugin.Config.CordiPeep.LogParty;
+                    theme.ConfigCheckbox("Log party members", ref logParty, () =>
+                    {
+                        plugin.Config.CordiPeep.LogParty = logParty;
+                        plugin.Config.Save();
+                    });
+                    theme.HoverHandIfItem();
 
-                bool logAlliance = plugin.Config.CordiPeep.LogAlliance;
-                theme.ConfigCheckbox("Log alliance members", ref logAlliance, () =>
-                {
-                    plugin.Config.CordiPeep.LogAlliance = logAlliance;
-                    plugin.Config.Save();
-                });
-                theme.HoverHandIfItem();
-                ImGui.EndGroup();
+                    bool logAlliance = plugin.Config.CordiPeep.LogAlliance;
+                    theme.ConfigCheckbox("Log alliance members", ref logAlliance, () =>
+                    {
+                        plugin.Config.CordiPeep.LogAlliance = logAlliance;
+                        plugin.Config.Save();
+                    });
+                    theme.HoverHandIfItem();
+                }
 
                 ImGui.SameLine();
                 ImGui.SetCursorPosX(ImGui.GetCursorPosX() + theme.Gap(2f));
 
-                ImGui.BeginGroup();
-                bool logCombat = plugin.Config.CordiPeep.LogCombat;
-                theme.ConfigCheckbox("Combat targeters only", ref logCombat, () =>
+                using (var g6 = ImRaii.Group())
                 {
-                    plugin.Config.CordiPeep.LogCombat = logCombat;
-                    plugin.Config.Save();
-                });
-                theme.HoverHandIfItem();
+                    bool logCombat = plugin.Config.CordiPeep.LogCombat;
+                    theme.ConfigCheckbox("Combat targeters only", ref logCombat, () =>
+                    {
+                        plugin.Config.CordiPeep.LogCombat = logCombat;
+                        plugin.Config.Save();
+                    });
+                    theme.HoverHandIfItem();
 
-                bool wIncludeSelf = plugin.Config.CordiPeep.IncludeSelf;
-                theme.ConfigCheckbox("Include yourself", ref wIncludeSelf, () =>
-                {
-                    plugin.Config.CordiPeep.IncludeSelf = wIncludeSelf;
-                    plugin.Config.Save();
-                });
-                theme.HoverHandIfItem();
-                ImGui.EndGroup();
+                    bool wIncludeSelf = plugin.Config.CordiPeep.IncludeSelf;
+                    theme.ConfigCheckbox("Include yourself", ref wIncludeSelf, () =>
+                    {
+                        plugin.Config.CordiPeep.IncludeSelf = wIncludeSelf;
+                        plugin.Config.Save();
+                    });
+                    theme.HoverHandIfItem();
+                }
             }
         );
 
@@ -376,53 +383,56 @@ public class CordiPeepTab : ConfigTabBase
 
                 float colW = (avail - theme.Gap(2f)) / 2f;
 
-                ImGui.BeginGroup();
-                float vol = plugin.Config.CordiPeep.SoundVolume * 100f;
-                ImGui.Text("Volume:");
-                ImGui.SetNextItemWidth(colW);
-                if (ImGui.SliderFloat("##vol", ref vol, 0f, 100f, "%.0f%%"))
+                using (var g7 = ImRaii.Group())
                 {
-                    plugin.Config.CordiPeep.SoundVolume = vol / 100f;
-                    plugin.Config.Save();
+                    float vol = plugin.Config.CordiPeep.SoundVolume * 100f;
+                    ImGui.Text("Volume:");
+                    ImGui.SetNextItemWidth(colW);
+                    if (ImGui.SliderFloat("##vol", ref vol, 0f, 100f, "%.0f%%"))
+                    {
+                        plugin.Config.CordiPeep.SoundVolume = vol / 100f;
+                        plugin.Config.Save();
+                    }
                 }
-                ImGui.EndGroup();
 
                 ImGui.SameLine();
                 ImGui.SetCursorPosX(ImGui.GetCursorPosX() + theme.Gap(2f));
 
-                ImGui.BeginGroup();
-
-                var devices = plugin.CordiPeep.GetOutputDevices().Where(d => d.Guid != Guid.Empty).ToList();
-                string currentDeviceName = "Primary Driver";
-                if (plugin.Config.CordiPeep.SoundDevice != Guid.Empty)
+                using (var g8 = ImRaii.Group())
                 {
-                    var current = devices.FirstOrDefault(d => d.Guid == plugin.Config.CordiPeep.SoundDevice);
-                    if (current != null) currentDeviceName = current.Description;
-                }
-
-                ImGui.Text("Output Device:");
-                ImGui.SetNextItemWidth(colW);
-                if (ImGui.BeginCombo("##outDevice", currentDeviceName))
-                {
-                    if (ImGui.Selectable("Primary Sound Driver", plugin.Config.CordiPeep.SoundDevice == Guid.Empty))
+                    var devices = plugin.CordiPeep.GetOutputDevices().Where(d => d.Guid != Guid.Empty).ToList();
+                    string currentDeviceName = "Primary Driver";
+                    if (plugin.Config.CordiPeep.SoundDevice != Guid.Empty)
                     {
-                        plugin.Config.CordiPeep.SoundDevice = Guid.Empty;
-                        plugin.Config.Save();
+                        var current = devices.FirstOrDefault(d => d.Guid == plugin.Config.CordiPeep.SoundDevice);
+                        if (current != null) currentDeviceName = current.Description;
                     }
 
-                    foreach (var dev in devices)
+                    ImGui.Text("Output Device:");
+                    ImGui.SetNextItemWidth(colW);
+                    using (var combo = ImRaii.Combo("##outDevice", currentDeviceName))
                     {
-                        bool isSelected = dev.Guid == plugin.Config.CordiPeep.SoundDevice;
-                        if (ImGui.Selectable(dev.Description, isSelected))
+                        if (combo)
                         {
-                            plugin.Config.CordiPeep.SoundDevice = dev.Guid;
-                            plugin.Config.Save();
+                            if (ImGui.Selectable("Primary Sound Driver", plugin.Config.CordiPeep.SoundDevice == Guid.Empty))
+                            {
+                                plugin.Config.CordiPeep.SoundDevice = Guid.Empty;
+                                plugin.Config.Save();
+                            }
+
+                            foreach (var dev in devices)
+                            {
+                                bool isSelected = dev.Guid == plugin.Config.CordiPeep.SoundDevice;
+                                if (ImGui.Selectable(dev.Description, isSelected))
+                                {
+                                    plugin.Config.CordiPeep.SoundDevice = dev.Guid;
+                                    plugin.Config.Save();
+                                }
+                            }
                         }
                     }
-                    ImGui.EndCombo();
+                    theme.HoverHandIfItem();
                 }
-                theme.HoverHandIfItem();
-                ImGui.EndGroup();
             }
         );
 
@@ -474,48 +484,50 @@ public class CordiPeepTab : ConfigTabBase
                 }
                 else
                 {
-                    if (ImGui.BeginTable("##peepBlacklistTable", 4, ImGuiTableFlags.RowBg | ImGuiTableFlags.BordersInnerV))
+                    using (var table = ImRaii.Table("##peepBlacklistTable", 4, ImGuiTableFlags.RowBg | ImGuiTableFlags.BordersInnerV))
                     {
-                        ImGui.TableSetupColumn("Character", ImGuiTableColumnFlags.WidthStretch);
-                        ImGui.TableSetupColumn("No Sound", ImGuiTableColumnFlags.WidthFixed, 70f);
-                        ImGui.TableSetupColumn("No Discord", ImGuiTableColumnFlags.WidthFixed, 70f);
-                        ImGui.TableSetupColumn("Actions", ImGuiTableColumnFlags.WidthFixed, 60f);
-                        ImGui.TableHeadersRow();
-
-                        for (int i = 0; i < plugin.Config.CordiPeep.Blacklist.Count; i++)
+                        if (table)
                         {
-                            var entry = plugin.Config.CordiPeep.Blacklist[i];
-                            ImGui.TableNextRow();
-                            ImGui.TableNextColumn();
-                            ImGui.AlignTextToFramePadding();
-                            ImGui.Text($"{entry.Name}@{entry.World}");
+                            ImGui.TableSetupColumn("Character", ImGuiTableColumnFlags.WidthStretch);
+                            ImGui.TableSetupColumn("No Sound", ImGuiTableColumnFlags.WidthFixed, 70f);
+                            ImGui.TableSetupColumn("No Discord", ImGuiTableColumnFlags.WidthFixed, 70f);
+                            ImGui.TableSetupColumn("Actions", ImGuiTableColumnFlags.WidthFixed, 60f);
+                            ImGui.TableHeadersRow();
 
-                            ImGui.TableNextColumn();
-                            bool noSound = entry.DisableSound;
-                            theme.ConfigCheckbox($"##peepBlSound{i}", ref noSound, () =>
+                            for (int i = 0; i < plugin.Config.CordiPeep.Blacklist.Count; i++)
                             {
-                                entry.DisableSound = noSound;
-                                plugin.Config.Save();
-                            });
+                                var entry = plugin.Config.CordiPeep.Blacklist[i];
+                                ImGui.TableNextRow();
+                                ImGui.TableNextColumn();
+                                ImGui.AlignTextToFramePadding();
+                                ImGui.Text($"{entry.Name}@{entry.World}");
 
-                            ImGui.TableNextColumn();
-                            bool noDiscord = entry.DisableDiscord;
-                            theme.ConfigCheckbox($"##peepBlDiscord{i}", ref noDiscord, () =>
-                            {
-                                entry.DisableDiscord = noDiscord;
-                                plugin.Config.Save();
-                            });
+                                ImGui.TableNextColumn();
+                                bool noSound = entry.DisableSound;
+                                theme.ConfigCheckbox($"##peepBlSound{i}", ref noSound, () =>
+                                {
+                                    entry.DisableSound = noSound;
+                                    plugin.Config.Save();
+                                });
 
-                            ImGui.TableNextColumn();
-                            if (ImGui.Button($"Remove##remPeepBl{i}", new Vector2(-1, 0)))
-                            {
-                                plugin.Config.CordiPeep.Blacklist.RemoveAt(i);
-                                plugin.Config.Save();
-                                i--;
+                                ImGui.TableNextColumn();
+                                bool noDiscord = entry.DisableDiscord;
+                                theme.ConfigCheckbox($"##peepBlDiscord{i}", ref noDiscord, () =>
+                                {
+                                    entry.DisableDiscord = noDiscord;
+                                    plugin.Config.Save();
+                                });
+
+                                ImGui.TableNextColumn();
+                                if (ImGui.Button($"Remove##remPeepBl{i}", new Vector2(-1, 0)))
+                                {
+                                    plugin.Config.CordiPeep.Blacklist.RemoveAt(i);
+                                    plugin.Config.Save();
+                                    i--;
+                                }
+                                theme.HoverHandIfItem();
                             }
-                            theme.HoverHandIfItem();
                         }
-                        ImGui.EndTable();
                     }
                 }
             }

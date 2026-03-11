@@ -1,10 +1,11 @@
-﻿using System;
+using System;
 using System.Linq;
 using System.Numerics;
 using Cordi.Packets.Handler.Chat;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Game.Text;
 using Dalamud.Interface.Windowing;
+using Dalamud.Interface.Utility.Raii;
 using Dalamud.IoC;
 using Dalamud.Plugin.Services;
 using DSharpPlus;
@@ -86,24 +87,25 @@ public sealed class ConfigWindow : Window, IDisposable
 
         bool botStarted = plugin.Config.Discord.BotStarted;
 
-        ImGui.BeginDisabled(plugin.Discord.IsBusy);
-        var botStatus = theme.BadgeToggle(
-            id: "##botStatus",
-            ref botStarted,
-            label: "Discord Bot",
-            height: 25f,
-            iconOnRight: false,
-            bgOn: UiTheme.ColorSuccess,
-            bgOff: UiTheme.ColorDanger
-            );
-        if (botStatus.StateChanged)
+        using (ImRaii.Disabled(plugin.Discord.IsBusy))
         {
-            if (botStarted)
-                plugin.Discord.Start();
-            else
-                plugin.Discord.Stop();
+            var botStatus = theme.BadgeToggle(
+                id: "##botStatus",
+                ref botStarted,
+                label: "Discord Bot",
+                height: 25f,
+                iconOnRight: false,
+                bgOn: UiTheme.ColorSuccess,
+                bgOff: UiTheme.ColorDanger
+                );
+            if (botStatus.StateChanged)
+            {
+                if (botStarted)
+                    plugin.Discord.Start();
+                else
+                    plugin.Discord.Stop();
+            }
         }
-        ImGui.EndDisabled();
         theme.HoverHandIfItem();
 
         DrawStats();
@@ -114,124 +116,96 @@ public sealed class ConfigWindow : Window, IDisposable
 
 
         float fontScale = UiTheme.GlobalFontScale;
-        ImGui.BeginChild("##sidebar", new Vector2(150 * fontScale, 0), false);
-
-        theme.ApplyFontScale(1.1f);
-
-
-        ImGui.PushStyleVar(ImGuiStyleVar.FrameRounding, 12f);
-        ImGui.PushStyleVar(ImGuiStyleVar.ButtonTextAlign, new Vector2(0.5f, 0.5f));
-
-        float itemHeight = 40f * fontScale;
-        Vector2 buttonSize = new Vector2(-1, itemHeight);
-
-
-        void PushBtnColor(bool active)
+        using (ImRaii.Child("##sidebar", new Vector2(150 * fontScale, 0), false))
         {
-            if (active)
+            theme.ApplyFontScale(1.1f);
+
+            using (ImRaii.PushStyle(ImGuiStyleVar.FrameRounding, 12f))
+            using (ImRaii.PushStyle(ImGuiStyleVar.ButtonTextAlign, new Vector2(0.5f, 0.5f)))
             {
-                ImGui.PushStyleColor(ImGuiCol.Button, theme.Accent);
-                ImGui.PushStyleColor(ImGuiCol.ButtonHovered, theme.Accent);
-                ImGui.PushStyleColor(ImGuiCol.ButtonActive, theme.Accent);
-            }
-            else
-            {
-                ImGui.PushStyleColor(ImGuiCol.Button, new Vector4(0, 0, 0, 0)); // Transparent
-                ImGui.PushStyleColor(ImGuiCol.ButtonHovered, theme.TabHovered);
-                ImGui.PushStyleColor(ImGuiCol.ButtonActive, theme.TabActive);
-            }
-        }
+                float itemHeight = 40f * fontScale;
+                Vector2 buttonSize = new Vector2(-1, itemHeight);
 
+                void DrawSidebarButton(string label, int tabIndex, bool isFirst = false)
+                {
+                    if (!isFirst)
+                        theme.SpacerY();
+                    using (ImRaii.PushColor(ImGuiCol.Button, selectedTab == tabIndex ? theme.Accent : new Vector4(0, 0, 0, 0)))
+                    using (ImRaii.PushColor(ImGuiCol.ButtonHovered, selectedTab == tabIndex ? theme.Accent : theme.TabHovered))
+                    using (ImRaii.PushColor(ImGuiCol.ButtonActive, selectedTab == tabIndex ? theme.Accent : theme.TabActive))
+                    {
+                        if (ImGui.Button(label, buttonSize)) selectedTab = tabIndex;
+                        theme.HoverHandIfItem();
+                    }
+                    ImGui.Spacing();
+                }
 
-        bool isFirstSidebarButton = true;
-        void DrawSidebarButton(string label, int tabIndex)
-        {
-            if (isFirstSidebarButton)
-                isFirstSidebarButton = false;
-            else
-                theme.SpacerY();
-            PushBtnColor(selectedTab == tabIndex);
-            if (ImGui.Button(label, buttonSize)) selectedTab = tabIndex;
-            theme.HoverHandIfItem();
-            ImGui.PopStyleColor(3);
-            ImGui.Spacing();
-        }
-
-        theme.SpacerY(1f);
-        // DrawSidebarButton("General", 0);
-        DrawSidebarButton("Chats", 1);
-        DrawSidebarButton("Emote Log", 4);
-        DrawSidebarButton("Peepers", 2);
-        DrawSidebarButton("Combined", 9);
-        DrawSidebarButton("Activity", 5);
-        DrawSidebarButton("Party", 6);
-        DrawSidebarButton("Remember Me", 7);
-        DrawSidebarButton("Settings", 12);
+                theme.SpacerY(1f);
+                // DrawSidebarButton("General", 0);
+                DrawSidebarButton("Chats", 1, true);
+                DrawSidebarButton("Emote Log", 4);
+                DrawSidebarButton("Peepers", 2);
+                DrawSidebarButton("Combined", 9);
+                DrawSidebarButton("Activity", 5);
+                DrawSidebarButton("Party", 6);
+                DrawSidebarButton("Remember Me", 7);
+                DrawSidebarButton("Settings", 12);
 
 #if DEBUG
-        DrawSidebarButton("Debug", 3);
+                DrawSidebarButton("Debug", 3);
 #endif
-
-        ImGui.PopStyleVar(2);
-        theme.ApplyFontScale();
-
-
-        ImGui.EndChild();
+            }
+            theme.ApplyFontScale();
+        }
         ImGui.SameLine();
 
-        ImGui.BeginChild("##content", new Vector2(0, 0), false);
-        theme.ApplyFontScale();
-
-        switch (selectedTab)
+        using (ImRaii.Child("##content", new Vector2(0, 0), false))
         {
-            case 0:
+            theme.ApplyFontScale();
 
-                generalTab.Draw();
-                break;
+            switch (selectedTab)
+            {
+                case 0:
+                    generalTab.Draw();
+                    break;
 
-            case 1:
+                case 1:
+                    chatsTab.Draw();
+                    break;
 
-                chatsTab.Draw();
-                break;
-
-            case 2:
-
-                cordiPeepTab.Draw();
-                break;
+                case 2:
+                    cordiPeepTab.Draw();
+                    break;
 
 #if DEBUG
-            case 3:
-
-                debugTab.Draw();
-                break;
+                case 3:
+                    debugTab.Draw();
+                    break;
 #endif
-            case 4:
+                case 4:
+                    emoteLogTab.Draw();
+                    break;
+                case 5:
+                    discordActivityTab.Draw();
+                    break;
 
-                emoteLogTab.Draw();
-                break;
-            case 5:
+                case 6:
+                    partyTab.Draw();
+                    break;
 
-                discordActivityTab.Draw();
-                break;
+                case 7:
+                    rememberMeTab.Draw();
+                    break;
 
-            case 6:
-                partyTab.Draw();
-                break;
+                case 9:
+                    combinedWindowTab.Draw();
+                    break;
 
-            case 7:
-                rememberMeTab.Draw();
-                break;
-
-            case 9:
-                combinedWindowTab.Draw();
-                break;
-
-            case 12:
-                settingsTab.Draw();
-                break;
-                    
+                case 12:
+                    settingsTab.Draw();
+                    break;
+            }
         }
-        ImGui.EndChild();
     }
 
     private void DrawStats()

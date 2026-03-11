@@ -6,6 +6,7 @@ using System.Linq;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Interface;
 using Dalamud.Interface.Utility;
+using Dalamud.Interface.Utility.Raii;
 
 using Cordi.Core;
 using Cordi.UI.Themes;
@@ -51,20 +52,19 @@ public class GeneralTab : ConfigTabBase
                 theme.HoverHandIfItem();
                 if (plugin.Config.Discord.AllowDiscordCommands)
                 {
-                    ImGui.Indent();
-
-                    string prefix = plugin.Config.Discord.CommandPrefix;
-                    if (ImGui.InputText("Command Prefix", ref prefix, 10))
+                    using (ImRaii.PushIndent())
                     {
-                        plugin.Config.Discord.CommandPrefix = prefix;
-                        plugin.Config.Save();
+                        string prefix = plugin.Config.Discord.CommandPrefix;
+                        if (ImGui.InputText("Command Prefix", ref prefix, 10))
+                        {
+                            plugin.Config.Discord.CommandPrefix = prefix;
+                            plugin.Config.Save();
+                        }
+
+                        ImGui.TextWrapped("Available commands:");
+                        ImGui.BulletText("!target PlayerName World - Target a player");
+                        ImGui.BulletText("!emote emotename PlayerName World - Emote at a player");
                     }
-
-                    ImGui.TextWrapped("Available commands:");
-                    ImGui.BulletText("!target PlayerName World - Target a player");
-                    ImGui.BulletText("!emote emotename PlayerName World - Emote at a player");
-
-                    ImGui.Unindent();
                 }
             }
         );
