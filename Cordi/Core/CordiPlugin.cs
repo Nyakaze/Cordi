@@ -14,10 +14,7 @@ using Cordi.Packets.Handler.Chat;
 using Cordi.Services;
 using Cordi.Services.Discord;
 using Cordi.Services.Features;
-using Cordi.Services.QoLBar;
-using Cordi.Services.CleanWindow;
-using Cordi.Configuration.QoLBar;
-using Cordi.UI.QoLBar;
+
 using Dalamud.Interface.Windowing;
 using Dalamud.Plugin.Services;
 
@@ -84,25 +81,11 @@ public class CordiPlugin : IDalamudPlugin
     public ChatMessenger _chat = null!;
     public CordiPeepService CordiPeep { get; private set; }
     public CordiPeepWindow CordiPeepWindow { get; private set; }
-    public NearbyService NearbyService { get; private set; }
-    public NearbyWindow NearbyWindow { get; private set; }
     public EmoteLogService EmoteLog { get; private set; }
     public EmoteLogWindow EmoteLogWindow { get; private set; }
     public CombinedWindow CombinedWindow { get; private set; }
     public PartyService PartyService { get; private set; }
     public RememberMeService RememberMe { get; private set; }
-
-    public CommandExecutor CommandExecutor { get; private set; }
-    public KeybindService KeybindService { get; private set; }
-    public ConditionService ConditionService { get; private set; }
-    public BarImportExportService BarImportExport { get; private set; }
-    public VariableService VariableService { get; private set; }
-    public DynamicVariableService DynamicVariableService { get; private set; }
-    public QoLBarOverlay QoLBarOverlay { get; private set; }
-    public QoLBarConfig QoLBarConfig { get; private set; }
-    public CleanWindowService CleanWindowService { get; set; }
-    public CleanWindowUI CleanWindowUI { get; set; }
-    public KeepTargetService KeepTargetService { get; private set; }
 
     public CordiPlugin()
     {
@@ -110,7 +93,6 @@ public class CordiPlugin : IDalamudPlugin
         ECommonsMain.Init(PluginInterface, this);
         PluginInterface.Create<Service>();
         InitializeConfig();
-        QoLBarConfig = QoLBarConfig.Load(PluginInterface.ConfigDirectory.FullName);
 
         PluginInterface.UiBuilder.OpenConfigUi += ToggleConfigUI;
         PluginInterface.UiBuilder.OpenMainUi += ToggleConfigUI;
@@ -133,33 +115,17 @@ public class CordiPlugin : IDalamudPlugin
         RememberMe = new RememberMeService(this);
         ActivityManager = new ActivityManager(this, Discord, HonorificBridge);
 
-        CommandExecutor = new CommandExecutor(CommandManager, ChatGui, Framework);
-        KeybindService = new KeybindService(Service.KeyState);
-        ConditionService = new ConditionService(Service.Condition, Service.ClientState);
-        BarImportExport = new BarImportExportService();
-        VariableService = new VariableService(CommandManager);
-        DynamicVariableService = new DynamicVariableService(VariableService, Service.ClientState, Service.Condition, Service.DataManager, Framework, QoLBarConfig);
-        QoLBarOverlay = new QoLBarOverlay(ConditionService, CommandExecutor);
-
-        CleanWindowService = new CleanWindowService(Config.CleanWindow);
-        CleanWindowUI = new CleanWindowUI();
-        KeepTargetService = new KeepTargetService(this);
-
         configWindow = new ConfigWindow(this);
         discordWindow = new DiscordWindow(this);
         CordiPeepWindow = new CordiPeepWindow(this);
-        NearbyService = new NearbyService(this);
-        NearbyWindow = new NearbyWindow(this);
         this.EmoteLogWindow = new EmoteLogWindow(this);
         CombinedWindow = new CombinedWindow(this);
 
         windowSystem.AddWindow(discordWindow);
         windowSystem.AddWindow(configWindow);
         windowSystem.AddWindow(CordiPeepWindow);
-        windowSystem.AddWindow(NearbyWindow);
         windowSystem.AddWindow(this.EmoteLogWindow);
         windowSystem.AddWindow(CombinedWindow);
-        windowSystem.AddWindow(CleanWindowUI);
 
         PluginInterface.UiBuilder.Draw += DrawUI;
 
@@ -184,7 +150,6 @@ public class CordiPlugin : IDalamudPlugin
             if (Service.ClientState.IsLoggedIn)
             {
                 if (Config!.CordiPeep.OpenOnLogin) CordiPeepWindow.IsOpen = true;
-                if (Config!.Nearby.OpenOnLogin) NearbyWindow.IsOpen = true;
                 if (Config!.EmoteLog.WindowOpenOnLogin) this.EmoteLogWindow.IsOpen = true;
                 if (Config!.CombinedWindow.OpenOnLogin) CombinedWindow.IsOpen = true;
             }
@@ -252,7 +217,6 @@ public class CordiPlugin : IDalamudPlugin
 
         windowSystem.Draw();
         NotificationManager.Draw();
-        QoLBarOverlay?.Draw();
     }
 
     public void OpenConfigUi()
@@ -271,82 +235,7 @@ public class CordiPlugin : IDalamudPlugin
         configWindow.Toggle();
     }
 
-    [Command("/cordikpt")]
-    [HelpMessage("Force keep target. Usage: /cordikpt <name> to enable and target, /cordikpt off to disable.")]
-    public void KeepTargetCommand(string command, string args)
-    {
-        var arg = args.Trim();
-        if (string.Equals(arg, "off", StringComparison.OrdinalIgnoreCase) || string.IsNullOrEmpty(arg))
-        {
-            Config.KeepTarget.Enabled = false;
-            Config.KeepTarget.TargetName = "";
-            Config.Save();
-            ChatGui.Print("[Cordi] Keep Target: Disabled.");
-        }
-        else
-        {
-            Config.KeepTarget.Enabled = true;
-            Config.KeepTarget.TargetName = arg;
-            Config.Save();
-            ChatGui.Print($"[Cordi] Keep Target: Enabled for '{arg}'.");
-        }
-    }
-
     public void ToggleConfigUI() => configWindow.Toggle();
-
-    [Command("/cordibar")]
-    [HelpMessage("Show/hide/toggle bars. Usage: /cordibar <show|hide|toggle> <name or index>")]
-    public void BarCommand(string command, string args)
-    {
-        var parts = args.Trim().Split(' ', 2, StringSplitOptions.RemoveEmptyEntries);
-        if (parts.Length < 2)
-        {
-            ChatGui.Print("[Cordi] Usage: /cordibar <show|hide|toggle> <bar name or index>");
-            return;
-        }
-
-        var action = parts[0].ToLowerInvariant();
-        var target = parts[1].Trim();
-
-        int barIndex = -1;
-        if (int.TryParse(target, out var idx))
-        {
-            barIndex = idx;
-        }
-        else
-        {
-            for (int i = 0; i < QoLBarConfig.Bars.Count; i++)
-            {
-                if (string.Equals(QoLBarConfig.Bars[i].Name, target, StringComparison.OrdinalIgnoreCase))
-                {
-                    barIndex = i;
-                    break;
-                }
-            }
-        }
-
-        if (barIndex < 0 || barIndex >= QoLBarOverlay.Bars.Count)
-        {
-            ChatGui.Print($"[Cordi] Bar not found: {target}");
-            return;
-        }
-
-        switch (action)
-        {
-            case "show":
-                QoLBarOverlay.SetBarHidden(barIndex, false, false);
-                break;
-            case "hide":
-                QoLBarOverlay.SetBarHidden(barIndex, false, true);
-                break;
-            case "toggle":
-                QoLBarOverlay.SetBarHidden(barIndex, true);
-                break;
-            default:
-                ChatGui.Print("[Cordi] Unknown action. Use: show, hide, toggle");
-                break;
-        }
-    }
 
     public void UpdateCommandVisibility()
     {
@@ -388,25 +277,6 @@ public class CordiPlugin : IDalamudPlugin
             CommandManager.RemoveHandler(PeepCmd);
         }
 
-        const string NearbyCmd = "/cordinearby";
-        bool nearbyEnabled = Config.Nearby.WindowEnabled;
-        bool nearbyRegistered = CommandManager.Commands.ContainsKey(NearbyCmd);
-
-        if (nearbyEnabled && !nearbyRegistered)
-        {
-            CommandManager.AddHandler(NearbyCmd, new CommandInfo((cmd, args) =>
-            {
-                NearbyWindow.IsOpen = !NearbyWindow.IsOpen;
-            })
-            {
-                HelpMessage = "Toggles the Nearby Players Window"
-            });
-        }
-        else if (!nearbyEnabled && nearbyRegistered)
-        {
-            CommandManager.RemoveHandler(NearbyCmd);
-        }
-
         const string ComboCmd = "/cordicombo";
         bool comboRegistered = CommandManager.Commands.ContainsKey(ComboCmd);
 
@@ -426,23 +296,6 @@ public class CordiPlugin : IDalamudPlugin
     {
 
         cachedLocalPlayer = Service.ClientState.LocalPlayer;
-        CommandExecutor?.ReadyCommand();
-        KeybindService?.Update();
-
-        // Process shortcut hotkeys HERE (framework update, before game reads input)
-        // so that BlockGameKey takes effect before FFXIV processes the key for this frame.
-        if (QoLBarOverlay != null && KeybindService != null)
-        {
-            foreach (var bar in QoLBarOverlay.Bars)
-                KeybindService.ProcessShortcutHotkeys(bar.Children);
-        }
-
-        ConditionService?.Update(framework.UpdateDelta.Milliseconds / 1000f);
-        CleanWindowService?.OnFrameworkUpdate();
-
-        // The clean window service (native Win32 window for Discord streaming) is
-        // controlled solely via Config.CleanWindow.Enabled from the settings UI.
-        // The ImGui preview window (CleanWindowUI) is independent and not auto-opened.
     }
 
     private async void OnLoginEvent()
@@ -451,10 +304,6 @@ public class CordiPlugin : IDalamudPlugin
         if (Config.CordiPeep.OpenOnLogin)
         {
             CordiPeepWindow.IsOpen = true;
-        }
-        if (Config.Nearby.OpenOnLogin)
-        {
-            NearbyWindow.IsOpen = true;
         }
         if (Config.EmoteLog.WindowOpenOnLogin)
         {
@@ -500,7 +349,6 @@ public class CordiPlugin : IDalamudPlugin
 
         this.commandManager.Dispose();
         this.CordiPeep?.Dispose();
-        this.NearbyService?.Dispose();
         this.EmoteLog?.Dispose();
         this.ActivityManager?.Dispose();
         this.HonorificBridge?.Dispose();
@@ -508,12 +356,6 @@ public class CordiPlugin : IDalamudPlugin
         this.Tomestone?.Dispose();
         this.PartyService?.Dispose();
         this.RememberMe?.Dispose();
-        this.QoLBarOverlay?.Dispose();
-        this.CleanWindowService?.Dispose();
-        this.KeepTargetService?.Dispose();
-        this.ConditionService?.Dispose();
-        this.KeybindService?.Dispose();
-        this.CommandExecutor?.Dispose();
 
         Service.PluginInterface.UiBuilder.OpenConfigUi -= this.ToggleConfigUI;
         Service.PluginInterface.UiBuilder.OpenMainUi -= this.ToggleConfigUI;
@@ -525,7 +367,6 @@ public class CordiPlugin : IDalamudPlugin
         Service.ClientState.Logout -= OnLogoutEvent;
 
         this.Config?.Save();
-        this.QoLBarConfig?.Save();
 
         Service.PluginInterface.UiBuilder.Draw -= configWindow.Draw;
 

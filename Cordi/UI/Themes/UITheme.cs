@@ -83,6 +83,9 @@ public sealed class UiTheme
     public static readonly Vector4 ColorDangerText = new(1.0f, 0.4f, 0.4f, 1f);
     public static readonly Vector4 ColorCheckboxOn = new(0.35f, 0.75f, 0.45f, 1f);
 
+    public static float GlobalFontScale = 1.0f;
+    public static bool GlobalFontBold = false;
+
     public float RadiusBase = 8f;
     public float PadBase = 10f;
     public float GapBase = 8f;
@@ -128,6 +131,11 @@ public sealed class UiTheme
 
     private const int WindowColorCount = 4;
     private const int WindowVarCount = 3;
+
+    public void ApplyFontScale(float extraMul = 1f)
+    {
+        ImGui.SetWindowFontScale(GlobalFontScale * extraMul);
+    }
 
     public void PushWindow()
     {

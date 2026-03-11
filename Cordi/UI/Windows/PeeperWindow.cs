@@ -44,6 +44,7 @@ public class CordiPeepWindow : Window
 
     public override void Draw()
     {
+        _theme.ApplyFontScale();
         if (!_plugin.Config.CordiPeep.WindowEnabled)
         {
             IsOpen = false;

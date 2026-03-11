@@ -29,6 +29,7 @@ public class EmoteLogWindow : Window, IDisposable
 
     public override void Draw()
     {
+        _theme.ApplyFontScale();
         if (!_plugin.Config.EmoteLog.WindowEnabled)
         {
             IsOpen = false;

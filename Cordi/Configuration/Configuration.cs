@@ -16,7 +16,6 @@ public class Configuration : IPluginConfiguration
 
 
     public CordiPeepConfig CordiPeep { get; set; } = new();
-    public NearbyConfig Nearby { get; set; } = new();
     public EmoteLogConfig EmoteLog { get; set; } = new();
     public DiscordConfig Discord { get; set; } = new();
     public ChatConfig Chat { get; set; } = new();
@@ -25,9 +24,8 @@ public class Configuration : IPluginConfiguration
     public RememberMeConfig RememberMe { get; set; } = new();
     public AdvertisementFilterConfig AdvertisementFilter { get; set; } = new();
     public LodestoneConfig Lodestone { get; set; } = new();
-    public CleanWindowConfig CleanWindow { get; set; } = new();
     public CombinedWindowConfig CombinedWindow { get; set; } = new();
-    public KeepTargetConfig KeepTarget { get; set; } = new();
+    public FontConfig Font { get; set; } = new();
     public ThroughputStats Stats { get; set; } = new();
 
 
@@ -248,18 +246,6 @@ public class Configuration : IPluginConfiguration
         if (_additionalData.TryGetValue("CordiPeepBlacklist", out var cpBlacklist))
         {
             CordiPeep.Blacklist = cpBlacklist.ToObject<List<CordiPeepBlacklistEntry>>();
-            needsSave = true;
-        }
-
-        // --- Nearby Tracking Migrations ---
-        if (_additionalData.TryGetValue("NearbyEnabled", out var nbEnabled))
-        {
-            Nearby.Enabled = nbEnabled.ToObject<bool>();
-            needsSave = true;
-        }
-        if (_additionalData.TryGetValue("NearbyWindowEnabled", out var nbWinEnabled))
-        {
-            Nearby.WindowEnabled = nbWinEnabled.ToObject<bool>();
             needsSave = true;
         }
 

@@ -34,6 +34,7 @@ public sealed class DiscordWindow : Window, IDisposable
 
     public override void Draw()
     {
+        theme.ApplyFontScale();
         theme.BeginCard("wooowi");
         ImGui.Text("Allgemein");
         ImGui.Separator();

@@ -1,12 +1,9 @@
 using System;
 using System.Linq;
 using System.Numerics;
-using FFXIVClientStructs.FFXIV.Client.UI.Agent;
 using Cordi.Configuration;
 using Cordi.Core;
 using Cordi.UI.Themes;
-using Dalamud.Interface;
-using Dalamud.Interface.Components;
 using Dalamud.Bindings.ImGui;
 
 namespace Cordi.UI.Tabs;
@@ -22,12 +19,7 @@ public class RememberMeTab : ConfigTabBase
     private string editingPlayerKey = string.Empty;
     private string editingNotes = string.Empty;
 
-    private string searchExaminedText = string.Empty;
-    private string viewingGlamourPlayer = string.Empty;
-    private PlayerGlamour? viewingGlamour = null;
-
     private bool showRememberedPlayers = true;
-    private bool showExaminedPlayers = false;
 
     public override string Label => "Remember Me";
 
@@ -52,17 +44,6 @@ public class RememberMeTab : ConfigTabBase
         theme.SpacerY(1f);
 
         DrawPlayersCard();
-
-        theme.SpacerY(1f);
-        ImGui.Separator();
-        theme.SpacerY(1f);
-
-        DrawExaminedCard();
-
-        if (!string.IsNullOrEmpty(viewingGlamourPlayer) && viewingGlamour != null)
-        {
-            DrawGlamourWindow();
-        }
     }
 
     private void DrawGeneralCard(ref bool cardEnabled)
@@ -83,14 +64,6 @@ public class RememberMeTab : ConfigTabBase
                 }
                 theme.HoverHandIfItem();
                 ImGui.TextDisabled("Automatically track party members and display notes in notifications.");
-
-                bool examineEnabled = plugin.Config.RememberMe.EnableExamineFeature;
-                if (ImGui.Checkbox("Enable Examine Feature", ref examineEnabled))
-                {
-                    plugin.Config.RememberMe.EnableExamineFeature = examineEnabled;
-                    plugin.Config.Save();
-                }
-                theme.HoverHandIfItem();
 
                 theme.SpacerY(0.5f);
             }
@@ -256,314 +229,6 @@ public class RememberMeTab : ConfigTabBase
             (val) => searchText = val,
             onAdd
         );
-    }
-
-    private void DrawExaminedCard()
-    {
-        var players = plugin.RememberMe.GetAllExaminedPlayers();
-
-        if (!string.IsNullOrWhiteSpace(searchExaminedText))
-        {
-            players = plugin.RememberMe.SearchExaminedPlayers(searchExaminedText);
-        }
-
-        Action<RememberedPlayerEntry> onDelete = (player) =>
-        {
-            plugin.RememberMe.RemoveExaminedPlayer(player.Name, player.World);
-        };
-
-        Action<RememberedPlayerEntry> onShowGlamour = (player) =>
-        {
-            viewingGlamourPlayer = player.FullName;
-            viewingGlamour = player.Glamour;
-        };
-
-        theme.DrawPlayerTable(
-            "rememberme-examined",
-            "Examined Players",
-            ref showExaminedPlayers,
-            players,
-            onDelete,
-            null, // No note editing
-            onShowGlamour,
-            null, // No footer
-            searchExaminedText,
-            (val) => searchExaminedText = val
-        );
-    }
-
-    private void DrawGlamourWindow()
-    {
-        bool open = true;
-        ImGui.SetNextWindowSize(new Vector2(500, 550), ImGuiCond.FirstUseEver);
-        if (ImGui.Begin($"Glamour: {viewingGlamourPlayer}###glamour_window", ref open))
-        {
-            if (!open)
-            {
-                viewingGlamourPlayer = string.Empty;
-                viewingGlamour = null;
-            }
-            else
-            {
-                if (viewingGlamour != null)
-                {
-                    ImGui.TextUnformatted("Captured: "); ImGui.SameLine(0, 0); ImGui.TextUnformatted(viewingGlamour.CapturedAt.ToString());
-                    theme.SpacerY(0.5f);
-
-                    if (ImGui.BeginTable("glamour_table", 2, ImGuiTableFlags.BordersInnerV | ImGuiTableFlags.SizingStretchProp))
-                    {
-                        ImGui.TableSetupColumn("Left", ImGuiTableColumnFlags.WidthStretch);
-                        ImGui.TableSetupColumn("Right", ImGuiTableColumnFlags.WidthStretch);
-
-                        // Row 1: Main / Off
-                        ImGui.TableNextRow();
-                        ImGui.TableNextColumn(); DrawGlamourItem("Main Hand", viewingGlamour.MainHand);
-                        ImGui.TableNextColumn(); DrawGlamourItem("Off Hand", viewingGlamour.OffHand);
-
-                        // Row 2: Head / Ears
-                        ImGui.TableNextRow();
-                        ImGui.TableNextColumn(); DrawGlamourItem("Head", viewingGlamour.Head);
-                        ImGui.TableNextColumn(); DrawGlamourItem("Earrings", viewingGlamour.Ears);
-
-                        // Row 3: Body / Neck
-                        ImGui.TableNextRow();
-                        ImGui.TableNextColumn(); DrawGlamourItem("Body", viewingGlamour.Body);
-                        ImGui.TableNextColumn(); DrawGlamourItem("Necklace", viewingGlamour.Neck);
-
-                        // Row 4: Hands / Wrists
-                        ImGui.TableNextRow();
-                        ImGui.TableNextColumn(); DrawGlamourItem("Hands", viewingGlamour.Hands);
-                        ImGui.TableNextColumn(); DrawGlamourItem("Bracelets", viewingGlamour.Wrists);
-
-                        // Row 5: Legs / Right Ring
-                        ImGui.TableNextRow();
-                        ImGui.TableNextColumn(); DrawGlamourItem("Legs", viewingGlamour.Legs);
-                        ImGui.TableNextColumn(); DrawGlamourItem("Right Ring", viewingGlamour.RightRing);
-
-                        // Row 6: Feet / Left Ring
-                        ImGui.TableNextRow();
-                        ImGui.TableNextColumn(); DrawGlamourItem("Feet", viewingGlamour.Feet);
-                        ImGui.TableNextColumn(); DrawGlamourItem("Left Ring", viewingGlamour.LeftRing);
-
-                        ImGui.EndTable();
-                    }
-                }
-            }
-            ImGui.End();
-        }
-        else
-        {
-            ImGui.End();
-            if (!open)
-            {
-                viewingGlamourPlayer = string.Empty;
-                viewingGlamour = null;
-            }
-        }
-    }
-
-    private void DrawGlamourItem(string slotName, PlayerGlamour.GearItem item)
-    {
-        if (item.ItemId == 0) return;
-
-        ImGui.BeginGroup();
-        // Slot name in muted text
-        ImGui.TextColored(new Vector4(0.7f, 0.7f, 0.7f, 1f), slotName);
-
-        var itemSheet = Service.DataManager.GetExcelSheet<Lumina.Excel.Sheets.Item>();
-        var itemData = itemSheet?.GetRow(item.ItemId);
-        string itemName = itemData?.Name.ToString() ?? "";
-        ushort iconId = itemData?.Icon ?? 0;
-        byte rarity = itemData?.Rarity ?? 1;
-        ushort ilvl = (ushort)(itemData?.LevelItem.Value.RowId ?? 0);
-
-        Vector4 rarityColor = GetRarityColor(rarity);
-
-        bool isValidItem = !string.IsNullOrWhiteSpace(itemName);
-
-        if (isValidItem)
-        {
-            bool iconDrawn = false;
-            // Draw Icon with border
-            if (iconId > 0)
-            {
-                try
-                {
-                    var tex = Service.TextureProvider.GetFromGameIcon(new Dalamud.Interface.Textures.GameIconLookup(iconId));
-                    var wrap = tex.GetWrapOrEmpty();
-
-                    if (wrap != null && wrap.Handle != IntPtr.Zero)
-                    {
-                        ImGui.PushID($"btn_{slotName}_{item.ItemId}");
-                        // Transparent background for button, providing our own border
-                        ImGui.PushStyleColor(ImGuiCol.Button, Vector4.Zero);
-                        ImGui.PushStyleColor(ImGuiCol.ButtonActive, Vector4.Zero);
-                        ImGui.PushStyleColor(ImGuiCol.ButtonHovered, Vector4.Zero);
-
-                        // Icon size
-                        Vector2 iconSize = new Vector2(40, 40);
-
-                        // Draw border manually
-                        var p = ImGui.GetCursorScreenPos();
-                        var drawList = ImGui.GetWindowDrawList();
-
-                        if (ImGui.ImageButton(wrap.Handle, iconSize))
-                        {
-                            TryOnItem(item, slotName);
-                        }
-                        if (ImGui.IsItemClicked(ImGuiMouseButton.Right))
-                        {
-                            PrintItemLink(item, itemName);
-                        }
-
-                        // Draw rarity border
-                        drawList.AddRect(p, p + iconSize + new Vector2(ImGui.GetStyle().FramePadding.X * 2, ImGui.GetStyle().FramePadding.Y * 2), ImGui.GetColorU32(rarityColor), 4f, ImDrawFlags.None, 2f);
-
-                        ImGui.PopStyleColor(3);
-                        ImGui.PopID();
-
-                        if (ImGui.IsItemHovered())
-                        {
-                            ImGui.SetTooltip($"{itemName}\nItem Level: {ilvl}\nL-Click: Try On\nR-Click: Link Chat");
-                            theme.HoverHandIfItem();
-                        }
-
-                        ImGui.SameLine();
-
-                        // Item Details Column
-                        ImGui.BeginGroup();
-                        ImGui.TextColored(rarityColor, itemName);
-                        ImGui.TextDisabled($"iLvl {ilvl}");
-
-                        // Stain / Dye 1
-                        if (item.StainId > 0)
-                        {
-                            var stainSheet = Service.DataManager.GetExcelSheet<Lumina.Excel.Sheets.Stain>();
-                            var stainData = stainSheet?.GetRow(item.StainId);
-                            if (stainData != null)
-                            {
-                                string stainName = stainData.Value.Name.ToString();
-                                uint stainColorInt = stainData.Value.Color;
-                                stainColorInt |= 0xFF000000;
-                                float r = ((stainColorInt >> 16) & 0xFF) / 255f;
-                                float g = ((stainColorInt >> 8) & 0xFF) / 255f;
-                                float b = (stainColorInt & 0xFF) / 255f;
-                                Vector4 stainColorVec = new Vector4(r, g, b, 1f);
-
-                                ImGui.SameLine();
-                                ImGui.ColorButton($"##stain1_{item.ItemId}", stainColorVec, ImGuiColorEditFlags.NoTooltip | ImGuiColorEditFlags.NoDragDrop | ImGuiColorEditFlags.NoPicker, new Vector2(10, 10));
-                                if (ImGui.IsItemHovered())
-                                {
-                                    ImGui.SetTooltip($"Dye 1: {stainName}");
-                                }
-                            }
-                        }
-
-                        // Stain / Dye 2
-                        if (item.StainId2 > 0)
-                        {
-                            var stainSheet = Service.DataManager.GetExcelSheet<Lumina.Excel.Sheets.Stain>();
-                            var stainData = stainSheet?.GetRow(item.StainId2);
-                            if (stainData != null)
-                            {
-                                string stainName = stainData.Value.Name.ToString();
-                                uint stainColorInt = stainData.Value.Color;
-                                stainColorInt |= 0xFF000000;
-                                float r = ((stainColorInt >> 16) & 0xFF) / 255f;
-                                float g = ((stainColorInt >> 8) & 0xFF) / 255f;
-                                float b = (stainColorInt & 0xFF) / 255f;
-                                Vector4 stainColorVec = new Vector4(r, g, b, 1f);
-
-                                ImGui.SameLine();
-                                ImGui.ColorButton($"##stain2_{item.ItemId}", stainColorVec, ImGuiColorEditFlags.NoTooltip | ImGuiColorEditFlags.NoDragDrop | ImGuiColorEditFlags.NoPicker, new Vector2(10, 10));
-                                if (ImGui.IsItemHovered())
-                                {
-                                    ImGui.SetTooltip($"Dye 2: {stainName}");
-                                }
-                            }
-                        }
-
-                        ImGui.EndGroup();
-
-                        iconDrawn = true;
-                    }
-                }
-                catch { }
-            }
-
-            if (!iconDrawn)
-            {
-                if (ImGui.Button($"{itemName}##{slotName}_{item.ItemId}"))
-                {
-                    TryOnItem(item, slotName);
-                }
-                if (ImGui.IsItemClicked(ImGuiMouseButton.Right))
-                {
-                    PrintItemLink(item, itemName);
-                }
-            }
-        }
-        else
-        {
-            ImGui.TextUnformatted("Unknown Item (ID: "); ImGui.SameLine(0, 0); ImGui.TextUnformatted(item.ItemId.ToString()); ImGui.SameLine(0, 0); ImGui.TextUnformatted(")");
-            if (ImGui.IsItemHovered())
-                ImGui.SetTooltip("Could not resolve Item ID to Name. Might be a Model ID.");
-        }
-        ImGui.EndGroup();
-    }
-
-    private Vector4 GetRarityColor(byte rarity)
-    {
-        return rarity switch
-        {
-            1 => new Vector4(1f, 1f, 1f, 1f),       // Common (White)
-            2 => new Vector4(0.7f, 1f, 0.7f, 1f),   // Uncomon (Green)
-            3 => new Vector4(0.4f, 0.6f, 1f, 1f),   // Rare (Blue)
-            4 => new Vector4(0.8f, 0.5f, 1f, 1f),   // Relic (Purple)
-            7 => new Vector4(1f, 0.5f, 0.8f, 1f),   // Aetherial (Pink)
-            _ => new Vector4(1f, 1f, 1f, 1f)
-        };
-    }
-
-    private unsafe void TryOnItem(PlayerGlamour.GearItem item, string slotName)
-    {
-        try
-        {
-            var itemSheet = Service.DataManager.GetExcelSheet<Lumina.Excel.Sheets.Item>();
-            var itemData = itemSheet?.GetRow(item.ItemId);
-
-            if (itemData == null) return;
-
-            // EquipSlotCategory.Row seems to match the slot ID expected by TryOn
-            var equipSlotCategory = itemData.Value.EquipSlotCategory.RowId;
-
-            // AgentTryon.TryOn(itemId, stainId, equipSlot, 0, 0, isHq)
-            // Using EquipSlotCategory as 3rd arg
-            Service.Log.Debug($"[Cordi] TryOnItem: ID={item.ItemId} Stain={item.StainId} Slot={equipSlotCategory} (Category)");
-            AgentTryon.TryOn(0xFF, item.ItemId, item.StainId, 0, 0);
-            // AgentTryon.TryOn(item.ItemId, item.StainId, (byte)equipSlotCategory, 0, 0, item.IsHq);
-        }
-        catch (Exception ex)
-        {
-            Service.Log.Error(ex, "Failed to try on item.");
-        }
-    }
-
-    private void PrintItemLink(PlayerGlamour.GearItem item, string itemName)
-    {
-        try
-        {
-            var payload = new Dalamud.Game.Text.SeStringHandling.Payloads.ItemPayload(item.ItemId, item.IsHq);
-            var text = new Dalamud.Game.Text.SeStringHandling.Payloads.TextPayload($"{itemName}");
-            // Add a link terminator to properly close the item link
-            var seString = new Dalamud.Game.Text.SeStringHandling.SeString(
-                payload,
-                text,
-                Dalamud.Game.Text.SeStringHandling.Payloads.RawPayload.LinkTerminator
-            );
-            Service.Chat.Print(seString);
-        }
-        catch { }
     }
 
     private void DrawAddNewForm(float avail)

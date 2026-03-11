@@ -26,8 +26,10 @@ namespace Cordi.Services
         private int _currentCycleIndex = -1;
 
         private DateTime _lastWatchLog = DateTime.MinValue;
+        private DateTime _lastDebugLog = DateTime.MinValue;
 
         private DiscordPresence _cachedPresence;
+        private bool _hasLoggedPresenceReceived = false;
 
         public ActivityManager(CordiPlugin plugin, DiscordHandler discord, HonorificBridge honorific)
         {
@@ -37,6 +39,8 @@ namespace Cordi.Services
 
             _discord.OnPresenceUpdated += OnPresenceUpdated;
             Service.Framework.Update += OnFrameworkUpdate;
+
+            Service.Log.Info("[ActivityManager] Initialized and listening for presence updates.");
         }
 
         private void OnFrameworkUpdate(IFramework framework)
@@ -48,9 +52,34 @@ namespace Cordi.Services
 
         private Task OnPresenceUpdated(DiscordClient sender, PresenceUpdateEventArgs e)
         {
-            if (e.User.Id != _plugin.Config.ActivityConfig.TargetUserId)
+            var targetId = _plugin.Config.ActivityConfig.TargetUserId;
+
+            if (e.User.Id != targetId)
             {
+                // Log mismatched presence updates periodically to avoid spam
+                if ((DateTime.Now - _lastDebugLog).TotalSeconds >= 30)
+                {
+                    Service.Log.Debug($"[ActivityManager] Presence update from user {e.User.Id} ('{e.User.Username}') ignored — does not match TargetUserId {targetId}.");
+                    _lastDebugLog = DateTime.Now;
+                }
                 return Task.CompletedTask;
+            }
+
+            if (!_hasLoggedPresenceReceived)
+            {
+                Service.Log.Info($"[ActivityManager] First presence update received for target user {e.User.Id} ('{e.User.Username}').");
+                _hasLoggedPresenceReceived = true;
+            }
+
+            var activityCount = e.PresenceAfter?.Activities?.Count ?? 0;
+            Service.Log.Debug($"[ActivityManager] Presence update for target user {e.User.Id}: Status={e.PresenceAfter?.Status}, Activities={activityCount}");
+
+            if (e.PresenceAfter?.Activities != null)
+            {
+                foreach (var a in e.PresenceAfter.Activities)
+                {
+                    Service.Log.Debug($"[ActivityManager]   -> Activity: Type={a.ActivityType}, Name='{a.Name}'");
+                }
             }
 
             _cachedPresence = e.PresenceAfter;
@@ -62,10 +91,37 @@ namespace Cordi.Services
         private void ProcessPresence(DiscordPresence presence, bool isUpdateLoop)
         {
             var config = _plugin.Config.ActivityConfig;
-            if (config == null || !config.Enabled)
+            if (config == null)
             {
+                if (!isUpdateLoop) Service.Log.Warning("[ActivityManager] ActivityConfig is null, clearing title.");
                 ClearTitle();
                 return;
+            }
+
+            if (!config.Enabled)
+            {
+                if (!isUpdateLoop) Service.Log.Debug("[ActivityManager] Activity integration is disabled, clearing title.");
+                ClearTitle();
+                return;
+            }
+
+            if (config.TargetUserId == 0)
+            {
+                if (!isUpdateLoop) Service.Log.Warning("[ActivityManager] TargetUserId is not set (0). No presence will be tracked.");
+                ClearTitle();
+                return;
+            }
+
+            if (presence == null)
+            {
+                if (!isUpdateLoop) Service.Log.Debug("[ActivityManager] Cached presence is null — no presence data received yet.");
+                ClearTitle();
+                return;
+            }
+
+            if (presence.Activities == null || !presence.Activities.Any())
+            {
+                if (!isUpdateLoop) Service.Log.Debug("[ActivityManager] Presence has no activities.");
             }
 
             var candidates = new List<(DiscordActivity Activity, ActivityTypeConfig Config)>();
@@ -78,16 +134,26 @@ namespace Cordi.Services
                     // Check for Game Override first (Only for Playing activities)
                     if (a.ActivityType == ActivityType.Playing && !string.IsNullOrEmpty(a.Name) && config.GameConfigs.TryGetValue(a.Name, out var gameConf))
                     {
+                        if (!isUpdateLoop) Service.Log.Debug($"[ActivityManager] Activity '{a.Name}' ({a.ActivityType}) matched game override config.");
                         conf = gameConf;
                     }
                     else
                     {
                         conf = GetConfigForType(a.ActivityType, config);
+                        if (conf == null)
+                        {
+                            if (!isUpdateLoop) Service.Log.Debug($"[ActivityManager] Activity '{a.Name}' ({a.ActivityType}) has no matching type config — skipped.");
+                        }
                     }
 
                     if (conf != null && conf.Enabled)
                     {
+                        if (!isUpdateLoop) Service.Log.Debug($"[ActivityManager] Activity '{a.Name}' ({a.ActivityType}) added as candidate (Priority={conf.Priority}).");
                         candidates.Add((a, conf));
+                    }
+                    else if (conf != null && !conf.Enabled)
+                    {
+                        if (!isUpdateLoop) Service.Log.Debug($"[ActivityManager] Activity '{a.Name}' ({a.ActivityType}) has config but it is disabled — skipped.");
                     }
                 }
             }
@@ -96,19 +162,24 @@ namespace Cordi.Services
             {
                 if (!candidates.Any(c => c.Activity != null && c.Activity.ActivityType == ActivityType.Custom))
                 {
+                    if (!isUpdateLoop) Service.Log.Debug("[ActivityManager] Adding fallback Custom activity candidate.");
                     candidates.Add((null, customConf));
                 }
             }
+
+            if (!isUpdateLoop) Service.Log.Debug($"[ActivityManager] Total candidates: {candidates.Count}");
 
             var best = candidates.OrderByDescending(x => x.Config.Priority).FirstOrDefault();
 
             if (best.Config == null)
             {
+                if (!isUpdateLoop) Service.Log.Debug("[ActivityManager] No valid candidate found — clearing title.");
                 ClearTitle();
                 return;
             }
 
             var bestActivityType = best.Activity?.ActivityType ?? ActivityType.Custom;
+            if (!isUpdateLoop) Service.Log.Debug($"[ActivityManager] Best candidate: Type={bestActivityType}, Name='{best.Activity?.Name ?? "(custom)"}', Priority={best.Config.Priority}");
 
             if (best.Config.EnableCycling && best.Config.CycleFormats != null && best.Config.CycleFormats.Any())
             {
@@ -117,6 +188,7 @@ namespace Cordi.Services
                     _currentCyclingType = bestActivityType;
                     _lastCycleSwap = DateTime.Now;
                     _currentCycleIndex = -1;
+                    if (!isUpdateLoop) Service.Log.Debug($"[ActivityManager] Cycling reset for new activity type {bestActivityType}.");
                 }
 
                 double seconds = (DateTime.Now - _lastCycleSwap).TotalSeconds;
@@ -130,6 +202,7 @@ namespace Cordi.Services
                     }
 
                     _lastCycleSwap = DateTime.Now;
+                    Service.Log.Debug($"[ActivityManager] Cycle advanced to index {_currentCycleIndex}.");
                 }
             }
             else
@@ -142,14 +215,27 @@ namespace Cordi.Services
 
             if (title.Length > 32)
             {
+                if (!isUpdateLoop) Service.Log.Debug($"[ActivityManager] Title truncated from {title.Length} to 32 chars.");
                 title = title.Substring(0, 32);
             }
 
             var player = _plugin.cachedLocalPlayer;
-            if (player != null)
+            if (player == null)
+            {
+                if (!isUpdateLoop) Service.Log.Warning("[ActivityManager] cachedLocalPlayer is null — cannot set title. Is the player logged in?");
+                return;
+            }
+
+            if (!isUpdateLoop) Service.Log.Info($"[ActivityManager] Setting title: \"{title}\" (Prefix={config.PrefixTitle})");
+
+            try
             {
                 var typeConf = best.Config;
                 _honorific.SetTitle(player, title, config.PrefixTitle, typeConf.Color, typeConf.Glow, typeConf.GradientColourSet, typeConf.GradientAnimationStyle);
+            }
+            catch (Exception ex)
+            {
+                Service.Log.Error($"[ActivityManager] Failed to set title via HonorificBridge: {ex.Message}\n{ex.StackTrace}");
             }
         }
 
@@ -163,15 +249,24 @@ namespace Cordi.Services
 
         private string RenderTitle(DiscordActivity act, ActivityTypeConfig config, Dictionary<string, string> replacements, bool silent)
         {
-            if (config == null) return "";
+            if (config == null)
+            {
+                if (!silent) Service.Log.Debug("[ActivityManager] RenderTitle called with null config — returning empty.");
+                return "";
+            }
 
             string format = config.Format;
             if (config.EnableCycling && config.CycleFormats != null && _currentCycleIndex >= 0 && _currentCycleIndex < config.CycleFormats.Count)
             {
                 format = config.CycleFormats[_currentCycleIndex];
+                if (!silent) Service.Log.Debug($"[ActivityManager] Using cycle format [{_currentCycleIndex}]: \"{format}\"");
             }
 
-            if (string.IsNullOrEmpty(format)) return "";
+            if (string.IsNullOrEmpty(format))
+            {
+                if (!silent) Service.Log.Debug("[ActivityManager] Format string is empty — returning empty title.");
+                return "";
+            }
 
             string name = act?.Name ?? "";
             string details = "";
@@ -228,11 +323,17 @@ namespace Cordi.Services
                             }
                         }
                     }
+
+                    if (!silent) Service.Log.Debug($"[ActivityManager] RenderTitle extracted — name='{name}', details='{details}', state='{state}', album='{album}', elapsed='{elapsed}', duration='{duration}'");
                 }
                 catch (Exception ex)
                 {
-                    if (!silent) Service.Log.Error($"[ActivityManager] Extraction Error: {ex.Message}");
+                    Service.Log.Error($"[ActivityManager] Extraction Error: {ex.Message}");
                 }
+            }
+            else
+            {
+                if (!silent) Service.Log.Debug("[ActivityManager] RenderTitle called with null activity (custom/fallback).");
             }
 
             if (config != null)
@@ -260,6 +361,8 @@ namespace Cordi.Services
             result = ApplyReplacements(result, replacements);
 
             result = Regex.Replace(result, @"\s+", " ").Trim();
+
+            if (!silent) Service.Log.Debug($"[ActivityManager] RenderTitle result: \"{result}\"");
             return result;
         }
 
@@ -277,11 +380,15 @@ namespace Cordi.Services
         private void ClearTitle()
         {
             var local = _plugin.cachedLocalPlayer;
-            if (local != null) _honorific.ClearTitle(local);
+            if (local != null)
+            {
+                _honorific.ClearTitle(local);
+            }
         }
 
         public void Dispose()
         {
+            Service.Log.Info("[ActivityManager] Disposing — unsubscribing from events.");
             _discord.OnPresenceUpdated -= OnPresenceUpdated;
             Service.Framework.Update -= OnFrameworkUpdate;
         }

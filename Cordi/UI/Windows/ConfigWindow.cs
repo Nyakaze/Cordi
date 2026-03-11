@@ -17,7 +17,6 @@ using Cordi.Core;
 
 using Cordi.UI.Tabs;
 using Cordi.UI.Themes;
-using Cordi.Services.QoLBar;
 
 namespace Cordi.UI.Windows;
 
@@ -28,9 +27,6 @@ public sealed class ConfigWindow : Window, IDisposable
     private readonly CordiPlugin plugin;
     private readonly UiTheme theme = new UiTheme();
 
-    private string _botToken = string.Empty;
-    private bool _botTokenInputActive = false;
-    private bool _botTokenModalOpen = false;
 
 
     private GeneralTab generalTab;
@@ -43,19 +39,16 @@ public sealed class ConfigWindow : Window, IDisposable
     private DiscordActivityTab discordActivityTab;
     private PartyTab partyTab;
     private RememberMeTab rememberMeTab;
-    private QoLBarTab qolBarTab;
     private CombinedWindowTab combinedWindowTab;
-    private NearbyTab nearbyTab;
-    private MiscellaneousTab miscellaneousTab;
-    
+    private SettingsTab settingsTab;
 
-    private int selectedTab = 0;
+
+    private int selectedTab = 1;
 
     public ConfigWindow(CordiPlugin plugin)
         : base("Cordi", ImGuiWindowFlags.None)
     {
         this.plugin = plugin;
-        this._botToken = plugin.Config.Discord.BotToken ?? string.Empty;
 
 
         this.generalTab = new GeneralTab(plugin, theme);
@@ -68,10 +61,12 @@ public sealed class ConfigWindow : Window, IDisposable
 #endif
         this.partyTab = new PartyTab(plugin, theme);
         this.rememberMeTab = new RememberMeTab(plugin, theme);
-        this.qolBarTab = new QoLBarTab(plugin, theme, plugin.BarImportExport, plugin.QoLBarOverlay);
         this.combinedWindowTab = new CombinedWindowTab(plugin, theme);
-        this.nearbyTab = new NearbyTab(plugin);
-        this.miscellaneousTab = new MiscellaneousTab(plugin, theme);
+        this.settingsTab = new SettingsTab(plugin, theme);
+
+        // Apply saved font settings
+        UiTheme.GlobalFontScale = plugin.Config.Font.GlobalScale;
+        UiTheme.GlobalFontBold = plugin.Config.Font.Bold;
 
         SizeConstraints = new WindowSizeConstraints
         {
@@ -87,6 +82,8 @@ public sealed class ConfigWindow : Window, IDisposable
 
     public async override void Draw()
     {
+        theme.ApplyFontScale();
+
         bool botStarted = plugin.Config.Discord.BotStarted;
 
         ImGui.BeginDisabled(plugin.Discord.IsBusy);
@@ -109,28 +106,6 @@ public sealed class ConfigWindow : Window, IDisposable
         ImGui.EndDisabled();
         theme.HoverHandIfItem();
 
-        var badgeMin = ImGui.GetItemRectMin();
-        var badgeMax = ImGui.GetItemRectMax();
-        float badgeCenterY = (badgeMin.Y + badgeMax.Y) * 0.5f;
-
-        ImGui.SameLine(0, 10f);
-
-        float cogSize = ImGui.GetFrameHeight();
-        ImGui.SetCursorScreenPos(new Vector2(ImGui.GetCursorScreenPos().X, badgeCenterY - cogSize * 0.5f));
-
-        ImGui.PushStyleColor(ImGuiCol.Button, new Vector4(0, 0, 0, 0));
-        ImGui.PushStyleColor(ImGuiCol.ButtonHovered, new Vector4(1, 1, 1, 0.08f));
-        ImGui.PushStyleColor(ImGuiCol.ButtonActive, new Vector4(1, 1, 1, 0.15f));
-        if (theme.IconButton("##botTokenCog",FontAwesomeIcon.Cog, "Bot Token"))
-        {
-            _botToken = plugin.Config.Discord.BotToken ?? string.Empty;
-            _botTokenModalOpen = true;
-            ImGui.OpenPopup("##BotTokenModal");
-        }
-        ImGui.PopStyleColor(3);
-
-        DrawBotTokenModal();
-
         DrawStats();
         theme.SpacerY(1f);
         ImGui.Separator();
@@ -138,15 +113,16 @@ public sealed class ConfigWindow : Window, IDisposable
 
 
 
-        ImGui.BeginChild("##sidebar", new Vector2(150, 0), false);
+        float fontScale = UiTheme.GlobalFontScale;
+        ImGui.BeginChild("##sidebar", new Vector2(150 * fontScale, 0), false);
 
-        ImGui.SetWindowFontScale(1.1f);
+        theme.ApplyFontScale(1.1f);
 
 
         ImGui.PushStyleVar(ImGuiStyleVar.FrameRounding, 12f);
         ImGui.PushStyleVar(ImGuiStyleVar.ButtonTextAlign, new Vector2(0.5f, 0.5f));
 
-        float itemHeight = 40f;
+        float itemHeight = 40f * fontScale;
         Vector2 buttonSize = new Vector2(-1, itemHeight);
 
 
@@ -167,8 +143,13 @@ public sealed class ConfigWindow : Window, IDisposable
         }
 
 
+        bool isFirstSidebarButton = true;
         void DrawSidebarButton(string label, int tabIndex)
         {
+            if (isFirstSidebarButton)
+                isFirstSidebarButton = false;
+            else
+                theme.SpacerY();
             PushBtnColor(selectedTab == tabIndex);
             if (ImGui.Button(label, buttonSize)) selectedTab = tabIndex;
             theme.HoverHandIfItem();
@@ -176,30 +157,30 @@ public sealed class ConfigWindow : Window, IDisposable
             ImGui.Spacing();
         }
 
+        theme.SpacerY(1f);
         // DrawSidebarButton("General", 0);
         DrawSidebarButton("Chats", 1);
         DrawSidebarButton("Emote Log", 4);
         DrawSidebarButton("Peepers", 2);
-        DrawSidebarButton("Nearby", 10);
         DrawSidebarButton("Combined", 9);
         DrawSidebarButton("Activity", 5);
         DrawSidebarButton("Party", 6);
         DrawSidebarButton("Remember Me", 7);
-        DrawSidebarButton("QoL Bar", 8);
-        DrawSidebarButton("Miscellaneous", 11);
+        DrawSidebarButton("Settings", 12);
 
 #if DEBUG
         DrawSidebarButton("Debug", 3);
 #endif
 
         ImGui.PopStyleVar(2);
-        ImGui.SetWindowFontScale(1.0f);
+        theme.ApplyFontScale();
 
 
         ImGui.EndChild();
         ImGui.SameLine();
 
         ImGui.BeginChild("##content", new Vector2(0, 0), false);
+        theme.ApplyFontScale();
 
         switch (selectedTab)
         {
@@ -241,65 +222,16 @@ public sealed class ConfigWindow : Window, IDisposable
                 rememberMeTab.Draw();
                 break;
 
-            case 8:
-                qolBarTab.Draw();
-                break;
-
             case 9:
                 combinedWindowTab.Draw();
                 break;
 
-            case 10:
-                nearbyTab.Draw();
-                break;
-            case 11:
-                miscellaneousTab.Draw();
+            case 12:
+                settingsTab.Draw();
                 break;
                     
         }
         ImGui.EndChild();
-    }
-
-    private void DrawBotTokenModal()
-    {
-        var viewport = ImGui.GetMainViewport();
-        var center = new Vector2(viewport.Pos.X + viewport.Size.X * 0.5f, viewport.Pos.Y + viewport.Size.Y * 0.5f);
-        ImGui.SetNextWindowPos(center, ImGuiCond.Appearing, new Vector2(0.5f, 0.5f));
-        ImGui.SetNextWindowSize(new Vector2(500, 0));
-
-        if (ImGui.BeginPopupModal("##BotTokenModal", ref _botTokenModalOpen, ImGuiWindowFlags.AlwaysAutoResize | ImGuiWindowFlags.NoTitleBar))
-        {
-            theme.SpacerY(0.5f);
-            ImGui.TextColored(theme.Text, "Discord Bot Token");
-            theme.SpacerY(0.5f);
-
-            var flags = _botTokenInputActive ? ImGuiInputTextFlags.None : ImGuiInputTextFlags.Password;
-            ImGui.PushItemWidth(-1);
-            ImGui.InputText("##bot-token-input", ref _botToken, 256, flags);
-            _botTokenInputActive = ImGui.IsItemActive();
-            ImGui.PopItemWidth();
-
-            theme.SpacerY(0.5f);
-
-            if (theme.PrimaryButton("Save", new Vector2(80, 0)))
-            {
-                plugin.Config.Discord.BotToken = _botToken;
-                plugin.Config.Save();
-                _botTokenModalOpen = false;
-                ImGui.CloseCurrentPopup();
-            }
-
-            ImGui.SameLine();
-
-            if (ImGui.Button("Cancel", new Vector2(80, 0)))
-            {
-                _botTokenModalOpen = false;
-                ImGui.CloseCurrentPopup();
-            }
-
-            theme.SpacerY(0.5f);
-            ImGui.EndPopup();
-        }
     }
 
     private void DrawStats()

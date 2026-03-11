@@ -40,7 +40,7 @@ public abstract class ConfigTabBase
         ImGui.PushStyleVar(ImGuiStyleVar.ItemSpacing, new Vector2(theme.Gap(0.5f), theme.Gap(0.5f)));
 
         float btnW = ImGui.GetContentRegionAvail().X / subTabs.Count - theme.Gap(0.5f);
-        float btnH = 32f * ImGuiHelpers.GlobalScale;
+        float btnH = 32f * ImGuiHelpers.GlobalScale * UiTheme.GlobalFontScale;
 
         for (int i = 0; i < subTabs.Count; i++)
         {

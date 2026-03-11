@@ -48,6 +48,7 @@ public class CombinedWindow : Window
 
     public override void Draw()
     {
+        _theme.ApplyFontScale();
         var swap = _plugin.Config.CombinedWindow.SwapPanels;
 
         if (ImGui.BeginTable("##CombinedTable", 2,
