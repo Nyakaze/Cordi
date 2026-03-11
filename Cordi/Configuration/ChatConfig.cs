@@ -20,7 +20,7 @@ public class ChatConfig
 [Serializable]
 public class ExtraChatConnection
 {
-    public string DiscordChannelId { get; set; } = "";
+    public string? DiscordChannelId { get; set; } = "";
     public int ExtraChatNumber { get; set; } = 0;
     public string? ExtraChatGuid { get; set; }
 }

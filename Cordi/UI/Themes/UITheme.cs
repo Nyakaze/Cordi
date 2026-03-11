@@ -96,7 +96,7 @@ public sealed class UiTheme
     public float PadX(float mul = 1f) => PadBase * ImGuiHelpers.GlobalScale * mul;
     public float PadY(float mul = 1f) => (PadBase * PadYRatio) * ImGuiHelpers.GlobalScale * mul;
     public float Gap(float mul = 1f) => GapBase * ImGuiHelpers.GlobalScale * mul;
-    private float ScaledActionsWidth => ActionsColumnWidth * ImGuiHelpers.GlobalScale;
+    public float ScaledActionsWidth => ActionsColumnWidth * ImGuiHelpers.GlobalScale;
 
     public UiTheme(Vector4? accentOverride = null)
     {
@@ -235,7 +235,7 @@ public sealed class UiTheme
         HoverHandIfItem();
         return ret;
     }
-    public bool Checkbox(string label, string tooltip,ref bool v)
+    public bool Checkbox(string label, string tooltip, ref bool v)
     {
         var ret = ImGui.Checkbox(label, ref v);
         if (!string.IsNullOrEmpty(tooltip) && ImGui.IsItemHovered())
@@ -270,8 +270,8 @@ public sealed class UiTheme
         HoverHandIfItem();
         return changed;
     }
-    
-    public bool EnumCombo<T>(string id, string tooltip ,ref T value) where T : struct, Enum
+
+    public bool EnumCombo<T>(string id, string tooltip, ref T value) where T : struct, Enum
     {
         var values = Enum.GetValues<T>();
         int currentIndex = Array.IndexOf(values, value);
@@ -1032,16 +1032,19 @@ public sealed class UiTheme
         Action? setupColumns = null,
         bool showHeaders = false,
         Action<float>? drawFooter = null,
-        Action? drawTopContent = null,
+        Action<float>? drawTopContent = null,
         Action? extraRows = null,
         float maxTableHeight = 0,
-        bool collapsible = true)
+        bool collapsible = true,
+        string? mutedText = null,
+        Action? drawHeaderRight = null)
     {
         int count = explicitCount ?? collection.Count();
         title = showCount ? $"{title}: {count}" : title;
 
         float scale = ImGuiHelpers.GlobalScale;
         float headerHeight = CollapsableHeaderHeight * scale;
+        if (!string.IsNullOrEmpty(mutedText)) headerHeight += ImGui.GetTextLineHeight() + Gap(0.2f);
         if (headerHeight < ImGui.GetFrameHeightWithSpacing()) headerHeight = ImGui.GetFrameHeightWithSpacing();
 
         float padX = PadX(0.9f);
@@ -1057,12 +1060,32 @@ public sealed class UiTheme
 
         using (var group = ImRaii.Group())
         {
-            float titleCenterY = startPos.Y + (headerHeight - ImGui.GetTextLineHeight()) * 0.5f;
-            ImGui.SetCursorScreenPos(new Vector2(startPos.X + padX, titleCenterY));
+            float titleY = startPos.Y + padY;
+            ImGui.SetCursorScreenPos(new Vector2(startPos.X + padX, titleY));
 
             using (ImRaii.PushColor(ImGuiCol.Text, Text))
             {
                 ImGui.TextUnformatted(title);
+            }
+
+            if (!string.IsNullOrEmpty(mutedText))
+            {
+                ImGui.SetCursorScreenPos(new Vector2(startPos.X + padX, titleY + ImGui.GetTextLineHeight() + Gap(0.1f)));
+                ImGui.TextColored(MutedText, mutedText);
+            }
+
+            float rightElementsY = startPos.Y + (headerHeight - ImGui.GetTextLineHeight()) * 0.5f;
+
+            if (drawHeaderRight != null)
+            {
+                ImGui.SameLine();
+                float chevronArea = collapsible ? (24f * scale) : 0;
+                float headerRightCursorX = (startPos.X + availW - padX) - chevronArea - 10f * scale;
+
+                if (headerRightCursorX < ImGui.GetCursorPosX()) headerRightCursorX = ImGui.GetCursorPosX() + 10f;
+
+                ImGui.SetCursorScreenPos(new Vector2(headerRightCursorX, rightElementsY));
+                drawHeaderRight();
             }
 
             if (collapsible)
@@ -1071,7 +1094,8 @@ public sealed class UiTheme
                 {
                     string icon = expanded ? FontAwesomeIcon.ChevronUp.ToIconString() : FontAwesomeIcon.ChevronDown.ToIconString();
                     var iconSize = ImGui.CalcTextSize(icon);
-                    ImGui.SetCursorScreenPos(new Vector2(startPos.X + availW - padX - iconSize.X, titleCenterY));
+                    ImGui.SetCursorScreenPos(new Vector2(startPos.X + availW - padX - iconSize.X, rightElementsY));
+                    ImGui.SetCursorScreenPos(new Vector2(startPos.X + availW - padX - iconSize.X, rightElementsY));
                     ImGui.TextUnformatted(icon);
                 }
 
@@ -1088,12 +1112,10 @@ public sealed class UiTheme
 
             if (!collapsible || expanded)
             {
-                // Calculate 95% width and centering offset
                 float targetWidth = availW * 0.95f;
                 float xOffset = (availW - targetWidth) / 2.0f;
                 float effectiveStartX = startPos.X + xOffset;
 
-                // Start content Y below header
                 ImGui.SetCursorScreenPos(new Vector2(effectiveStartX, startPos.Y + headerHeight + Gap(0.2f)));
 
                 if (count == 0 && drawFooter == null)
@@ -1105,8 +1127,7 @@ public sealed class UiTheme
                     if (drawTopContent != null)
                     {
                         ImGui.SetCursorScreenPos(new Vector2(effectiveStartX, ImGui.GetCursorScreenPos().Y));
-                        ImGui.SetNextItemWidth(targetWidth);
-                        drawTopContent();
+                        drawTopContent(targetWidth);
                         SpacerY(0.5f);
                     }
 
@@ -1144,7 +1165,7 @@ public sealed class UiTheme
         bool headerHovered = mousePos.X >= startPos.X && mousePos.X < endPos.X &&
                              mousePos.Y >= startPos.Y && mousePos.Y < headerRectMax.Y;
 
-        if (headerHovered)
+        if (headerHovered && collapsible)
         {
             draw.AddRectFilled(startPos, headerRectMax, ImGui.GetColorU32(new Vector4(1, 1, 1, 0.05f)), radius, ImDrawFlags.RoundCornersTop);
         }
@@ -1274,7 +1295,7 @@ public sealed class UiTheme
             // Actions Column
             if (isEditing)
             {
-                if(SuccessIconButton($"##save-{id}-{idx}", FontAwesomeIcon.Check, tooltip:"Save"))
+                if (SuccessIconButton($"##save-{id}-{idx}", FontAwesomeIcon.Check, tooltip: "Save"))
                 {
                     list[idx] = _stringEditStates[editKey].Value;
                     _stringEditStates.Remove(editKey);
@@ -1283,7 +1304,7 @@ public sealed class UiTheme
 
                 ImGui.SameLine();
 
-                if(SecondaryIconButton($"##cancel-{id}-{idx}", FontAwesomeIcon.Times, tooltip:"Cancel"))
+                if (SecondaryIconButton($"##cancel-{id}-{idx}", FontAwesomeIcon.Times, tooltip: "Cancel"))
                 {
                     if (string.IsNullOrEmpty(list[idx]))
                     {
@@ -1298,14 +1319,14 @@ public sealed class UiTheme
             }
             else
             {
-                
-                if(SecondaryIconButton($"##edit-{id}-{idx}", FontAwesomeIcon.Edit, tooltip:"Edit Pattern"))
+
+                if (SecondaryIconButton($"##edit-{id}-{idx}", FontAwesomeIcon.Edit, tooltip: "Edit Pattern"))
                 {
                     _stringEditStates[editKey] = (idx, item);
                 }
                 ImGui.SameLine();
 
-                if(DangerIconButton($"##del-{id}-{idx}", FontAwesomeIcon.Trash, tooltip:"Delete Pattern"))
+                if (DangerIconButton($"##del-{id}-{idx}", FontAwesomeIcon.Trash, tooltip: "Delete Pattern"))
                 {
                     postDrawActions.Add(() =>
                     {
@@ -1516,7 +1537,7 @@ public sealed class UiTheme
                 }
                 float width = avail * 0.95f;
                 ImGui.SetCursorPosX(ImGui.GetCursorPosX() + ((avail - width) * 0.5f));
-                if (Button($"Add New {title.Split(' ')[0]} {title.Split(' ')[1][..^2]}", new Vector2(width, 0)))
+                if (SecondaryButton($"Add new {title.Split(' ')[0]} {title.Split(' ')[1][..^2]}", new Vector2(width, 0)))
                 {
                     _dictAddStates[id] = ("", "");
                     _dictEditStates.Remove(id);
@@ -1573,7 +1594,7 @@ public sealed class UiTheme
             else preview = currentId;
         }
 
-        ImGui.SetNextItemWidth(ImGui.GetContentRegionAvail().X - ImGui.GetStyle().FramePadding.X*2);
+        ImGui.SetNextItemWidth(ImGui.GetContentRegionAvail().X - ImGui.GetStyle().FramePadding.X * 2);
         using (var combo = ImRaii.Combo($"##{id}", preview))
         {
             if (combo)
@@ -1595,10 +1616,10 @@ public sealed class UiTheme
                         }
                         if (isSelected) ImGui.SetItemDefaultFocus();
                     }
-                    HoverHandIfItem();
                 }
             }
         }
+        HoverHandIfItem();
     }
 
     private Dictionary<string, (string Key, string Value)> _playerNoteEditStates = new();
@@ -1810,7 +1831,7 @@ public sealed class UiTheme
             setupColumns,
             true, // showHeaders
             internalFooter,
-            drawSearch,
+            (w) => drawSearch(),
             extraRows,
             maxTableHeight
         );

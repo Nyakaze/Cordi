@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.Concurrent;
 using System.Linq;
 using System.Threading.Tasks;
 using Cordi.Core;
@@ -20,8 +21,10 @@ public class DiscordChannelCache : IDisposable
 
     private volatile List<DiscordChannel> _textChannels = new();
     private volatile List<DiscordChannel> _forumChannels = new();
-    private Dictionary<ulong, string> _threadsByParent = new();
-    private readonly object _threadLock = new();
+    private ConcurrentDictionary<ulong, string> _threadsById = new();
+    private ConcurrentDictionary<ulong, string> _missingThreadNames = new();
+    private readonly HashSet<ulong> _fetchingThreads = new();
+    private readonly object _fetchLock = new();
 
     public IReadOnlyList<DiscordChannel> TextChannels => _textChannels;
     public IReadOnlyList<DiscordChannel> ForumChannels => _forumChannels;
@@ -60,7 +63,9 @@ public class DiscordChannelCache : IDisposable
 
         _textChannels = new List<DiscordChannel>();
         _forumChannels = new List<DiscordChannel>();
-        lock (_threadLock) _threadsByParent.Clear();
+        _threadsById.Clear();
+        _missingThreadNames.Clear();
+        lock (_fetchLock) _fetchingThreads.Clear();
     }
 
     private Task OnGuildDownloadCompleted(DiscordClient sender, GuildDownloadCompletedEventArgs e)
@@ -103,19 +108,16 @@ public class DiscordChannelCache : IDisposable
         if (_client == null) return;
         try
         {
-            var newThreadParams = new Dictionary<ulong, string>();
+            var newThreads = new ConcurrentDictionary<ulong, string>();
             foreach (var guild in _client.Guilds.Values)
             {
                 foreach (var thread in guild.Threads.Values)
                 {
-                    newThreadParams[thread.Id] = thread.Name;
+                    newThreads[thread.Id] = thread.Name;
                 }
             }
 
-            lock (_threadLock)
-            {
-                _threadsByParent = newThreadParams;
-            }
+            _threadsById = newThreads;
         }
         catch (Exception ex)
         {
@@ -147,6 +149,10 @@ public class DiscordChannelCache : IDisposable
                             result[thread.Id] = thread.Name;
                         }
                     }
+
+                    // Also include missing names that happen to be in this forum
+                    // However, we don't know the parent of missing threads unless we fetch them.
+                    // For now, result just contains what DSharpPlus knows.
                     return result;
                 }
             }
@@ -154,6 +160,50 @@ public class DiscordChannelCache : IDisposable
         catch { }
 
         return result;
+    }
+
+    /// <summary>
+    /// Gets the name of a thread, fetching it in the background if it's missing from cache.
+    /// </summary>
+    public string GetThreadName(ulong threadId)
+    {
+        if (_threadsById.TryGetValue(threadId, out var name)) return name;
+        if (_missingThreadNames.TryGetValue(threadId, out name)) return name;
+
+        // Not in cache, try to fetch
+        if (_client != null)
+        {
+            lock (_fetchLock)
+            {
+                if (!_fetchingThreads.Contains(threadId))
+                {
+                    _fetchingThreads.Add(threadId);
+                    Task.Run(async () =>
+                    {
+                        try
+                        {
+                            var channel = await _client.GetChannelAsync(threadId);
+                            if (channel != null)
+                            {
+                                _missingThreadNames[threadId] = channel.Name;
+                                Service.Log.Debug($"Fetched missing thread name for {threadId}: {channel.Name}");
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            Service.Log.Error(ex, $"Failed to fetch missing thread name for {threadId}");
+                            _missingThreadNames[threadId] = $"[Unknown Thread {threadId}]";
+                        }
+                        finally
+                        {
+                            lock (_fetchLock) _fetchingThreads.Remove(threadId);
+                        }
+                    });
+                }
+            }
+        }
+
+        return threadId.ToString();
     }
 
     /// <summary>

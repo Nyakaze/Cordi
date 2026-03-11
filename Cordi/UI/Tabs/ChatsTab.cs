@@ -2,36 +2,34 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
-
 using Dalamud.Game.Text;
 using Dalamud.Interface;
 using Dalamud.Interface.Utility;
 using Dalamud.Interface.Utility.Raii;
-using DSharpPlus;
 using DSharpPlus.Entities;
 using Dalamud.Bindings.ImGui;
 using Cordi.Services;
-
 using Cordi.Core;
 using Cordi.UI.Themes;
 using Cordi.Configuration;
-using Dalamud.Interface.Components;
 
 namespace Cordi.UI.Tabs;
 
 public class ChatsTab : ConfigTabBase
 {
-    private bool _activeTellsExpanded = false;
-    private bool _extraChatExpanded = false;
-    private bool _existingAvatarsExpanded = false;
-    private bool _highScoreRegexExpanded;
-    private bool _highScoreKeywordsExpanded;
-    private bool _mediumScoreRegexExpanded;
-    private bool _mediumScoreKeywordsExpanded;
-    private bool _whitelistExpanded;
-    private Dictionary<ulong, string> _cachedAvailableThreads = new();
+    private bool activeTellsExpanded = false;
+    private bool extraChatExpanded = false;
+    private bool existingAvatarsExpanded = false;
+    private bool highScoreRegexExpanded;
+    private bool highScoreKeywordsExpanded;
+    private bool mediumScoreRegexExpanded;
+    private bool mediumScoreKeywordsExpanded;
+    private bool whitelistExpanded;
+    private Dictionary<string, (string Key, ExtraChatConnection Value)> extraChatEditStates = new();
+    private (string Key, ExtraChatConnection Value)? extraChatAddState = null;
+    private Dictionary<ulong, string> cachedAvailableThreads = new();
     private readonly Services.Features.ExtraChatService extraChatService;
-    
+
 
     private readonly XivChatType[] supportedChatTypes = new[]
     {
@@ -50,20 +48,21 @@ public class ChatsTab : ConfigTabBase
     protected override IReadOnlyList<(string Label, Action Draw)> GetSubTabs()
     {
         RefreshThreadCache();
-        
+
         var tabs = new List<(string Label, Action Draw)>
         {
-            ("Channel Mappings", () => DrawChatMappingsCard(plugin.ChannelCache.TextChannels, plugin.ChannelCache.ForumChannels, ref _activeTellsExpanded)),
-            ("Active Conversations", () => DrawActiveTellsCard(plugin.ChannelCache.ForumChannels, ref _activeTellsExpanded)),
-            ("Custom Avatars", () => DrawExistingAvatarsCard(ref _existingAvatarsExpanded))
+            ("Channel Mappings", () => DrawChatMappingsCard(plugin.ChannelCache.TextChannels, plugin.ChannelCache.ForumChannels, ref activeTellsExpanded)),
+            ("Active Conversations", () => DrawActiveTellsCard(plugin.ChannelCache.ForumChannels, ref activeTellsExpanded)),
+            ("Custom Avatars", () => DrawExistingAvatarsCard(ref existingAvatarsExpanded))
         };
 
         if (extraChatService.IsExtraChatInstalled())
         {
             tabs.Add(("ExtraChat Mappings", () =>
             {
-                DrawExtraChatMappingsCard(plugin.ChannelCache.TextChannels, ref _extraChatExpanded, extraChatService);
-            }));
+                DrawExtraChatMappingsCard(plugin.ChannelCache.TextChannels, ref extraChatExpanded, extraChatService);
+            }
+            ));
         }
 
         tabs.Add(("Advertisement Filter", () => DrawAdvertisementFilter(plugin.Config.AdvertisementFilter)));
@@ -121,11 +120,11 @@ public class ChatsTab : ConfigTabBase
 
     private void RefreshThreadCache()
     {
-        _cachedAvailableThreads.Clear();
+        cachedAvailableThreads.Clear();
         var tellMap = plugin.Config.Chat.Mappings.FirstOrDefault(m => m.GameChatType == XivChatType.TellIncoming);
         if (tellMap != null && ulong.TryParse(tellMap.DiscordChannelId, out var forumId))
         {
-            _cachedAvailableThreads = plugin.ChannelCache.GetThreadsForForum(forumId);
+            cachedAvailableThreads = plugin.ChannelCache.GetThreadsForForum(forumId);
         }
     }
 
@@ -171,126 +170,203 @@ public class ChatsTab : ConfigTabBase
                         }
                     }
                 }
-                theme.HoverHandIfItem();
             }
         );
     }
 
     private void DrawExtraChatMappingsCard(IReadOnlyList<DiscordChannel>? textChannels, ref bool enabled, Services.Features.ExtraChatService extraChatService)
     {
-        theme.DrawPluginCardAuto(
-           id: "extrachat-mappings-card",
-           enabled: ref enabled,
-           showCheckbox: false,
-           title: "ExtraChat",
-           drawContent: (avail) =>
-           {
-               ImGui.TextColored(theme.MutedText, "Map ExtraChat Channels (like 'ECLS1') to specific channels.");
-               theme.SpacerY(1f);
+        var mappings = plugin.Config.Chat.ExtraChatMappings;
+        var headers = new[] { "Label", "Num", "Discord Channel", "Action" };
 
-               if (theme.SecondaryButton("Sync from ExtraChat", new Vector2(avail, 28)))
-               {
-                   int count = extraChatService.SyncFromExtraChat();
+        Action setupCols = () =>
+        {
+            ImGui.TableSetupColumn("Label", ImGuiTableColumnFlags.WidthFixed, 120f * ImGuiHelpers.GlobalScale);
+            ImGui.TableSetupColumn("Num", ImGuiTableColumnFlags.WidthFixed, 50f * ImGuiHelpers.GlobalScale);
+            ImGui.TableSetupColumn("Discord Channel", ImGuiTableColumnFlags.WidthStretch);
+            ImGui.TableSetupColumn("Action", ImGuiTableColumnFlags.WidthFixed, 80f * ImGuiHelpers.GlobalScale);
+        };
 
-                   plugin.NotificationManager.Add("ExtraChat Sync", $"Synced {count} channels from ExtraChat config.", CordiNotificationType.Success);
-               }
-               if (ImGui.IsItemHovered()) ImGui.SetTooltip("Import settings from ExtraChat plugin configuration.");
+        Action<KeyValuePair<string, ExtraChatConnection>, int> drawRow = (kvp, idx) =>
+        {
+            var key = kvp.Key;
+            var connection = kvp.Value;
+            bool isEditing = extraChatEditStates.TryGetValue("extra", out var state) && state.Key == key;
 
-               theme.SpacerY(1f);
+            if (isEditing)
+            {
+                string tempKey = state.Key;
+                ImGui.SetNextItemWidth(-1);
+                if (ImGui.InputText($"##edit-key-{key}", ref tempKey, 64))
+                {
+                    extraChatEditStates["extra"] = (tempKey, state.Value);
+                }
+            }
+            else
+            {
+                ImGui.AlignTextToFramePadding();
+                ImGui.TextUnformatted(key);
+            }
 
-               using (var table = ImRaii.Table("##extraChatMappingsTable", 4, ImGuiTableFlags.BordersInnerH | ImGuiTableFlags.SizingStretchProp))
-               if (table)
-               {
-                   ImGui.TableSetupColumn("Label (e.g. ECLS1)", ImGuiTableColumnFlags.WidthFixed, 150f);
-                   ImGui.TableSetupColumn("Channel", ImGuiTableColumnFlags.WidthFixed, 70f);
-                   ImGui.TableSetupColumn("Discord Channel", ImGuiTableColumnFlags.WidthStretch);
-                   ImGui.TableSetupColumn("", ImGuiTableColumnFlags.WidthFixed, 40f);
-                   ImGui.TableHeadersRow();
+            ImGui.TableNextColumn();
+            if (isEditing)
+            {
+                int num = state.Value.ExtraChatNumber;
+                ImGui.SetNextItemWidth(-1);
+                if (ImGui.InputInt($"##edit-num-{key}", ref num, 0))
+                {
+                    if (num < 0) num = 0;
+                    if (num > 8) num = 8;
+                    state.Value.ExtraChatNumber = num;
+                }
+            }
+            else
+            {
+                ImGui.AlignTextToFramePadding();
+                ImGui.TextUnformatted(connection.ExtraChatNumber.ToString());
+            }
 
-                   var mappings = plugin.Config.Chat.ExtraChatMappings;
-                   foreach (var key in mappings.Keys.ToList())
-                   {
-                       var connection = mappings[key];
-                       if (connection == null) continue;
+            ImGui.TableNextColumn();
+            if (isEditing)
+            {
+                theme.ChannelPicker(
+                    $"extra-combo-{key}",
+                    state.Value.DiscordChannelId ?? "",
+                    textChannels ?? new List<DiscordChannel>(),
+                    (newId) => state.Value.DiscordChannelId = newId,
+                    showLabel: false
+                );
+            }
+            else
+            {
+                ImGui.AlignTextToFramePadding();
+                string channelName = "None";
+                if (!string.IsNullOrEmpty(connection.DiscordChannelId))
+                {
+                    var ch = textChannels?.FirstOrDefault(c => c.Id.ToString() == connection.DiscordChannelId);
+                    channelName = ch != null ? $"#{ch.Name}" : connection.DiscordChannelId;
+                }
+                ImGui.TextUnformatted(channelName);
+            }
 
-                       ImGui.TableNextRow();
-                       ImGui.TableNextColumn();
+            ImGui.TableNextColumn();
+            if (isEditing)
+            {
+                if (theme.SuccessIconButton($"##save-{key}", FontAwesomeIcon.Check, "Save"))
+                {
+                    if (!string.IsNullOrWhiteSpace(state.Key))
+                    {
+                        mappings.Remove(key);
+                        mappings[state.Key] = state.Value;
+                        extraChatEditStates.Remove("extra");
+                        plugin.Config.Save();
+                    }
+                }
+                ImGui.SameLine();
+                if (theme.SecondaryIconButton($"##cancel-{key}", FontAwesomeIcon.Times, "Cancel"))
+                {
+                    extraChatEditStates.Remove("extra");
+                }
+            }
+            else
+            {
+                if (theme.SecondaryIconButton($"##edit-{key}", FontAwesomeIcon.Pen, "Edit"))
+                {
+                    var editConn = new ExtraChatConnection
+                    {
+                        DiscordChannelId = connection.DiscordChannelId,
+                        ExtraChatNumber = connection.ExtraChatNumber,
+                        ExtraChatGuid = connection.ExtraChatGuid
+                    };
+                    extraChatEditStates["extra"] = (key, editConn);
+                    extraChatAddState = null;
+                }
+                ImGui.SameLine();
+                if (theme.DangerIconButton($"##del-{key}", FontAwesomeIcon.Trash, "Delete"))
+                {
+                    mappings.Remove(key);
+                    plugin.Config.Save();
+                }
+            }
+        };
 
-                       string tempKey = key;
-                       ImGui.SetNextItemWidth(-1);
-                       bool changed = ImGui.InputText($"##label-{key}", ref tempKey, 64);
-                       if (ImGui.IsItemDeactivatedAfterEdit() && tempKey != key)
-                       {
-                           if (!string.IsNullOrWhiteSpace(tempKey) && !mappings.ContainsKey(tempKey))
-                           {
-                               mappings.Remove(key);
-                               mappings[tempKey] = connection;
-                               plugin.Config.Save();
-                           }
-                       }
-                       if (ImGui.IsItemHovered()) ImGui.SetTooltip("Edit the ExtraChat Label (e.g. ECLS1)");
+        theme.DrawCollapsableCardWithTable(
+            id: "extraChatMappings",
+            title: "ExtraChat Mappings",
+            expanded: ref extraChatExpanded,
+            collection: mappings.ToList(),
+            drawRow: drawRow,
+            headers: headers,
+            setupColumns: setupCols,
+            showCount: true,
+            showHeaders: true,
+            mutedText: "Map ExtraChat Channels (like 'ECLS1') to specific channels.",
+            collapsible: false,
+            drawTopContent: (width) =>
+            {
+                float btnWidth = width * 0.95f;
+                ImGui.SetCursorPosX(ImGui.GetCursorPosX() + (width - btnWidth) * 0.5f);
+                if (theme.SecondaryButton("Sync from ExtraChat", new Vector2(btnWidth, 0)))
+                {
+                    int count = extraChatService.SyncFromExtraChat();
+                    plugin.NotificationManager.Add("ExtraChat Sync", $"Synced {count} channels from ExtraChat.", CordiNotificationType.Success);
+                }
+            },
+            drawFooter: (width) =>
+            {
+                if (extraChatAddState != null)
+                {
+                    var state = extraChatAddState.Value;
+                    float keyWidth = width * 0.3f;
+                    float numWidth = 50f * ImGuiHelpers.GlobalScale;
+                    float buttonWidth = theme.ScaledActionsWidth;
+                    float chanWidth = width - keyWidth - numWidth - buttonWidth - 20f * ImGuiHelpers.GlobalScale;
 
-                       ImGui.TableNextColumn();
-                       int num = connection.ExtraChatNumber;
-                       ImGui.SetNextItemWidth(60f);
-                       if (ImGui.InputInt($"##num-{key}", ref num, 0))
-                       {
-                           if (num < 0) num = 0;
-                           if (num > 8) num = 8;
-                           connection.ExtraChatNumber = num;
-                           plugin.Config.Save();
-                       }
+                    string nKey = state.Key;
+                    ImGui.SetNextItemWidth(keyWidth);
+                    ImGui.InputTextWithHint($"##add-key-extra", "Label", ref nKey, 64);
 
-                       ImGui.TableNextColumn();
-                       string currentId = connection.DiscordChannelId ?? "";
-                       theme.ChannelPicker(
-                           $"extra-combo-{key}",
-                           currentId,
-                           textChannels ?? new List<DSharpPlus.Entities.DiscordChannel>(),
-                           (newId) =>
-                           {
-                               connection.DiscordChannelId = newId;
-                               plugin.Config.Save();
-                           },
-                           showLabel: false
-                       );
+                    ImGui.SameLine();
+                    int nNum = state.Value.ExtraChatNumber;
+                    ImGui.SetNextItemWidth(numWidth);
+                    if (ImGui.InputInt($"##add-num-extra", ref nNum, 0))
+                    {
+                        if (nNum < 0) nNum = 0;
+                        if (nNum > 8) nNum = 8;
+                        state.Value.ExtraChatNumber = nNum;
+                    }
 
-                       ImGui.TableNextColumn();
+                    ImGui.SameLine();
+                    theme.ChannelPicker("add-chan-extra", state.Value.DiscordChannelId ?? "", textChannels ?? new List<DiscordChannel>(), (id) => state.Value.DiscordChannelId = id, showLabel: false);
 
-                       using (ImRaii.PushFont(Dalamud.Interface.UiBuilder.IconFont))
-                       using (ImRaii.PushColor(ImGuiCol.Button, new Vector4(0.56f, 0f, 0f, 1f)))
-                       using (ImRaii.PushColor(ImGuiCol.ButtonHovered, new Vector4(0.7f, 0.1f, 0.1f, 1f)))
-                       using (ImRaii.PushColor(ImGuiCol.ButtonActive, new Vector4(0.4f, 0f, 0f, 1f)))
-                       {
-                           if (theme.Button($"{FontAwesomeIcon.Trash.ToIconString()}##del-{key}"))
-                           {
-                               mappings.Remove(key);
-                               plugin.Config.Save();
-                           }
-                       }
-                       if (ImGui.IsItemHovered()) ImGui.SetTooltip("Remove Mapping");
-                   }
+                    extraChatAddState = (nKey, state.Value);
 
-                   float availW = ImGui.GetContentRegionAvail().X;
-                   float btnW = availW * 0.95f;
-                   float pad = (availW - btnW) * 0.3f;
+                    ImGui.SameLine();
+                    if (theme.SuccessIconButton("##add-save-extra", FontAwesomeIcon.Check, "Add"))
+                    {
+                        if (!string.IsNullOrWhiteSpace(nKey) && !mappings.ContainsKey(nKey))
+                        {
+                            mappings[nKey] = state.Value;
+                            extraChatAddState = null;
+                            plugin.Config.Save();
+                        }
+                    }
+                    ImGui.SameLine();
+                    if (theme.SecondaryIconButton("##add-cancel-extra", FontAwesomeIcon.Times, "Cancel"))
+                    {
+                        extraChatAddState = null;
+                    }
+                    theme.SpacerY(1f);
+                }
 
-                   ImGui.SetCursorPosX(ImGui.GetCursorPosX() + pad);
-                   if (theme.Button(" + Add ExtraChat Mapping ", new Vector2(btnW, 0)))
-                   {
-                       string baseName = "New Chat";
-                       string newName = baseName;
-                       int i = 1;
-                       while (mappings.ContainsKey(newName))
-                       {
-                           newName = $"{baseName} {i++}";
-                       }
-
-                       mappings[newName] = new ExtraChatConnection();
-                       plugin.Config.Save();
-                   }
-               }
-           },
+                float btnWidth = width * 0.95f;
+                ImGui.SetCursorPosX(ImGui.GetCursorPosX() + (width - btnWidth) * 0.5f);
+                if (theme.SecondaryButton("Add New ExtraChat Mapping", new Vector2(btnWidth, 0)))
+                {
+                    extraChatAddState = ("", new ExtraChatConnection());
+                    extraChatEditStates.Remove("extra");
+                }
+            },
             drawHeaderRight: () =>
             {
                 ImGui.TextDisabled("(?)");
@@ -312,9 +388,9 @@ public class ChatsTab : ConfigTabBase
     private void DrawChatMappingsCard(IReadOnlyList<DiscordChannel>? textChannels, IReadOnlyList<DiscordChannel>? forumChannels, ref bool enabled)
     {
         DrawDefaultChannelCard(textChannels, ref enabled);
-        
+
         theme.SpacerY();
-        
+
         theme.DrawPluginCardAuto(
            id: "chat-mappings-card",
            enabled: ref enabled,
@@ -326,168 +402,168 @@ public class ChatsTab : ConfigTabBase
                theme.SpacerY(1f);
 
                using (var mappingsTable = ImRaii.Table("##mappingsTable", 3, ImGuiTableFlags.BordersInnerH | ImGuiTableFlags.SizingStretchProp))
-               if (mappingsTable)
-               {
-                   ImGui.TableSetupColumn("Chat Type", ImGuiTableColumnFlags.WidthFixed, 150f);
-                   ImGui.TableSetupColumn("Discord Channel / Forum", ImGuiTableColumnFlags.WidthStretch);
-                   ImGui.TableSetupColumn("Filter Ads", ImGuiTableColumnFlags.WidthFixed, 30f);
-
-                   Action<XivChatType> drawRow = (chatType) =>
+                   if (mappingsTable)
                    {
-                       ImGui.TableNextRow();
-                       ImGui.TableNextColumn();
-                       ImGui.AlignTextToFramePadding();
+                       ImGui.TableSetupColumn("Chat Type", ImGuiTableColumnFlags.WidthFixed, 150f);
+                       ImGui.TableSetupColumn("Discord Channel / Forum", ImGuiTableColumnFlags.WidthStretch);
+                       ImGui.TableSetupColumn("Filter Ads", ImGuiTableColumnFlags.WidthFixed, 30f);
 
-                       string label = chatType == XivChatType.TellIncoming ? "Tell" : chatType.ToString();
-                       ImGui.Text(label);
-
-                       ImGui.TableNextColumn();
-                       string currentId = "";
-                       if (plugin.Config.MappingCache.TryGetValue(chatType, out var cachedId)) currentId = cachedId;
-
-                       bool isTell = chatType == XivChatType.TellIncoming;
-                       var targetChannels = isTell ? forumChannels : textChannels;
-
-                       theme.ChannelPicker(
-                           $"combo-{chatType}",
-                           currentId,
-                           targetChannels,
-                           (newId) =>
-                           {
-                               if (string.IsNullOrEmpty(newId))
-                               {
-                                   var map = plugin.Config.Chat.Mappings.FirstOrDefault(m => m.GameChatType == chatType);
-                                   if (map != null) plugin.Config.Chat.Mappings.Remove(map);
-                                   if (isTell)
-                                   {
-                                       var mapOut = plugin.Config.Chat.Mappings.FirstOrDefault(m => m.GameChatType == XivChatType.TellOutgoing);
-                                       if (mapOut != null) plugin.Config.Chat.Mappings.Remove(mapOut);
-                                   }
-                               }
-                               else
-                               {
-                                   var map = plugin.Config.Chat.Mappings.FirstOrDefault(m => m.GameChatType == chatType);
-
-                                   if (map != null) map.DiscordChannelId = newId;
-                                   else plugin.Config.Chat.Mappings.Add(new ChannelMapping { GameChatType = chatType, DiscordChannelId = newId });
-
-                                   if (isTell)
-                                   {
-                                       var mapOut = plugin.Config.Chat.Mappings.FirstOrDefault(m => m.GameChatType == XivChatType.TellOutgoing);
-                                       if (mapOut != null) mapOut.DiscordChannelId = newId;
-                                       else plugin.Config.Chat.Mappings.Add(new ChannelMapping { GameChatType = XivChatType.TellOutgoing, DiscordChannelId = newId });
-                                   }
-                               }
-                               plugin.Config.Save();
-                               plugin.ChannelCache.Invalidate();
-                           },
-                           showLabel: false
-                       );
-
-                       // Advertisement Filter checkbox
-                       ImGui.TableNextColumn();
-                       var mapping = plugin.Config.Chat.Mappings.FirstOrDefault(m => m.GameChatType == chatType);
-                       if (mapping != null && !string.IsNullOrEmpty(mapping.DiscordChannelId))
+                       Action<XivChatType> drawRow = (chatType) =>
                        {
-                           bool filterEnabled = mapping.EnableAdvertisementFilter;
-                           theme.ConfigCheckbox($"##filter-{chatType}", ref filterEnabled, () =>
-                           {
-                               mapping.EnableAdvertisementFilter = filterEnabled;
-                               plugin.Config.Save();
-                           });
-                           if (ImGui.IsItemHovered())
-                           {
-                               ImGui.SetTooltip("Enable advertisement filter for this channel");
-                           }
-                       }
-                   };
+                           ImGui.TableNextRow();
+                           ImGui.TableNextColumn();
+                           ImGui.AlignTextToFramePadding();
 
-                   foreach (var chatType in supportedChatTypes)
-                   {
-                       drawRow(chatType);
-                   }
+                           string label = chatType == XivChatType.TellIncoming ? "Tell" : chatType.ToString();
+                           ImGui.Text(label);
 
-                   ImGui.TableNextRow();
-                   ImGui.TableNextColumn();
-                   using (var lsTree = ImRaii.TreeNode("Linkshell"))
-                   {
-                       ImGui.TableNextColumn();
-                       if (lsTree)
-                       {
-                           drawRow(XivChatType.Ls1);
-                           drawRow(XivChatType.Ls2);
-                           drawRow(XivChatType.Ls3);
-                           drawRow(XivChatType.Ls4);
-                           drawRow(XivChatType.Ls5);
-                           drawRow(XivChatType.Ls6);
-                           drawRow(XivChatType.Ls7);
-                           drawRow(XivChatType.Ls8);
-                       }
-                   }
+                           ImGui.TableNextColumn();
+                           string currentId = "";
+                           if (plugin.Config.MappingCache.TryGetValue(chatType, out var cachedId)) currentId = cachedId;
 
-                   ImGui.TableNextRow();
-                   ImGui.TableNextColumn();
-                   using (var cwlsTree = ImRaii.TreeNode("Cross-World Linkshells"))
-                   {
-                       ImGui.TableNextColumn();
-                       if (cwlsTree)
-                       {
-                           drawRow(XivChatType.CrossLinkShell1);
-                           drawRow(XivChatType.CrossLinkShell2);
-                           drawRow(XivChatType.CrossLinkShell3);
-                           drawRow(XivChatType.CrossLinkShell4);
-                           drawRow(XivChatType.CrossLinkShell5);
-                           drawRow(XivChatType.CrossLinkShell6);
-                           drawRow(XivChatType.CrossLinkShell7);
-                           drawRow(XivChatType.CrossLinkShell8);
-                       }
-                   }
+                           bool isTell = chatType == XivChatType.TellIncoming;
+                           var targetChannels = isTell ? forumChannels : textChannels;
 
-                   theme.SpacerY(1f);
-                   ImGui.Separator();
-                   theme.SpacerY(1f);
-
-                   bool tellNotif = plugin.Config.Chat.EnableTellNotification;
-                   if (theme.ConfigCheckbox("Send Tell notification to other channel", ref tellNotif, () =>
-                   {
-                       plugin.Config.Chat.EnableTellNotification = tellNotif;
-                       plugin.Config.Save();
-                   }))
-                   {
-                   }
-
-                   if (tellNotif)
-                   {
-                       using (ImRaii.PushIndent())
-                       {
-                           ImGui.TextDisabled("This will send a notification to the selected channel when you receive a tell.");
-                           theme.SpacerY(0.5f);
-                           ImGui.Text("Notification Channel:");
-                           string currentNotifId = plugin.Config.Chat.TellNotificationChannelId;
                            theme.ChannelPicker(
-                               "tell-notif-channel",
-                               currentNotifId,
-                               textChannels,
+                               $"combo-{chatType}",
+                               currentId,
+                               targetChannels,
                                (newId) =>
                                {
-                                   plugin.Config.Chat.TellNotificationChannelId = newId;
+                                   if (string.IsNullOrEmpty(newId))
+                                   {
+                                       var map = plugin.Config.Chat.Mappings.FirstOrDefault(m => m.GameChatType == chatType);
+                                       if (map != null) plugin.Config.Chat.Mappings.Remove(map);
+                                       if (isTell)
+                                       {
+                                           var mapOut = plugin.Config.Chat.Mappings.FirstOrDefault(m => m.GameChatType == XivChatType.TellOutgoing);
+                                           if (mapOut != null) plugin.Config.Chat.Mappings.Remove(mapOut);
+                                       }
+                                   }
+                                   else
+                                   {
+                                       var map = plugin.Config.Chat.Mappings.FirstOrDefault(m => m.GameChatType == chatType);
+
+                                       if (map != null) map.DiscordChannelId = newId;
+                                       else plugin.Config.Chat.Mappings.Add(new ChannelMapping { GameChatType = chatType, DiscordChannelId = newId });
+
+                                       if (isTell)
+                                       {
+                                           var mapOut = plugin.Config.Chat.Mappings.FirstOrDefault(m => m.GameChatType == XivChatType.TellOutgoing);
+                                           if (mapOut != null) mapOut.DiscordChannelId = newId;
+                                           else plugin.Config.Chat.Mappings.Add(new ChannelMapping { GameChatType = XivChatType.TellOutgoing, DiscordChannelId = newId });
+                                       }
+                                   }
                                    plugin.Config.Save();
+                                   plugin.ChannelCache.Invalidate();
                                },
-                               defaultLabel: "Select a Channel..."
+                               showLabel: false
                            );
 
-                           theme.SpacerY(0.5f);
-                           int cooldown = plugin.Config.Chat.TellNotificationCooldownSeconds;
-                           ImGui.SetNextItemWidth(100f);
-                           if (ImGui.InputInt("Conversation Cooldown (seconds)", ref cooldown))
+                           // Advertisement Filter checkbox
+                           ImGui.TableNextColumn();
+                           var mapping = plugin.Config.Chat.Mappings.FirstOrDefault(m => m.GameChatType == chatType);
+                           if (mapping != null && !string.IsNullOrEmpty(mapping.DiscordChannelId))
                            {
-                               if (cooldown < 0) cooldown = 0;
-                               plugin.Config.Chat.TellNotificationCooldownSeconds = cooldown;
-                               plugin.Config.Save();
+                               bool filterEnabled = mapping.EnableAdvertisementFilter;
+                               theme.ConfigCheckbox($"##filter-{chatType}", ref filterEnabled, () =>
+                               {
+                                   mapping.EnableAdvertisementFilter = filterEnabled;
+                                   plugin.Config.Save();
+                               });
+                               if (ImGui.IsItemHovered())
+                               {
+                                   ImGui.SetTooltip("Enable advertisement filter for this channel");
+                               }
                            }
-                           if (ImGui.IsItemHovered())
-                               ImGui.SetTooltip("Time in seconds to wait before sending another notification for the same active conversation.");
+                       };
+
+                       foreach (var chatType in supportedChatTypes)
+                       {
+                           drawRow(chatType);
                        }
+
+                       ImGui.TableNextRow();
+                       ImGui.TableNextColumn();
+                       using (var lsTree = ImRaii.TreeNode("Linkshell"))
+                       {
+                           ImGui.TableNextColumn();
+                           if (lsTree)
+                           {
+                               drawRow(XivChatType.Ls1);
+                               drawRow(XivChatType.Ls2);
+                               drawRow(XivChatType.Ls3);
+                               drawRow(XivChatType.Ls4);
+                               drawRow(XivChatType.Ls5);
+                               drawRow(XivChatType.Ls6);
+                               drawRow(XivChatType.Ls7);
+                               drawRow(XivChatType.Ls8);
+                           }
+                       }
+
+                       ImGui.TableNextRow();
+                       ImGui.TableNextColumn();
+                       using (var cwlsTree = ImRaii.TreeNode("Cross-World Linkshells"))
+                       {
+                           ImGui.TableNextColumn();
+                           if (cwlsTree)
+                           {
+                               drawRow(XivChatType.CrossLinkShell1);
+                               drawRow(XivChatType.CrossLinkShell2);
+                               drawRow(XivChatType.CrossLinkShell3);
+                               drawRow(XivChatType.CrossLinkShell4);
+                               drawRow(XivChatType.CrossLinkShell5);
+                               drawRow(XivChatType.CrossLinkShell6);
+                               drawRow(XivChatType.CrossLinkShell7);
+                               drawRow(XivChatType.CrossLinkShell8);
+                           }
+                       }
+                   }
+
+               theme.SpacerY(1f);
+               ImGui.Separator();
+               theme.SpacerY(1f);
+
+               bool tellNotif = plugin.Config.Chat.EnableTellNotification;
+               if (theme.ConfigCheckbox("Send Tell notification to other channel", ref tellNotif, () =>
+               {
+                   plugin.Config.Chat.EnableTellNotification = tellNotif;
+                   plugin.Config.Save();
+               }))
+               {
+               }
+
+               if (tellNotif)
+               {
+                   using (ImRaii.PushIndent())
+                   {
+                       ImGui.TextDisabled("This will send a notification to the selected channel when you receive a tell.");
+                       theme.SpacerY(0.5f);
+                       ImGui.Text("Notification Channel:");
+                       string currentNotifId = plugin.Config.Chat.TellNotificationChannelId;
+                       theme.ChannelPicker(
+                           "tell-notif-channel",
+                           currentNotifId,
+                           textChannels,
+                           (newId) =>
+                           {
+                               plugin.Config.Chat.TellNotificationChannelId = newId;
+                               plugin.Config.Save();
+                           },
+                           defaultLabel: "Select a Channel..."
+                       );
+
+                       theme.SpacerY(0.5f);
+                       int cooldown = plugin.Config.Chat.TellNotificationCooldownSeconds;
+                       ImGui.SetNextItemWidth(100f);
+                       if (ImGui.InputInt("Conversation Cooldown (seconds)", ref cooldown))
+                       {
+                           if (cooldown < 0) cooldown = 0;
+                           plugin.Config.Chat.TellNotificationCooldownSeconds = cooldown;
+                           plugin.Config.Save();
+                       }
+                       if (ImGui.IsItemHovered())
+                           ImGui.SetTooltip("Time in seconds to wait before sending another notification for the same active conversation.");
                    }
                }
            },
@@ -500,7 +576,7 @@ public class ChatsTab : ConfigTabBase
                     tip += "- Every Chat Type can be mapped to a Discord Channel\n";
                     tip += "- You can also enable an advertisement filter for each chat type.\n";
                     tip += "\n";
-                    tip += "- Tell needs to be mapped to a thread to be sent to Discord.\n";
+                    tip += "- Tell needs to be mapped to a Forum to be sent to Discord.\n";
                     ImGui.SetTooltip(tip);
                 }
             }
@@ -510,7 +586,7 @@ public class ChatsTab : ConfigTabBase
     private void DrawActiveTellsCard(IReadOnlyList<DiscordChannel>? forumChannels, ref bool enabled)
     {
         var tells = plugin.Config.Chat.TellThreadMappings;
-        var availableThreads = _cachedAvailableThreads;
+        var availableThreads = cachedAvailableThreads;
 
         var headers = new[] { "Correspondent", "Thread ID / Name", "Action" };
 
@@ -523,8 +599,12 @@ public class ChatsTab : ConfigTabBase
 
         Func<string, string, string> getDisplayValue = (key, value) =>
         {
-            if (ulong.TryParse(value, out var cid) && availableThreads.TryGetValue(cid, out var name))
+            if (ulong.TryParse(value, out var cid))
+            {
+                var name = plugin.ChannelCache.GetThreadName(cid);
+                if (ulong.TryParse(name, out _)) return value; // It's still just the ID
                 return $"#{name}";
+            }
             return value;
         };
 
@@ -533,9 +613,10 @@ public class ChatsTab : ConfigTabBase
             if (availableThreads.Count > 0)
             {
                 string preview = currentValue;
-                if (ulong.TryParse(currentValue, out var cid) && availableThreads.TryGetValue(cid, out var name))
+                if (ulong.TryParse(currentValue, out var cid))
                 {
-                    preview = $"#{name}";
+                    var name = plugin.ChannelCache.GetThreadName(cid);
+                    if (!ulong.TryParse(name, out _)) preview = $"#{name}";
                 }
 
                 ImGui.SetNextItemWidth(ImGui.GetContentRegionAvail().X - 50f * ImGuiHelpers.GlobalScale);
@@ -543,6 +624,13 @@ public class ChatsTab : ConfigTabBase
                 {
                     if (combo)
                     {
+                        if (ulong.TryParse(currentValue, out var selectedId) && !availableThreads.ContainsKey(selectedId))
+                        {
+                            var name = plugin.ChannelCache.GetThreadName(selectedId);
+                            if (ImGui.Selectable($"#{name}##{selectedId}", true)) { }
+                            ImGui.Separator();
+                        }
+
                         foreach (var thread in availableThreads)
                         {
                             bool isSelected = thread.Key.ToString() == currentValue;
@@ -619,19 +707,19 @@ public class ChatsTab : ConfigTabBase
 
         Action save = () => plugin.Config.Save();
 
-        theme.DrawStringTable("hsregex", "High-Score Regex Patterns ", ref _highScoreRegexExpanded,
+        theme.DrawStringTable("hsregex", "High-Score Regex Patterns ", ref highScoreRegexExpanded,
             config.HighScoreRegexPatterns, save, itemName: "Pattern");
 
-        theme.DrawStringTable("hskw", "High-Score Keywords", ref _highScoreKeywordsExpanded,
+        theme.DrawStringTable("hskw", "High-Score Keywords", ref highScoreKeywordsExpanded,
             config.HighScoreKeywords, save, itemName: "Pattern");
 
-        theme.DrawStringTable("msregex", "Medium-Score Regex Patterns", ref _mediumScoreRegexExpanded,
+        theme.DrawStringTable("msregex", "Medium-Score Regex Patterns", ref mediumScoreRegexExpanded,
             config.MediumScoreRegexPatterns, save, itemName: "Pattern");
 
-        theme.DrawStringTable("mskw", "Medium-Score Keywords", ref _mediumScoreKeywordsExpanded,
+        theme.DrawStringTable("mskw", "Medium-Score Keywords", ref mediumScoreKeywordsExpanded,
             config.MediumScoreKeywords, save, itemName: "Pattern");
 
-        theme.DrawStringTable("wl", "Whitelist", ref _whitelistExpanded,
+        theme.DrawStringTable("wl", "Whitelist", ref whitelistExpanded,
             config.Whitelist, save, itemName: "Pattern");
     }
 
@@ -650,7 +738,7 @@ public class ChatsTab : ConfigTabBase
         theme.DrawDictionaryTable(
             "customAvatars",
             $"Custom Avatars: {avatars.Count}",
-            ref _existingAvatarsExpanded,
+            ref existingAvatarsExpanded,
             avatars,
             () =>
             {
@@ -661,7 +749,8 @@ public class ChatsTab : ConfigTabBase
             },
             headers,
             setupColumns: setupCols,
-            allowAdd: true
+            allowAdd: true,
+            collapsible: false
         );
     }
 
