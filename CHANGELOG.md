@@ -1,3 +1,31 @@
+## [2.0.0](https://github.com/Nyakaze/Cordi/compare/1.2.1...2.0.0) (15-03-2026)
+
+### Overhaul
+ - **Overhauled** the entire Config Window.
+
+### Chats
+ - **Added:** A new Tab called "Chats" to the Config Window.
+
+### Peeper
+ - **Added:** Options for Transparency
+ - **Added:** Option for Direction Arrow
+ - **Added:** Option for Distance
+ - **Added:** Option for Showing Peepers Target
+ - **Added:** Option for Change highlight color
+ - **Added:** Option for Target Dot
+ - **Added:** Option for Hide Titlebar
+
+### Emote Log
+ - **Added:** Options for Transparency
+ - **Added:** Option for Hide Titlebar
+
+### Combined Window
+ - **Added:** A new Tab called "Combined" to the Config Window.
+
+### Activitys
+ - **Added:** Option for Gradient Titles
+ - **Added:** Option to Blacklist certain Activitys
+
 ## [1.2.1](https://github.com/Nyakaze/Cordi/compare/1.2.0...1.2.1) (11-02-2026)
 
 ### Party
