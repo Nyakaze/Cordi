@@ -1,4 +1,9 @@
-## [2.0.1](https://github.com/Nyakaze/Cordi/compare/2.0.0...2.0.1) (15-03-2026)
+## [2.0.2](https://github.com/Nyakaze/Cordi/compare/2.0.1...2.0.2) (14-03-2026)
+
+### General
+ - **Fixed:** A bug where the targetdot had a fixed offset. Not scaling with characters size
+
+## [2.0.1](https://github.com/Nyakaze/Cordi/compare/2.0.0...2.0.1) (14-03-2026)
 
 ### Windows
  - **Updated:** Windows can now be resized without a size restriction.
@@ -6,7 +11,7 @@
 ### Chats
  - **Fixed:** A bug where the Chat Mappings were not working.
 
-## [2.0.0](https://github.com/Nyakaze/Cordi/compare/1.2.1...2.0.0) (15-03-2026)
+## [2.0.0](https://github.com/Nyakaze/Cordi/compare/1.2.1...2.0.0) (14-03-2026)
 
 ### Overhaul
  - **Overhauled** the entire Config Window.

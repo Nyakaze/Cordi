@@ -607,7 +607,7 @@ public class CordiPeepService : IDisposable
         return await tcs.Task;
     }
 
-    private void DrawTargetingDots()
+    private unsafe void DrawTargetingDots()
     {
         var config = plugin.Config.CordiPeep;
         if (!config.ShowTargetingDot || !config.Enabled) return;
@@ -624,7 +624,8 @@ public class CordiPeepService : IDisposable
             if (obj == null) continue;
 
             var worldPos = obj.Position;
-            worldPos.Y += yOffset;
+            var gameObj = (FFXIVClientStructs.FFXIV.Client.Game.Object.GameObject*)obj.Address;
+            worldPos.Y += gameObj->NameplateOffset.Y + yOffset;
 
             if (!Service.GameGui.WorldToScreen(worldPos, out var screenPos)) continue;
 

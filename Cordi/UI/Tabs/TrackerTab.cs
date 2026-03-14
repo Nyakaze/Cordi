@@ -536,7 +536,7 @@ public class TrackerTab : ConfigTabBase
                 ImGui.Text("Dot Y Offset:");
                 ImGui.SetNextItemWidth(avail);
                 float dotYOffset = plugin.Config.CordiPeep.TargetingDotYOffset;
-                if (ImGui.SliderFloat("##peepDotYOffset", ref dotYOffset, -1f, 5f, "%.1f"))
+                if (ImGui.SliderFloat("##peepDotYOffset", ref dotYOffset, -2.5f, 2.5f, "%.1f"))
                 {
                     plugin.Config.CordiPeep.TargetingDotYOffset = dotYOffset;
                     plugin.Config.Save();
