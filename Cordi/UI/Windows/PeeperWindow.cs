@@ -23,8 +23,8 @@ public class CordiPeepWindow : Window
         _panel = new CordiPeepPanel(plugin);
         this.SizeConstraints = new WindowSizeConstraints
         {
-            MinimumSize = new Vector2(250, 100),
-            MaximumSize = new Vector2(400, 1000)
+            // MinimumSize = new Vector2(250, 100),
+            MaximumSize = new Vector2(float.MaxValue, float.MaxValue)
         };
     }
 

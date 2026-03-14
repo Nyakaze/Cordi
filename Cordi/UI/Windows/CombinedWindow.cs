@@ -26,7 +26,7 @@ public class CombinedWindow : Window
 
         this.SizeConstraints = new WindowSizeConstraints
         {
-            MinimumSize = new Vector2(500, 200),
+            // MinimumSize = new Vector2(500, 200),
             MaximumSize = new Vector2(float.MaxValue, float.MaxValue)
         };
     }

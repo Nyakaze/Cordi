@@ -25,7 +25,7 @@ public class EmoteLogWindow : Window, IDisposable
 
         this.SizeConstraints = new WindowSizeConstraints
         {
-            MinimumSize = new Vector2(250, 100),
+            // MinimumSize = new Vector2(250, 100),
             MaximumSize = new Vector2(float.MaxValue, float.MaxValue)
         };
     }
