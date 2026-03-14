@@ -14,12 +14,15 @@ public class EmoteLogPanel
 {
     private readonly CordiPlugin _plugin;
 
+    private static readonly uint ShadowColor = ImGui.GetColorU32(new Vector4(0f, 0f, 0f, 0.8f));
+    private static readonly Vector2 ShadowOffset = new(1f, 1f);
+
     public EmoteLogPanel(CordiPlugin plugin)
     {
         _plugin = plugin;
     }
 
-    public void Draw()
+    public void Draw(bool textShadow = false)
     {
         var logs = _plugin.EmoteLog.Logs;
 
@@ -39,6 +42,11 @@ public class EmoteLogPanel
                     text += $" [{entry.Count}]";
                 }
 
+                if (textShadow)
+                {
+                    var drawList = ImGui.GetWindowDrawList();
+                    drawList.AddText(ImGui.GetCursorScreenPos() + ShadowOffset, ShadowColor, text);
+                }
                 ImGui.TextUnformatted(text);
 
                 if (_plugin.Config.EmoteLog.ShowReplyButton)

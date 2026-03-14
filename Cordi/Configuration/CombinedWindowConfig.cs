@@ -11,4 +11,8 @@ public class CombinedWindowConfig
     public bool WindowLocked { get; set; } = false;
     public bool WindowNoResize { get; set; } = false;
     public bool IgnoreEsc { get; set; } = false;
+
+    public float BackgroundOpacity { get; set; } = 1.0f;
+    public bool HideTitleBar { get; set; } = false;
+    public bool TextShadow { get; set; } = false;
 }

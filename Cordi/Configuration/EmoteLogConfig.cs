@@ -20,5 +20,9 @@ public class EmoteLogConfig
     public bool WindowLockSize { get; set; } = false;
     public bool IgnoreEsc { get; set; } = false;
 
+    public float BackgroundOpacity { get; set; } = 1.0f;
+    public bool HideTitleBar { get; set; } = false;
+    public bool TextShadow { get; set; } = false;
+
     public List<EmoteLogBlacklistEntry> Blacklist { get; set; } = new();
 }

@@ -407,7 +407,33 @@ public class TrackerTab : ConfigTabBase
                         plugin.Config.Save();
                     });
                     theme.HoverHandIfItem();
+
+                    bool hideTitleBar = plugin.Config.CordiPeep.HideTitleBar;
+                    theme.ConfigCheckbox("Hide Title Bar", ref hideTitleBar, () =>
+                    {
+                        plugin.Config.CordiPeep.HideTitleBar = hideTitleBar;
+                        plugin.Config.Save();
+                    });
+                    theme.HoverHandIfItem();
                 }
+
+                theme.SpacerY(0.5f);
+                ImGui.Text("Background Opacity:");
+                ImGui.SetNextItemWidth(avail);
+                float peepOpacity = plugin.Config.CordiPeep.BackgroundOpacity * 100f;
+                if (ImGui.SliderFloat("##peepBgOpacity", ref peepOpacity, 0f, 100f, "%.0f%%"))
+                {
+                    plugin.Config.CordiPeep.BackgroundOpacity = peepOpacity / 100f;
+                    plugin.Config.Save();
+                }
+
+                bool peepTextShadow = plugin.Config.CordiPeep.TextShadow;
+                theme.ConfigCheckbox("Text Shadow", ref peepTextShadow, () =>
+                {
+                    plugin.Config.CordiPeep.TextShadow = peepTextShadow;
+                    plugin.Config.Save();
+                });
+                theme.HoverHandIfItem();
 
                 theme.SpacerY(1f);
                 ImGui.Separator();
@@ -462,6 +488,58 @@ public class TrackerTab : ConfigTabBase
                         plugin.Config.Save();
                     });
                     theme.HoverHandIfItem();
+                }
+
+                theme.SpacerY(1f);
+                ImGui.Separator();
+                theme.SpacerY(0.5f);
+                ImGui.TextColored(theme.MutedText, "Colors");
+                theme.SpacerY(0.5f);
+
+                var highlightColor = plugin.Config.CordiPeep.TargetingHighlightColor;
+                if (ImGui.ColorEdit4("Targeting Highlight##peepHighlight", ref highlightColor, ImGuiColorEditFlags.NoInputs | ImGuiColorEditFlags.AlphaBar))
+                {
+                    plugin.Config.CordiPeep.TargetingHighlightColor = highlightColor;
+                    plugin.Config.Save();
+                }
+
+                theme.SpacerY(1f);
+                ImGui.Separator();
+                theme.SpacerY(0.5f);
+                ImGui.TextColored(theme.MutedText, "Targeting Dot");
+                theme.SpacerY(0.5f);
+
+                bool showDot = plugin.Config.CordiPeep.ShowTargetingDot;
+                theme.ConfigCheckbox("Show Dot on Targeting Players", ref showDot, () =>
+                {
+                    plugin.Config.CordiPeep.ShowTargetingDot = showDot;
+                    plugin.Config.Save();
+                });
+                theme.HoverHandIfItem();
+
+                var dotColor = plugin.Config.CordiPeep.TargetingDotColor;
+                if (ImGui.ColorEdit4("Dot Color##peepDotColor", ref dotColor, ImGuiColorEditFlags.NoInputs | ImGuiColorEditFlags.AlphaBar))
+                {
+                    plugin.Config.CordiPeep.TargetingDotColor = dotColor;
+                    plugin.Config.Save();
+                }
+
+                ImGui.Text("Dot Size:");
+                ImGui.SetNextItemWidth(avail);
+                float dotSize = plugin.Config.CordiPeep.TargetingDotSize;
+                if (ImGui.SliderFloat("##peepDotSize", ref dotSize, 2f, 20f, "%.1f px"))
+                {
+                    plugin.Config.CordiPeep.TargetingDotSize = dotSize;
+                    plugin.Config.Save();
+                }
+
+                ImGui.Text("Dot Y Offset:");
+                ImGui.SetNextItemWidth(avail);
+                float dotYOffset = plugin.Config.CordiPeep.TargetingDotYOffset;
+                if (ImGui.SliderFloat("##peepDotYOffset", ref dotYOffset, -1f, 5f, "%.1f"))
+                {
+                    plugin.Config.CordiPeep.TargetingDotYOffset = dotYOffset;
+                    plugin.Config.Save();
                 }
 
                 theme.SpacerY(0.7f);
@@ -819,7 +897,33 @@ public class TrackerTab : ConfigTabBase
                         plugin.Config.Save();
                     });
                     theme.HoverHandIfItem();
+
+                    bool hideEmoteTitleBar = plugin.Config.EmoteLog.HideTitleBar;
+                    theme.ConfigCheckbox("Hide Title Bar", ref hideEmoteTitleBar, () =>
+                    {
+                        plugin.Config.EmoteLog.HideTitleBar = hideEmoteTitleBar;
+                        plugin.Config.Save();
+                    });
+                    theme.HoverHandIfItem();
                 }
+
+                theme.SpacerY(0.5f);
+                ImGui.Text("Background Opacity:");
+                ImGui.SetNextItemWidth(avail);
+                float emoteOpacity = plugin.Config.EmoteLog.BackgroundOpacity * 100f;
+                if (ImGui.SliderFloat("##emoteBgOpacity", ref emoteOpacity, 0f, 100f, "%.0f%%"))
+                {
+                    plugin.Config.EmoteLog.BackgroundOpacity = emoteOpacity / 100f;
+                    plugin.Config.Save();
+                }
+
+                bool emoteTextShadow = plugin.Config.EmoteLog.TextShadow;
+                theme.ConfigCheckbox("Text Shadow##emoteTextShadow", ref emoteTextShadow, () =>
+                {
+                    plugin.Config.EmoteLog.TextShadow = emoteTextShadow;
+                    plugin.Config.Save();
+                });
+                theme.HoverHandIfItem();
 
                 theme.SpacerY(0.7f);
 
@@ -946,6 +1050,32 @@ public class TrackerTab : ConfigTabBase
                     plugin.Config.CombinedWindow.IgnoreEsc = ignoreEsc;
                     plugin.Config.Save();
                 }
+
+                var comboHideTitle = plugin.Config.CombinedWindow.HideTitleBar;
+                if (ImGui.Checkbox("Hide Title Bar##comboTitle", ref comboHideTitle))
+                {
+                    plugin.Config.CombinedWindow.HideTitleBar = comboHideTitle;
+                    plugin.Config.Save();
+                }
+
+                theme.SpacerY(0.5f);
+                ImGui.Text("Background Opacity:");
+                ImGui.SetNextItemWidth(avail);
+                float comboOpacity = plugin.Config.CombinedWindow.BackgroundOpacity * 100f;
+                if (ImGui.SliderFloat("##comboBgOpacity", ref comboOpacity, 0f, 100f, "%.0f%%"))
+                {
+                    plugin.Config.CombinedWindow.BackgroundOpacity = comboOpacity / 100f;
+                    plugin.Config.Save();
+                }
+
+                var comboTextShadow = plugin.Config.CombinedWindow.TextShadow;
+                if (ImGui.Checkbox("Text Shadow##comboShadow", ref comboTextShadow))
+                {
+                    plugin.Config.CombinedWindow.TextShadow = comboTextShadow;
+                    plugin.Config.Save();
+                }
+
+                theme.SpacerY(0.7f);
                 if (theme.SecondaryButton("Open Window Now", new Vector2(avail, 28)))
                 {
                     plugin.CombinedWindow.IsOpen = true;

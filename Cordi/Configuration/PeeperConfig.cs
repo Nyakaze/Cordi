@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Numerics;
 
 namespace Cordi.Configuration;
 
@@ -36,6 +37,17 @@ public class CordiPeepConfig
     public bool ShowDirectionInHistory { get; set; } = true;
     public bool ShowDistanceInHistory { get; set; } = true;
     public bool ShowCurrentTarget { get; set; } = true;
+
+    public Vector4 TargetingHighlightColor { get; set; } = new Vector4(1f, 0.5f, 0.5f, 1f);
+
+    public float BackgroundOpacity { get; set; } = 1.0f;
+    public bool HideTitleBar { get; set; } = false;
+    public bool TextShadow { get; set; } = false;
+
+    public bool ShowTargetingDot { get; set; } = false;
+    public Vector4 TargetingDotColor { get; set; } = new Vector4(1f, 0.3f, 0.3f, 1f);
+    public float TargetingDotSize { get; set; } = 6f;
+    public float TargetingDotYOffset { get; set; } = 2.0f;
 
     public List<CordiPeepBlacklistEntry> Blacklist { get; set; } = new();
 }

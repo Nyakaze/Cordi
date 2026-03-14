@@ -19,12 +19,15 @@ public class CordiPeepPanel
     private ulong? _lastHoveredTarget;
     private ulong? _hoveredTargetThisFrame;
 
+    private static readonly uint ShadowColor = ImGui.GetColorU32(new Vector4(0f, 0f, 0f, 0.8f));
+    private static readonly Vector2 ShadowOffset = new(1f, 1f);
+
     public CordiPeepPanel(CordiPlugin plugin)
     {
         _plugin = plugin;
     }
 
-    public void Draw()
+    public void Draw(bool textShadow = false)
     {
         _hoveredPeeperThisFrame = null;
         _hoveredTargetThisFrame = null;
@@ -32,45 +35,29 @@ public class CordiPeepPanel
         var cordiPeep = _plugin.CordiPeep;
         if (cordiPeep == null) return;
 
-        if (!cordiPeep.ActivePeepers.IsEmpty)
+        if (cordiPeep.ActivePeepers.IsEmpty && cordiPeep.History.Count == 0)
         {
-            ImGui.TextColored(new Vector4(1f, 0.5f, 0.5f, 1f), "Targeting you");
-            ImGui.SameLine();
-            ImGui.TextDisabled("(?)");
-            if (ImGui.IsItemHovered())
-            {
-                ImGui.SetTooltip($"Players actively targeting you right now.\nRight-Click to target.\n{(_plugin.Config.CordiPeep.AltClickExamine ? "Alt-Click to examine." : "")}");
-            }
-
+            if (textShadow) DrawTextShadow("No detected peeps.");
+            ImGui.TextDisabled("No detected peeps.");
+        }
+        else
+        {
             foreach (var peeper in cordiPeep.ActivePeepers.Values)
             {
                 string label = $"{peeper.Name}";
                 string time = peeper.LastSeen.ToString("HH:mm");
 
-                DrawEntry(peeper, label, time, true);
+                DrawEntry(peeper, label, time, true, textShadow);
             }
-            ImGui.Separator();
-        }
 
-        if (cordiPeep.History.Count > 0)
-        {
-            ImGui.TextDisabled("History");
-        }
-
-        lock (cordiPeep.History)
-        {
-            if (cordiPeep.History.Count == 0 && cordiPeep.ActivePeepers.IsEmpty)
-            {
-                ImGui.TextDisabled("No detected peeps.");
-            }
-            else
+            lock (cordiPeep.History)
             {
                 foreach (var peeper in cordiPeep.History)
                 {
                     string label = $"{peeper.Name}";
                     string time = peeper.EndTime.HasValue ? peeper.EndTime.Value.ToString("HH:mm") : "Unknown";
 
-                    DrawEntry(peeper, label, time, false);
+                    DrawEntry(peeper, label, time, false, textShadow);
                 }
             }
         }
@@ -110,7 +97,7 @@ public class CordiPeepPanel
         }
     }
 
-    private void DrawEntry(CordiPeepService.PeeperState peeper, string label, string rightText, bool isActive)
+    private void DrawEntry(CordiPeepService.PeeperState peeper, string label, string rightText, bool isActive, bool textShadow)
     {
         var avail = ImGui.GetContentRegionAvail().X;
         var style = ImGui.GetStyle();
@@ -129,7 +116,7 @@ public class CordiPeepPanel
         bool showTarget = config.ShowCurrentTarget && !string.IsNullOrEmpty(peeper.CurrentTargetName) && !isTargetLocalPlayer;
         float rowHeight = ImGui.GetTextLineHeight() + style.FramePadding.Y * 2;
 
-        using var textColorRaii = ImRaii.PushColor(ImGuiCol.Text, isActive ? new Vector4(1f, 0.5f, 0.5f, 1f) : ImGui.GetStyle().Colors[(int)ImGuiCol.TextDisabled]);
+        using var textColorRaii = ImRaii.PushColor(ImGuiCol.Text, isActive ? _plugin.Config.CordiPeep.TargetingHighlightColor : ImGui.GetStyle().Colors[(int)ImGuiCol.TextDisabled]);
 
         using var headerHoveredRaii = ImRaii.PushColor(ImGuiCol.HeaderHovered, new Vector4(0f, 0f, 0f, 0f));
         using var headerActiveRaii = ImRaii.PushColor(ImGuiCol.HeaderActive, new Vector4(0f, 0f, 0f, 0f));
@@ -271,6 +258,8 @@ public class CordiPeepPanel
             textColor = ImGui.GetColorU32(ImGuiCol.TextDisabled);
         }
 
+        var shadowColor = ShadowColor;
+
         // Draw direction arrow + distance + label
         float textX = pMin.X + style.ItemSpacing.X;
         float textY = pMin.Y + style.FramePadding.Y;
@@ -280,27 +269,41 @@ public class CordiPeepPanel
         {
             float arrowSize = lineH * 0.45f;
             var arrowCenter = new Vector2(textX + arrowSize + 1f, textY + lineH * 0.5f);
+            if (textShadow) DrawDirectionTriangle(drawList, arrowCenter + ShadowOffset, arrowSize, peeper.DirectionAngle, shadowColor);
             DrawDirectionTriangle(drawList, arrowCenter, arrowSize, peeper.DirectionAngle, ImGui.GetColorU32(ImGuiCol.TextDisabled));
             textX += arrowSize * 2f + 6f;
         }
 
         if (distText.Length > 0)
         {
+            if (textShadow) drawList.AddText(new Vector2(textX, textY) + ShadowOffset, shadowColor, distText);
             drawList.AddText(new Vector2(textX, textY), ImGui.GetColorU32(ImGuiCol.TextDisabled), distText);
             textX += ImGui.CalcTextSize(distText).X;
         }
 
+        if (textShadow) drawList.AddText(new Vector2(textX, textY) + ShadowOffset, shadowColor, label);
         drawList.AddText(new Vector2(textX, textY), textColor, label);
 
         var timeSize = ImGui.CalcTextSize(rightText);
-        drawList.AddText(new Vector2(pMax.X - timeSize.X - style.ItemSpacing.X, textY), ImGui.GetColorU32(ImGuiCol.TextDisabled), rightText);
+        var timePos = new Vector2(pMax.X - timeSize.X - style.ItemSpacing.X, textY);
+        if (textShadow) drawList.AddText(timePos + ShadowOffset, shadowColor, rightText);
+        drawList.AddText(timePos, ImGui.GetColorU32(ImGuiCol.TextDisabled), rightText);
 
         // Draw current target on second line
         if (showTarget)
         {
             var targetText = $"  \u2192 {peeper.CurrentTargetName}";
-            drawList.AddText(new Vector2(targetItemMin.X + style.ItemSpacing.X, targetItemMin.Y), ImGui.GetColorU32(ImGuiCol.TextDisabled), targetText);
+            var targetPos = new Vector2(targetItemMin.X + style.ItemSpacing.X, targetItemMin.Y);
+            if (textShadow) drawList.AddText(targetPos + ShadowOffset, shadowColor, targetText);
+            drawList.AddText(targetPos, ImGui.GetColorU32(ImGuiCol.TextDisabled), targetText);
         }
+    }
+
+    private static void DrawTextShadow(string text)
+    {
+        var drawList = ImGui.GetWindowDrawList();
+        var pos = ImGui.GetCursorScreenPos();
+        drawList.AddText(pos + ShadowOffset, ShadowColor, text);
     }
 
     private Dalamud.Game.ClientState.Objects.Types.IGameObject? FindPeeper(CordiPeepService.PeeperState peeper)

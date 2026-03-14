@@ -14,6 +14,7 @@ using DSharpPlus;
 using DSharpPlus.Entities;
 using DSharpPlus.EventArgs;
 using Lumina.Excel.Sheets;
+using Dalamud.Bindings.ImGui;
 using Cordi.Core;
 using Cordi.Configuration;
 using Cordi.Extensions;
@@ -79,7 +80,7 @@ public class CordiPeepService : IDisposable
     {
         this.plugin = plugin;
         Service.Framework.Update += OnFrameworkUpdate;
-
+        Service.PluginInterface.UiBuilder.Draw += DrawTargetingDots;
 
         if (plugin.Discord != null)
             plugin.Discord.OnReactionAdded += OnDiscordReactionAdded;
@@ -606,12 +607,38 @@ public class CordiPeepService : IDisposable
         return await tcs.Task;
     }
 
+    private void DrawTargetingDots()
+    {
+        var config = plugin.Config.CordiPeep;
+        if (!config.ShowTargetingDot || !config.Enabled) return;
+        if (ActivePeepers.IsEmpty) return;
+
+        var drawList = ImGui.GetForegroundDrawList();
+        var dotColor = ImGui.GetColorU32(config.TargetingDotColor);
+        var radius = config.TargetingDotSize;
+        var yOffset = config.TargetingDotYOffset;
+
+        foreach (var peeper in ActivePeepers.Values)
+        {
+            var obj = Service.ObjectTable.SearchById(peeper.GameObjectId);
+            if (obj == null) continue;
+
+            var worldPos = obj.Position;
+            worldPos.Y += yOffset;
+
+            if (!Service.GameGui.WorldToScreen(worldPos, out var screenPos)) continue;
+
+            drawList.AddCircleFilled(screenPos, radius, dotColor);
+        }
+    }
+
     public void Dispose()
     {
         if (configChanged)
         {
             plugin.Config.Save();
         }
+        Service.PluginInterface.UiBuilder.Draw -= DrawTargetingDots;
         Service.Framework.Update -= OnFrameworkUpdate;
         if (plugin.Discord != null)
             plugin.Discord.OnReactionAdded -= OnDiscordReactionAdded;
