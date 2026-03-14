@@ -1017,7 +1017,7 @@ public class TrackerTab : ConfigTabBase
             drawContent: (avail) =>
             {
                 var swap = plugin.Config.CombinedWindow.SwapPanels;
-                if (ImGui.Checkbox("Swap Panels (Peeper links, Emote Log rechts)##comboSwap", ref swap))
+                if (ImGui.Checkbox("Swap Panels (Peeper left, Emote Log right)##comboSwap", ref swap))
                 {
                     plugin.Config.CombinedWindow.SwapPanels = swap;
                     plugin.Config.Save();
