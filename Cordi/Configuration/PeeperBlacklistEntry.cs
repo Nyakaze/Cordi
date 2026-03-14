@@ -3,7 +3,7 @@ using System;
 namespace Cordi.Configuration;
 
 [Serializable]
-public class CordiPeepBlacklistEntry
+public class CordiPeepBlacklistEntry : IBlacklistEntry
 {
     public string Name { get; set; } = string.Empty;
     public string World { get; set; } = string.Empty;

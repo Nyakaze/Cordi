@@ -1189,6 +1189,9 @@ public sealed class UiTheme
         var flags = ImGuiTableFlags.BordersInnerH | ImGuiTableFlags.SizingStretchProp;
         if (outerSize != null && outerSize.Value.Y > 0) flags |= ImGuiTableFlags.ScrollY;
 
+        using (ImRaii.PushColor(ImGuiCol.TableHeaderBg, FrameBg)
+                .Push(ImGuiCol.TableBorderStrong, WindowBorder)
+                .Push(ImGuiCol.TableBorderLight, WindowBorder))
         using (var table = ImRaii.Table($"##table_{id}", columns, flags, outerSize ?? Vector2.Zero))
         {
             if (table)
@@ -1579,7 +1582,8 @@ public sealed class UiTheme
         IReadOnlyList<DSharpPlus.Entities.DiscordChannel>? channels,
         Action<string> onWaitSelection,
         string defaultLabel = "None",
-        bool showLabel = true)
+        bool showLabel = true,
+        float? width = null)
     {
         if (showLabel)
         {
@@ -1594,7 +1598,15 @@ public sealed class UiTheme
             else preview = currentId;
         }
 
-        ImGui.SetNextItemWidth(ImGui.GetContentRegionAvail().X - ImGui.GetStyle().FramePadding.X * 2);
+        if (width.HasValue)
+        {
+            ImGui.SetNextItemWidth(width.Value);
+        }
+        else
+        {
+            ImGui.SetNextItemWidth(ImGui.GetContentRegionAvail().X - ImGui.GetStyle().FramePadding.X * 2);
+        }
+
         using (var combo = ImRaii.Combo($"##{id}", preview))
         {
             if (combo)

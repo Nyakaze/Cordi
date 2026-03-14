@@ -42,6 +42,7 @@ public sealed class ConfigWindow : Window, IDisposable
     private RememberMeTab rememberMeTab;
     private CombinedWindowTab combinedWindowTab;
     private SettingsTab settingsTab;
+    private TrackerTab trackerTab;
 
 
     private int selectedTab = 1;
@@ -64,6 +65,7 @@ public sealed class ConfigWindow : Window, IDisposable
         this.rememberMeTab = new RememberMeTab(plugin, theme);
         this.combinedWindowTab = new CombinedWindowTab(plugin, theme);
         this.settingsTab = new SettingsTab(plugin, theme);
+        this.trackerTab = new TrackerTab(plugin, theme);
 
         // Apply saved font settings
         UiTheme.GlobalFontScale = plugin.Config.Font.GlobalScale;
@@ -143,9 +145,10 @@ public sealed class ConfigWindow : Window, IDisposable
                 theme.SpacerY(1f);
                 // DrawSidebarButton("General", 0);
                 DrawSidebarButton("Chats", 1, true);
-                DrawSidebarButton("Emote Log", 4);
-                DrawSidebarButton("Peepers", 2);
-                DrawSidebarButton("Combined", 9);
+                DrawSidebarButton("Trackers", 8);
+                // DrawSidebarButton("Emote Log", 4);
+                // DrawSidebarButton("Peepers", 2);
+                // DrawSidebarButton("Combined", 9);
                 DrawSidebarButton("Activity", 5);
                 DrawSidebarButton("Party", 6);
                 DrawSidebarButton("Remember Me", 7);
@@ -195,6 +198,10 @@ public sealed class ConfigWindow : Window, IDisposable
 
                 case 7:
                     rememberMeTab.Draw();
+                    break;
+
+                case 8:
+                    trackerTab.Draw();
                     break;
 
                 case 9:

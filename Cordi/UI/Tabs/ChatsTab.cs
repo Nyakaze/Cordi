@@ -234,7 +234,8 @@ public class ChatsTab : ConfigTabBase
                     state.Value.DiscordChannelId ?? "",
                     textChannels ?? new List<DiscordChannel>(),
                     (newId) => state.Value.DiscordChannelId = newId,
-                    showLabel: false
+                    showLabel: false,
+                    width: -1
                 );
             }
             else
@@ -290,6 +291,7 @@ public class ChatsTab : ConfigTabBase
             }
         };
 
+        theme.PushInputScope();
         theme.DrawCollapsableCardWithTable(
             id: "extraChatMappings",
             title: "ExtraChat Mappings",
@@ -305,7 +307,8 @@ public class ChatsTab : ConfigTabBase
             drawTopContent: (width) =>
             {
                 float btnWidth = width * 0.95f;
-                ImGui.SetCursorPosX(ImGui.GetCursorPosX() + (width - btnWidth) * 0.5f);
+                float avail = ImGui.GetContentRegionAvail().X;
+                ImGui.SetCursorPosX(ImGui.GetCursorPosX() + (avail - btnWidth) * 0.5f);
                 if (theme.SecondaryButton("Sync from ExtraChat", new Vector2(btnWidth, 0)))
                 {
                     int count = extraChatService.SyncFromExtraChat();
@@ -317,10 +320,12 @@ public class ChatsTab : ConfigTabBase
                 if (extraChatAddState != null)
                 {
                     var state = extraChatAddState.Value;
-                    float keyWidth = width * 0.3f;
+                    float spacing = ImGui.GetStyle().ItemSpacing.X;
+                    float btnSize = ImGui.GetFrameHeight();
+                    float buttonsWidth = btnSize * 2 + spacing;
                     float numWidth = 50f * ImGuiHelpers.GlobalScale;
-                    float buttonWidth = theme.ScaledActionsWidth;
-                    float chanWidth = width - keyWidth - numWidth - buttonWidth - 20f * ImGuiHelpers.GlobalScale;
+                    float keyWidth = width * 0.25f;
+                    float chanWidth = width - keyWidth - numWidth - buttonsWidth - spacing * 3;
 
                     string nKey = state.Key;
                     ImGui.SetNextItemWidth(keyWidth);
@@ -337,7 +342,7 @@ public class ChatsTab : ConfigTabBase
                     }
 
                     ImGui.SameLine();
-                    theme.ChannelPicker("add-chan-extra", state.Value.DiscordChannelId ?? "", textChannels ?? new List<DiscordChannel>(), (id) => state.Value.DiscordChannelId = id, showLabel: false);
+                    theme.ChannelPicker("add-chan-extra", state.Value.DiscordChannelId ?? "", textChannels ?? new List<DiscordChannel>(), (id) => state.Value.DiscordChannelId = id, showLabel: false, width: chanWidth);
 
                     extraChatAddState = (nKey, state.Value);
 
@@ -360,7 +365,8 @@ public class ChatsTab : ConfigTabBase
                 }
 
                 float btnWidth = width * 0.95f;
-                ImGui.SetCursorPosX(ImGui.GetCursorPosX() + (width - btnWidth) * 0.5f);
+                float avail = ImGui.GetContentRegionAvail().X;
+                ImGui.SetCursorPosX(ImGui.GetCursorPosX() + (avail - btnWidth) * 0.5f);
                 if (theme.SecondaryButton("Add New ExtraChat Mapping", new Vector2(btnWidth, 0)))
                 {
                     extraChatAddState = ("", new ExtraChatConnection());
@@ -383,6 +389,7 @@ public class ChatsTab : ConfigTabBase
                 }
             }
         );
+        theme.PopInputScope();
     }
 
     private void DrawChatMappingsCard(IReadOnlyList<DiscordChannel>? textChannels, IReadOnlyList<DiscordChannel>? forumChannels, ref bool enabled)
