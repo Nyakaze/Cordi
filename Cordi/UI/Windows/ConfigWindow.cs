@@ -38,8 +38,7 @@ public sealed class ConfigWindow : Window, IDisposable
 #endif
     private EmoteLogTab emoteLogTab;
     private DiscordActivityTab discordActivityTab;
-    private PartyTab partyTab;
-    private RememberMeTab rememberMeTab;
+    private PartyAndPlayersTab partyAndPlayersTab;
     private CombinedWindowTab combinedWindowTab;
     private SettingsTab settingsTab;
     private TrackerTab trackerTab;
@@ -61,8 +60,7 @@ public sealed class ConfigWindow : Window, IDisposable
 #if DEBUG
         this.debugTab = new DebugTab(plugin, theme);
 #endif
-        this.partyTab = new PartyTab(plugin, theme);
-        this.rememberMeTab = new RememberMeTab(plugin, theme);
+        this.partyAndPlayersTab = new PartyAndPlayersTab(plugin, theme);
         this.combinedWindowTab = new CombinedWindowTab(plugin, theme);
         this.settingsTab = new SettingsTab(plugin, theme);
         this.trackerTab = new TrackerTab(plugin, theme);
@@ -150,8 +148,7 @@ public sealed class ConfigWindow : Window, IDisposable
                 // DrawSidebarButton("Peepers", 2);
                 // DrawSidebarButton("Combined", 9);
                 DrawSidebarButton("Activity", 5);
-                DrawSidebarButton("Party", 6);
-                DrawSidebarButton("Remember Me", 7);
+                DrawSidebarButton("Party & Players", 6);
                 DrawSidebarButton("Settings", 12);
 
 #if DEBUG
@@ -193,11 +190,7 @@ public sealed class ConfigWindow : Window, IDisposable
                     break;
 
                 case 6:
-                    partyTab.Draw();
-                    break;
-
-                case 7:
-                    rememberMeTab.Draw();
+                    partyAndPlayersTab.Draw();
                     break;
 
                 case 8:

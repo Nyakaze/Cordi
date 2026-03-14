@@ -30,15 +30,11 @@ public class PartyTab : ConfigTabBase
 
         DrawGeneralCard(ref enabled);
 
-        theme.SpacerY(1f);
-        ImGui.Separator();
-        theme.SpacerY(1f);
+        theme.SpacerY();
 
         DrawTriggerCard(ref enabled);
 
-        theme.SpacerY(1f);
-        ImGui.Separator();
-        theme.SpacerY(1f);
+        theme.SpacerY();
 
         DrawIntegrationCard(ref enabled);
     }
@@ -86,8 +82,6 @@ public class PartyTab : ConfigTabBase
 
     private void DrawGeneralCard(ref bool cardEnabled)
     {
-        theme.SpacerY(2f);
-
         theme.DrawPluginCardAuto(
             id: "party-general",
             title: "General",

@@ -19,78 +19,40 @@ public class DiscordActivityTab : ConfigTabBase
 {
     private string newGameInputState = "";
 
+    private static readonly string[] FilterModeLabels = { "Contains", "Equals", "Starts With", "Ends With", "Regex" };
+
+    private static readonly Dictionary<ActivityType, string[]> PlaceholdersByType = new()
+    {
+        { ActivityType.Playing, new[] { "{name}", "{details}", "{state}", "{elapsed}", "{duration}", "{time_start}", "{time_end}" } },
+        { ActivityType.ListeningTo, new[] { "{name}", "{details}", "{track}", "{state}", "{artist}", "{album}", "{elapsed}", "{duration}", "{time_start}", "{time_end}" } },
+        { ActivityType.Watching, new[] { "{name}", "{details}", "{state}", "{elapsed}", "{duration}", "{time_start}", "{time_end}" } },
+        { ActivityType.Custom, new[] { "{name}", "{state}" } },
+    };
+
+    private static readonly string[] DefaultPlaceholders = { "{name}", "{details}", "{state}" };
+
     public override string Label => "Activity";
 
     public DiscordActivityTab(CordiPlugin plugin, UiTheme theme) : base(plugin, theme)
     {
     }
 
-    public override void Draw()
+    protected override IReadOnlyList<(string Label, Action Draw)> GetSubTabs()
+    {
+        return new List<(string Label, Action Draw)>
+        {
+            ("Playing", DrawPlayingSubTab),
+            ("Listening", DrawListeningSubTab),
+            ("Watching", DrawWatchingSubTab),
+            ("Custom", DrawCustomSubTab),
+            ("General", DrawGeneralSubTab),
+        };
+    }
+
+    private void DrawPlayingSubTab()
     {
         var config = plugin.Config.ActivityConfig;
         bool changed = false;
-
-        theme.SpacerY(2f);
-
-
-        bool enabled = config.Enabled;
-        bool unused = true;
-        theme.DrawPluginCardAuto(
-            id: "act-general-card",
-            enabled: ref unused,
-            showCheckbox: false,
-            title: "General",
-            drawContent: (avail) =>
-            {
-                ImGui.TextColored(theme.MutedText, "Configure the target Discord user and main settings.");
-                theme.SpacerY(0.5f);
-
-
-                if (ImGui.Checkbox("Enable Discord Activity Integration", ref enabled))
-                {
-                    config.Enabled = enabled;
-                    changed = true;
-                }
-                theme.HoverHandIfItem();
-
-                theme.SpacerY(0.5f);
-
-
-                string userIdStr = config.TargetUserId == 0 ? "" : config.TargetUserId.ToString();
-                ImGui.Text("Target User ID");
-                ImGui.SameLine();
-                ImGui.SetNextItemWidth(200f * ImGuiHelpers.GlobalScale);
-                if (ImGui.InputText("##TargetUserId", ref userIdStr, 20))
-                {
-                    if (ulong.TryParse(userIdStr, out var newId))
-                    {
-                        config.TargetUserId = newId;
-                        changed = true;
-                    }
-                    else if (string.IsNullOrEmpty(userIdStr))
-                    {
-                        config.TargetUserId = 0;
-                        changed = true;
-                    }
-                }
-                if (ImGui.IsItemHovered()) ImGui.SetTooltip("The value from 'Copy User ID' in Discord.");
-
-                ImGui.SameLine();
-                theme.SpacerX(1f);
-                ImGui.SameLine();
-
-
-                bool prefix = config.PrefixTitle;
-                if (ImGui.Checkbox("Prefix Mode", ref prefix)) { config.PrefixTitle = prefix; changed = true; }
-                theme.HoverHandIfItem();
-            }
-        );
-
-        theme.SpacerY(1f);
-        ImGui.Separator();
-        theme.SpacerY(1f);
-
-
 
         DrawTypeCard(ActivityType.Playing, "Activity: Playing", config, ref changed, (avail) =>
         {
@@ -126,11 +88,10 @@ public class DiscordActivityTab : ConfigTabBase
                         {
                             ImGui.TableNextRow();
                             ImGui.TableNextColumn();
-                            // Spanning both columns for the editor
                             ImGui.TableSetColumnIndex(0);
 
                             var gameConf = config.GameConfigs[game];
-                            DrawTypeCardInner(gameConf, $"Settings: {game}", ref changed, showLimits: false);
+                            DrawTypeCardInner(gameConf, $"Settings: {game}", ActivityType.Playing, ref changed, showLimits: false);
                         }
                     }
 
@@ -163,23 +124,99 @@ public class DiscordActivityTab : ConfigTabBase
                 }
             }
         });
-        theme.SpacerY(0.5f);
 
+        if (changed)
+            plugin.Config.Save();
+    }
+
+    private void DrawListeningSubTab()
+    {
+        var config = plugin.Config.ActivityConfig;
+        bool changed = false;
 
         DrawTypeCard(ActivityType.ListeningTo, "Activity: Listening", config, ref changed);
-        theme.SpacerY(0.5f);
 
+        if (changed)
+            plugin.Config.Save();
+    }
+
+    private void DrawWatchingSubTab()
+    {
+        var config = plugin.Config.ActivityConfig;
+        bool changed = false;
 
         DrawTypeCard(ActivityType.Watching, "Activity: Watching", config, ref changed);
-        theme.SpacerY(0.5f);
 
+        if (changed)
+            plugin.Config.Save();
+    }
+
+    private void DrawCustomSubTab()
+    {
+        var config = plugin.Config.ActivityConfig;
+        bool changed = false;
 
         DrawTypeCard(ActivityType.Custom, "Activity: Custom Status", config, ref changed);
 
-        theme.SpacerY(1f);
-        ImGui.Separator();
-        theme.SpacerY(1f);
+        if (changed)
+            plugin.Config.Save();
+    }
 
+    private void DrawGeneralSubTab()
+    {
+        var config = plugin.Config.ActivityConfig;
+        bool changed = false;
+        bool unused = true;
+
+        bool enabled = config.Enabled;
+        theme.DrawPluginCardAuto(
+            id: "act-general-card",
+            enabled: ref unused,
+            showCheckbox: false,
+            title: "General",
+            drawContent: (avail) =>
+            {
+                ImGui.TextColored(theme.MutedText, "Configure the target Discord user and main settings.");
+                theme.SpacerY(0.5f);
+
+                theme.ConfigCheckbox("Enable Discord Activity Integration", ref enabled, () =>
+                {
+                    config.Enabled = enabled;
+                    changed = true;
+                });
+
+                theme.SpacerY(0.5f);
+
+                string userIdStr = config.TargetUserId == 0 ? "" : config.TargetUserId.ToString();
+                ImGui.Text("Target User ID");
+                ImGui.SameLine();
+                ImGui.SetNextItemWidth(200f * ImGuiHelpers.GlobalScale);
+                if (ImGui.InputText("##TargetUserId", ref userIdStr, 20))
+                {
+                    if (ulong.TryParse(userIdStr, out var newId))
+                    {
+                        config.TargetUserId = newId;
+                        changed = true;
+                    }
+                    else if (string.IsNullOrEmpty(userIdStr))
+                    {
+                        config.TargetUserId = 0;
+                        changed = true;
+                    }
+                }
+                if (ImGui.IsItemHovered()) ImGui.SetTooltip("The value from 'Copy User ID' in Discord.");
+
+                ImGui.SameLine();
+                theme.SpacerX();
+                ImGui.SameLine();
+
+                bool prefix = config.PrefixTitle;
+                if (ImGui.Checkbox("Prefix Mode", ref prefix)) { config.PrefixTitle = prefix; changed = true; }
+                theme.HoverHandIfItem();
+            }
+        );
+
+        theme.SpacerY();
 
         theme.DrawPluginCardAuto(
             id: "act-replacements-card",
@@ -196,48 +233,43 @@ public class DiscordActivityTab : ConfigTabBase
                 string? keyToRename = null;
                 string? newKeyVal = null;
 
-                float tableHeight = 150f * ImGuiHelpers.GlobalScale;
-                using (var child = ImRaii.Child("ReplacementsList", new Vector2(0, tableHeight), true))
-                {
-                    if (child)
+                theme.DrawTable(
+                    id: "act-replacements",
+                    collection: keys,
+                    drawRow: (key, i) =>
                     {
-                        using var table = ImRaii.Table("RepTable", 3, ImGuiTableFlags.SizingStretchProp);
-                        if (table)
+                        string k = key;
+                        ImGui.SetNextItemWidth(-1);
+                        if (ImGui.InputText($"##Key_{i}", ref k, 50))
                         {
-                            ImGui.TableSetupColumn("Original Text");
-                            ImGui.TableSetupColumn("Replacement");
-                            ImGui.TableSetupColumn("##Del", ImGuiTableColumnFlags.WidthFixed, 30f);
-
-                            for (int i = 0; i < keys.Count; i++)
-                            {
-                                var key = keys[i];
-                                ImGui.TableNextRow();
-
-                                ImGui.TableNextColumn();
-                                string k = key;
-                                ImGui.SetNextItemWidth(-1);
-                                if (ImGui.InputText($"##Key_{i}", ref k, 50))
-                                {
-                                    keyToRename = key;
-                                    newKeyVal = k;
-                                }
-
-                                ImGui.TableNextColumn();
-                                string val = config.Replacements[key];
-                                ImGui.SetNextItemWidth(-1);
-                                if (ImGui.InputText($"##Val_{i}", ref val, 50))
-                                {
-                                    config.Replacements[key] = val;
-                                    changed = true;
-                                }
-
-                                ImGui.TableNextColumn();
-                                if (ImGui.Button($"X##Del_{i}")) keyToDelete = key;
-                                theme.HoverHandIfItem();
-                            }
+                            keyToRename = key;
+                            newKeyVal = k;
                         }
-                    }
-                }
+
+                        ImGui.TableNextColumn();
+                        string val = config.Replacements[key];
+                        ImGui.SetNextItemWidth(-1);
+                        if (ImGui.InputText($"##Val_{i}", ref val, 50))
+                        {
+                            config.Replacements[key] = val;
+                            changed = true;
+                        }
+
+                        ImGui.TableNextColumn();
+                        if (theme.DangerIconButton($"##Del_{i}", FontAwesomeIcon.Trash, "Remove")) keyToDelete = key;
+                    },
+                    headers: new[] { "Original Text", "Replacement", "##Del" },
+                    setupColumns: () =>
+                    {
+                        float delColW = ImGui.GetFrameHeight() + ImGui.GetStyle().FramePadding.X * 2f;
+                        float remaining = ImGui.GetContentRegionAvail().X - delColW - ImGui.GetStyle().CellPadding.X * 4f;
+                        float colW = remaining * 0.5f;
+                        ImGui.TableSetupColumn("Original Text", ImGuiTableColumnFlags.WidthFixed, colW);
+                        ImGui.TableSetupColumn("Replacement", ImGuiTableColumnFlags.WidthFixed, colW);
+                        ImGui.TableSetupColumn("##Del", ImGuiTableColumnFlags.WidthFixed, delColW);
+                    },
+                    showHeaders: true
+                );
 
                 if (keyToRename != null && newKeyVal != null && keyToRename != newKeyVal)
                 {
@@ -257,7 +289,9 @@ public class DiscordActivityTab : ConfigTabBase
                 }
 
                 theme.SpacerY(0.5f);
-                if (theme.SecondaryButton("+ Add New Replacement"))
+                float repBtnWidth = ImGui.GetContentRegionAvail().X * 0.95f;
+                ImGui.SetCursorPosX(ImGui.GetCursorPosX() + (ImGui.GetContentRegionAvail().X - repBtnWidth) * 0.5f);
+                if (theme.SecondaryButton("+ Add New Replacement", new Vector2(repBtnWidth, 0)))
                 {
                     string newKey = "New";
                     int i = 1;
@@ -269,9 +303,7 @@ public class DiscordActivityTab : ConfigTabBase
         );
 
         if (changed)
-        {
             plugin.Config.Save();
-        }
     }
 
     private void DrawTypeCard(ActivityType type, string label, DiscordActivityConfig config, ref bool changed, Action<float>? extraContent = null)
@@ -294,7 +326,7 @@ public class DiscordActivityTab : ConfigTabBase
             drawContent: (avail) =>
             {
                 if (enabled != conf.Enabled) { conf.Enabled = enabled; cardChanged = true; }
-                DrawTypeCardInner(conf, label, ref cardChanged, showLimits: type == ActivityType.ListeningTo);
+                DrawTypeCardInner(conf, label, type, ref cardChanged, showLimits: type == ActivityType.ListeningTo);
 
                 if (extraContent != null)
                 {
@@ -320,7 +352,7 @@ public class DiscordActivityTab : ConfigTabBase
         if (cardChanged) changed = true;
     }
 
-    private void DrawTypeCardInner(ActivityTypeConfig conf, string label, ref bool changed, bool showLimits)
+    private void DrawTypeCardInner(ActivityTypeConfig conf, string label, ActivityType activityType, ref bool changed, bool showLimits)
     {
         bool localChanged = false;
 
@@ -531,6 +563,79 @@ public class DiscordActivityTab : ConfigTabBase
                 }
                 theme.HoverHandIfItem();
             }
+        }
+
+        theme.SpacerY(0.5f);
+        ImGui.Separator();
+        theme.SpacerY(0.5f);
+
+        string[] placeholders = PlaceholdersByType.TryGetValue(activityType, out var ph) ? ph : DefaultPlaceholders;
+        int? filterRemoveIdx = null;
+
+        ImGui.Text("Blacklist Filters");
+        theme.MutedLabel("Activities matching any filter rule below will be ignored.");
+        theme.SpacerY(0.5f);
+
+        theme.DrawTable(
+            id: $"act-filters-{label.GetHashCode()}",
+            collection: conf.Filters,
+            drawRow: (filter, i) =>
+            {
+                int phIdx = Array.IndexOf(placeholders, filter.TargetPlaceholder);
+                if (phIdx < 0) phIdx = 0;
+                ImGui.SetNextItemWidth(-1);
+                if (ImGui.Combo($"##FiltPh_{label.GetHashCode()}_{i}", ref phIdx, placeholders, placeholders.Length))
+                {
+                    filter.TargetPlaceholder = placeholders[phIdx];
+                    localChanged = true;
+                }
+
+                ImGui.TableNextColumn();
+                int modeIdx = (int)filter.Mode;
+                ImGui.SetNextItemWidth(-1);
+                if (ImGui.Combo($"##FiltMode_{label.GetHashCode()}_{i}", ref modeIdx, FilterModeLabels, FilterModeLabels.Length))
+                {
+                    filter.Mode = (FilterMode)modeIdx;
+                    localChanged = true;
+                }
+
+                ImGui.TableNextColumn();
+                string val = filter.Value;
+                ImGui.SetNextItemWidth(-1);
+                if (ImGui.InputText($"##FiltVal_{label.GetHashCode()}_{i}", ref val, 128))
+                {
+                    filter.Value = val;
+                    localChanged = true;
+                }
+
+                ImGui.TableNextColumn();
+                if (theme.DangerIconButton($"##FiltDel_{label.GetHashCode()}_{i}", FontAwesomeIcon.Trash, "Remove")) filterRemoveIdx = i;
+            },
+            headers: new[] { "Field", "Mode", "Value", "##Del" },
+            setupColumns: () =>
+            {
+                float filtDelW = ImGui.GetFrameHeight() + ImGui.GetStyle().FramePadding.X * 2f;
+                ImGui.TableSetupColumn("Field", ImGuiTableColumnFlags.WidthFixed, 120f * ImGuiHelpers.GlobalScale);
+                ImGui.TableSetupColumn("Mode", ImGuiTableColumnFlags.WidthFixed, 100f * ImGuiHelpers.GlobalScale);
+                ImGui.TableSetupColumn("Value", ImGuiTableColumnFlags.WidthStretch);
+                ImGui.TableSetupColumn("##Del", ImGuiTableColumnFlags.WidthFixed, filtDelW);
+            },
+            showHeaders: true
+        );
+
+        if (filterRemoveIdx.HasValue)
+        {
+            conf.Filters.RemoveAt(filterRemoveIdx.Value);
+            localChanged = true;
+        }
+
+        theme.SpacerY(0.5f);
+        float filterBtnWidth = ImGui.GetContentRegionAvail().X * 0.95f;
+        ImGui.SetCursorPosX(ImGui.GetCursorPosX() + (ImGui.GetContentRegionAvail().X - filterBtnWidth) * 0.5f);
+        if (theme.SecondaryButton($"+ Add Filter##{label.GetHashCode()}", new Vector2(filterBtnWidth, 0)))
+        {
+            conf.Filters.Add(new FilterRule { TargetPlaceholder = placeholders[0] });
+            localChanged = true;
         }
 
         if (localChanged) changed = true;

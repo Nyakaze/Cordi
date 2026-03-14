@@ -148,6 +148,11 @@ namespace Cordi.Services
 
                     if (conf != null && conf.Enabled)
                     {
+                        if (IsFilteredOut(a, conf, isUpdateLoop))
+                        {
+                            if (!isUpdateLoop) Service.Log.Debug($"[ActivityManager] Activity '{a.Name}' ({a.ActivityType}) matched a blacklist filter — skipped.");
+                            continue;
+                        }
                         if (!isUpdateLoop) Service.Log.Debug($"[ActivityManager] Activity '{a.Name}' ({a.ActivityType}) added as candidate (Priority={conf.Priority}).");
                         candidates.Add((a, conf));
                     }
@@ -375,6 +380,76 @@ namespace Cordi.Services
                 input = input.Replace(kvp.Key, kvp.Value);
             }
             return input;
+        }
+
+        private bool IsFilteredOut(DiscordActivity act, ActivityTypeConfig conf, bool silent)
+        {
+            if (conf.Filters == null || conf.Filters.Count == 0 || act == null)
+                return false;
+
+            var values = ExtractPlaceholderValues(act);
+
+            foreach (var filter in conf.Filters)
+            {
+                if (string.IsNullOrEmpty(filter.Value))
+                    continue;
+
+                string key = filter.TargetPlaceholder;
+                // Support {track} -> {details}, {artist} -> {state} aliases
+                if (key == "{track}") key = "{details}";
+                if (key == "{artist}") key = "{state}";
+
+                if (!values.TryGetValue(key, out var fieldValue))
+                    fieldValue = "";
+
+                bool matched = filter.Mode switch
+                {
+                    FilterMode.Contains => fieldValue.Contains(filter.Value, StringComparison.OrdinalIgnoreCase),
+                    FilterMode.Equals => fieldValue.Equals(filter.Value, StringComparison.OrdinalIgnoreCase),
+                    FilterMode.StartsWith => fieldValue.StartsWith(filter.Value, StringComparison.OrdinalIgnoreCase),
+                    FilterMode.EndsWith => fieldValue.EndsWith(filter.Value, StringComparison.OrdinalIgnoreCase),
+                    FilterMode.Regex => Regex.IsMatch(fieldValue, filter.Value, RegexOptions.IgnoreCase),
+                    _ => false,
+                };
+
+                if (matched)
+                {
+                    if (!silent) Service.Log.Debug($"[ActivityManager] Filter matched: {filter.TargetPlaceholder} {filter.Mode} '{filter.Value}' against '{fieldValue}'");
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private Dictionary<string, string> ExtractPlaceholderValues(DiscordActivity act)
+        {
+            var values = new Dictionary<string, string>
+            {
+                { "{name}", act.Name ?? "" },
+                { "{details}", "" },
+                { "{state}", "" },
+                { "{album}", "" },
+            };
+
+            try
+            {
+                dynamic dAct = act;
+                try { values["{details}"] = dAct.Details ?? ""; } catch { }
+                try { values["{state}"] = dAct.State ?? ""; } catch { }
+
+                dynamic rp = null;
+                try { rp = dAct.RichPresence; } catch { }
+                if (rp != null)
+                {
+                    try { if (string.IsNullOrEmpty(values["{details}"])) values["{details}"] = rp.Details ?? ""; } catch { }
+                    try { if (string.IsNullOrEmpty(values["{state}"])) values["{state}"] = rp.State ?? ""; } catch { }
+                    try { values["{album}"] = rp.LargeImageText ?? ""; } catch { }
+                }
+            }
+            catch { }
+
+            return values;
         }
 
         private void ClearTitle()

@@ -34,23 +34,17 @@ public class RememberMeTab : ConfigTabBase
 
         DrawGeneralCard(ref enabled);
 
-        theme.SpacerY(1f);
-        ImGui.Separator();
-        theme.SpacerY(1f);
+        theme.SpacerY();
 
         DrawCurrentPartyCard(ref enabled);
 
-        theme.SpacerY(1f);
-        ImGui.Separator();
-        theme.SpacerY(1f);
+        theme.SpacerY();
 
         DrawPlayersCard();
     }
 
     private void DrawGeneralCard(ref bool cardEnabled)
     {
-        theme.SpacerY(2f);
-
         theme.DrawPluginCardAuto(
             id: "rememberme-general",
             title: "General",
@@ -138,8 +132,6 @@ public class RememberMeTab : ConfigTabBase
 
     private void DrawPlayersCard()
     {
-
-
         if (showAddNew)
         {
             theme.SpacerY(0.5f);
@@ -152,8 +144,6 @@ public class RememberMeTab : ConfigTabBase
             ImGui.Separator();
             theme.SpacerY(0.5f);
         }
-
-        theme.SpacerY(0.5f);
 
         var players = string.IsNullOrWhiteSpace(searchText)
             ? plugin.RememberMe.GetAllPlayers()
