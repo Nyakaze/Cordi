@@ -167,8 +167,6 @@ public class CordiPlugin : IDalamudPlugin
 
 
         UpdateCommandVisibility();
-        
-        configWindow.IsOpen = true;
     }
 
     private void InitializeConfig()
