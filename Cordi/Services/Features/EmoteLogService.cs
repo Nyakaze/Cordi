@@ -67,6 +67,9 @@ public class EmoteLogService : IDisposable
     public ConcurrentDictionary<string, DiscordEmoteState> ActiveDiscordEmotes => _activeDiscordEmotes;
     private readonly TimeSpan _spamThreshold = TimeSpan.FromSeconds(60);
 
+    private CordiLogService Log => _plugin.LogService;
+    private const string LogSource = "EmoteLog";
+
     public EmoteLogService(CordiPlugin plugin)
     {
         _plugin = plugin;
@@ -123,6 +126,7 @@ public class EmoteLogService : IDisposable
         catch (Exception ex)
         {
             _logger.Error(ex, "Error in Emote Detour");
+            Log.Error(LogSource, $"Hook error: {ex.Message}");
         }
 
         _hookEmote.Original(unk, instigatorAddr, emoteId, targetId, unk2);
@@ -184,6 +188,7 @@ public class EmoteLogService : IDisposable
                     _logs.Add(existing);
 
                     _logger.Info($"[EmoteLog] Collapsed: {existing.User} used {existing.Emote} [{existing.Count}]");
+                    Log.Debug(LogSource, $"Collapsed: {existing.User} used {existing.Emote} x{existing.Count}");
 
                     _ = ProcessDiscordEmote(existing.User, existing.World, existing.GameObjectId, emoteName, emoteCommand, existing.Count);
                     return;
@@ -206,6 +211,7 @@ public class EmoteLogService : IDisposable
             if (_logs.Count > 200) _logs.RemoveAt(0);
 
             _logger.Info($"[EmoteLog] Logged: {entry.User} used {entry.Emote} (Cmd: {entry.Command})");
+            Log.Info(LogSource, $"{entry.User}@{entry.World} used {entry.Emote} ({entry.Command})");
             _plugin.Config.Stats.IncrementEmotesTracked();
             _plugin.Config.Stats.RecordEmote(playerName, playerWorld);
 

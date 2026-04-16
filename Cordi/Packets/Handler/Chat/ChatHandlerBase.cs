@@ -1,6 +1,7 @@
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Cordi.Services;
 using Cordi.Services.Discord;
 using Cordi.Core;
 using Dalamud.Game.Text;
@@ -13,6 +14,7 @@ namespace Cordi.Packets.Handler.Chat;
 public abstract class ChatHandlerBase : IChatHandler
 {
     protected static readonly IPluginLog Logger = Service.Log;
+    private static CordiLogService Log => CordiPlugin.Plugin.LogService;
 
     public abstract XivChatType ChatType { get; }
 
@@ -22,6 +24,7 @@ public abstract class ChatHandlerBase : IChatHandler
         {
             if (msg.Sender.TextValue.EndsWith(CordiPlugin.Plugin.cachedLocalPlayer.Name.TextValue))
             {
+                Log.Debug("ChatHandler", $"Routing [{ChatType}] from self to Discord");
                 await discord.SendMessage(
                     null,
                     msg.Message,
@@ -32,10 +35,12 @@ public abstract class ChatHandlerBase : IChatHandler
                 return Task.CompletedTask;
             }
 
+            Log.Warning("ChatHandler", $"No player payload for [{ChatType}] sender: {msg.Sender.TextValue}");
             return Task.CompletedTask;
         }
         else
         {
+            Log.Debug("ChatHandler", $"Routing [{ChatType}] from {playerLink.PlayerName} to Discord");
             await discord.SendMessage(
                 null,
                 msg.Message,

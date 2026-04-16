@@ -34,6 +34,9 @@ public class PartyService : IDisposable
     private List<PartyMemberInfo> _partyMembers = new();
     public IReadOnlyList<PartyMemberInfo> PartyMembers => _partyMembers;
 
+    private CordiLogService Log => plugin.LogService;
+    private const string LogSource = "Party";
+
     public PartyService(CordiPlugin plugin, NotificationManager notificationService)
     {
         this.plugin = plugin;
@@ -199,6 +202,7 @@ public class PartyService : IDisposable
 
         if (currentPartyMembers.Count < 8 && newMembers.Count == 8)
         {
+            Log.Info(LogSource, "Party is full (8/8)");
             if (plugin.Config.Party.NotifyFull)
             {
                 _ = SendDiscordNotificationAsync("Party Full", "The party is now full (8/8)!", DiscordColor.Blurple);
@@ -250,6 +254,7 @@ public class PartyService : IDisposable
             var classJobAbbr = classJob?.Abbreviation.ToString() ?? string.Empty;
 
             Service.Log.Info($"[PartyService] NotifyJoin: {name}@{world} (Job: {classJobAbbr}).");
+            Log.Info(LogSource, $"Member joined: {name}@{world} [{classJobAbbr}] ({count}/8)");
 
             var message = $"**{name}@{world}** has joined the party. ({count}/8)";
             var msgId = await SendDiscordNotificationAsync("Party Join", message, DiscordColor.Green, name, world);
@@ -379,6 +384,7 @@ public class PartyService : IDisposable
         catch (Exception ex)
         {
             Service.Log.Error(ex, $"Error fetching data for {member.Name}@{member.World}");
+            Log.Error(LogSource, $"Data fetch failed for {member.Name}@{member.World}: {ex.Message}");
             // Ensure properties are set to stop any wait loops
             member.ItemLevel ??= 0;
             member.RaidActivity ??= new RaidActivity(Array.Empty<RaidEncounter>());
@@ -418,11 +424,13 @@ public class PartyService : IDisposable
             }
 
             var message = $"**{name}@{world}** has left the party. ({count}/8)";
+            Log.Info(LogSource, $"Member left: {name}@{world} ({count}/8)");
             await SendDiscordNotificationAsync("Party Leave", message, DiscordColor.Orange, name, world);
         }
         catch (Exception ex)
         {
             Service.Log.Error(ex, "Error in NotifyLeave");
+            Log.Error(LogSource, $"Error in NotifyLeave: {ex.Message}");
         }
     }
 

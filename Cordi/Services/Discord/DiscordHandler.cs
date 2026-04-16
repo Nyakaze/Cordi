@@ -41,6 +41,9 @@ public class DiscordHandler : IDisposable
     private readonly DiscordMessageRouter _messageRouter;
     private readonly DiscordCommandHandler _commandHandler;
 
+    private CordiLogService Log => _plugin.LogService;
+    private const string LogSource = "Discord";
+
     public DiscordHandler(CordiPlugin plugin, DiscordWebhookService webhooks, AdvertisementFilterService adFilter)
     {
         _plugin = plugin;
@@ -96,11 +99,13 @@ public class DiscordHandler : IDisposable
             await _client.ConnectAsync();
             await Task.Yield();
             Logger.Info($"Discord handler started");
+            Log.Info(LogSource, "Bot connected successfully");
             _plugin.Config.Discord.BotStarted = true;
         }
         catch (Exception e)
         {
             Logger.Error($"Failed to connect to the bot. {e.StackTrace}");
+            Log.Error(LogSource, $"Bot connection failed: {e.Message}");
             _plugin.Config.Discord.BotStarted = false;
         }
         finally
@@ -146,6 +151,7 @@ public class DiscordHandler : IDisposable
         }
 
         Logger.Info($"[DiscordHandler {_instanceId}] Processing message {message.Message.Id} from {message.Author.Username} in {message.Channel.Name} ({message.Channel.Id})");
+        Log.Debug(LogSource, $"Received from {message.Author.Username} in #{message.Channel.Name}: {message.Message.Content}");
 
         // Simple periodic cleanup of deduplication cache
         if (_processedMessages.Count > 1000)
@@ -323,6 +329,7 @@ public class DiscordHandler : IDisposable
 
                 ulong sentMessageId = await _webhooks.ExecuteWebhookAsync(channel, hookMessage);
                 Logger.Info($"{chatType} | Sent via webhook: {sanitizedContent} (ID: {sentMessageId})");
+                Log.Debug(LogSource, $"Sent [{chatType}] {senderName}@{senderWorld}: {sanitizedContent}");
 
                 // Add to buffer with message ID
                 _adFilter.AddMessageToBuffer(senderName, senderWorld, sanitizedContent, sentMessageId, channelFilterEnabled);
@@ -334,6 +341,7 @@ public class DiscordHandler : IDisposable
             catch (Exception ex)
             {
                 Logger.Error(ex, "Failed to send discord message");
+                Log.Error(LogSource, $"Failed to send message: {ex.Message}");
             }
         }
         if (channel == null)
@@ -494,6 +502,7 @@ public class DiscordHandler : IDisposable
     private async Task StopInternal()
     {
         if (_client == null) return;
+        Log.Info(LogSource, "Bot disconnecting...");
         Logger.Info($"[{_instanceId}] Disconnecting Discord client...");
 
         _plugin.ChannelCache.Unbind();

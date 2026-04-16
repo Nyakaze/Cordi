@@ -12,6 +12,8 @@ namespace Cordi.Services.Discord;
 public class AdvertisementFilterService
 {
     private static readonly IPluginLog Logger = Service.Log;
+    private CordiLogService Log => _plugin.LogService;
+    private const string LogSource = "AdFilter";
     private readonly CordiPlugin _plugin;
     private readonly DiscordWebhookService _webhooks;
 
@@ -36,6 +38,7 @@ public class AdvertisementFilterService
             if (DateTime.UtcNow < releaseTime)
             {
                 Logger.Info($"[AdvertisementFilter] Blocked message from penalized user {senderKey} until {releaseTime}");
+                Log.Warning(LogSource, $"Blocked penalized user {senderKey} (until {releaseTime:HH:mm:ss})");
                 return true;
             }
             else
@@ -83,6 +86,7 @@ public class AdvertisementFilterService
         if (isAd)
         {
             Logger.Info($"[AdvertisementFilter] Blocked advertisement: {sanitizedContent.Substring(0, Math.Min(100, sanitizedContent.Length))}...");
+            Log.Warning(LogSource, $"Blocked ad from {senderKey}: {sanitizedContent.Substring(0, Math.Min(80, sanitizedContent.Length))}");
 
             // Add to Penalty Box (10 seconds)
             _penaltyBox.AddOrUpdate(senderKey, DateTime.UtcNow.AddSeconds(10), (_, _) => DateTime.UtcNow.AddSeconds(10));
@@ -96,6 +100,7 @@ public class AdvertisementFilterService
                     {
                         Task.Run(() => _webhooks.DeleteWebhookMessageAsync(channel, msgId));
                         Logger.Info($"[AdvertisementFilter] Retroactively deleted message ID: {msgId}");
+                        Log.Info(LogSource, $"Retroactively deleted message {msgId} from {senderKey}");
                     }
                 }
                 userMessages.Clear();

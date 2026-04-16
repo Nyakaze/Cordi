@@ -62,7 +62,20 @@ public class CordiPlugin : IDalamudPlugin
 
     private readonly ChatRouter _router;
     public NotificationManager NotificationManager { get; private set; }
-
+    public CordiLogService LogService { get; private set; }
+    public bool IsLogsTabVisible
+    {
+        get => Config?.LogsTabVisible ?? false;
+        set
+        {
+            if (Config != null)
+            {
+                Config.LogsTabVisible = value;
+                Config.Save();
+            }
+        }
+    }
+    private bool _prevComboPressed;
 
     public IPlayerCharacter cachedLocalPlayer;
 
@@ -93,6 +106,8 @@ public class CordiPlugin : IDalamudPlugin
         ECommonsMain.Init(PluginInterface, this);
         PluginInterface.Create<Service>();
         InitializeConfig();
+
+        LogService = new CordiLogService();
 
         PluginInterface.UiBuilder.OpenConfigUi += ToggleConfigUI;
         PluginInterface.UiBuilder.OpenMainUi += ToggleConfigUI;
@@ -138,12 +153,18 @@ public class CordiPlugin : IDalamudPlugin
 
         this.commandManager = new CordiCommandManager<CordiPlugin>(this, CommandManager);
 
+        LogService.Info("Plugin", "Cordi plugin loading");
         Task.Run(async () =>
         {
+            LogService.Info("Plugin", "Initializing services...");
             await Lodestone.InitializeAsync();
+            LogService.Debug("Lodestone", "Initialized");
             await Tomestone.InitializeAsync();
+            LogService.Debug("Tomestone", "Initialized");
             await this.Discord.Start();
+            LogService.Info("Discord", "Bot started");
             this.EmoteLog.Initialize();
+            LogService.Debug("EmoteLog", "Initialized");
 
 
             await Task.Delay(1000);
@@ -292,12 +313,25 @@ public class CordiPlugin : IDalamudPlugin
 
     private void OnFrameworkUpdate(IFramework framework)
     {
-
         cachedLocalPlayer = Service.ClientState.LocalPlayer;
+
+        // Ctrl+Shift+L toggles hidden Logs tab (edge-triggered, only when config window is open)
+        bool ctrl = Service.KeyState[0x11];   // VK_CONTROL
+        bool shift = Service.KeyState[0x10];  // VK_SHIFT
+        bool l = Service.KeyState[0x4C];      // VK_L
+        bool comboPressed = ctrl && shift && l && configWindow.IsOpen;
+
+        if (comboPressed && !_prevComboPressed)
+        {
+            IsLogsTabVisible = !IsLogsTabVisible;
+            LogService.Info("Plugin", IsLogsTabVisible ? "Logs tab revealed" : "Logs tab hidden");
+        }
+        _prevComboPressed = comboPressed;
     }
 
     private async void OnLoginEvent()
     {
+        LogService.Info("Plugin", "Player logged in");
         cachedLocalPlayer = await Service.Framework.RunOnFrameworkThread(() => Service.ClientState.LocalPlayer);
         if (Config.CordiPeep.OpenOnLogin)
         {
@@ -314,6 +348,7 @@ public class CordiPlugin : IDalamudPlugin
     }
     private async void OnLogoutEvent(int type, int code)
     {
+        LogService.Info("Plugin", "Player logged out");
         cachedLocalPlayer = null;
     }
 
@@ -331,6 +366,10 @@ public class CordiPlugin : IDalamudPlugin
             SenderName = sender.TextValue,
             SenderWorld = ""
         };
+        if (Config.MappingCache.ContainsKey(type))
+        {
+            LogService.Debug("ChatRouter", $"[{type}] {msg.SenderName}: {msg.Message.TextValue}");
+        }
         _router.RouteAsync(msg, Discord);
 
     }

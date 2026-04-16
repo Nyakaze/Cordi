@@ -30,6 +30,10 @@ namespace Cordi.Services
 
         private DiscordPresence _cachedPresence;
         private bool _hasLoggedPresenceReceived = false;
+        private string _lastLoggedTitle = string.Empty;
+
+        private CordiLogService Log => _plugin.LogService;
+        private const string LogSource = "Activity";
 
         public ActivityManager(CordiPlugin plugin, DiscordHandler discord, HonorificBridge honorific)
         {
@@ -68,6 +72,7 @@ namespace Cordi.Services
             if (!_hasLoggedPresenceReceived)
             {
                 Service.Log.Info($"[ActivityManager] First presence update received for target user {e.User.Id} ('{e.User.Username}').");
+                Log.Info(LogSource, $"First presence update from {e.User.Username}");
                 _hasLoggedPresenceReceived = true;
             }
 
@@ -231,7 +236,16 @@ namespace Cordi.Services
                 return;
             }
 
-            if (!isUpdateLoop) Service.Log.Info($"[ActivityManager] Setting title: \"{title}\" (Prefix={config.PrefixTitle})");
+            if (!isUpdateLoop)
+            {
+                Service.Log.Info($"[ActivityManager] Setting title: \"{title}\" (Prefix={config.PrefixTitle})");
+            }
+
+            if (title != _lastLoggedTitle)
+            {
+                Log.Info(LogSource, $"Setting title: \"{title}\"");
+                _lastLoggedTitle = title;
+            }
 
             try
             {
@@ -241,6 +255,7 @@ namespace Cordi.Services
             catch (Exception ex)
             {
                 Service.Log.Error($"[ActivityManager] Failed to set title via HonorificBridge: {ex.Message}\n{ex.StackTrace}");
+                Log.Error(LogSource, $"Failed to set title: {ex.Message}");
             }
         }
 

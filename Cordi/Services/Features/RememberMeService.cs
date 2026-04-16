@@ -10,6 +10,9 @@ public class RememberMeService : IDisposable
 {
     private readonly CordiPlugin plugin;
 
+    private CordiLogService Log => plugin.LogService;
+    private const string LogSource = "RememberMe";
+
     public RememberMeService(CordiPlugin plugin)
     {
         this.plugin = plugin;
@@ -70,6 +73,7 @@ public class RememberMeService : IDisposable
                 Glamour = glamour
             };
             plugin.Config.RememberMe.RememberedPlayers.Add(newEntry);
+            Log.Info(LogSource, $"Remembered new player: {name}@{world}");
         }
 
         plugin.Config.Save();
@@ -106,6 +110,7 @@ public class RememberMeService : IDisposable
         if (player != null)
         {
             plugin.Config.RememberMe.RememberedPlayers.Remove(player);
+            Log.Info(LogSource, $"Removed player: {name}@{world}");
             plugin.Config.Save();
         }
     }

@@ -76,6 +76,9 @@ public class CordiPeepService : IDisposable
         public bool IsPresent;
     }
 
+    private CordiLogService Log => plugin.LogService;
+    private const string LogSource = "Peeper";
+
     public CordiPeepService(CordiPlugin plugin)
     {
         this.plugin = plugin;
@@ -266,6 +269,7 @@ public class CordiPeepService : IDisposable
                 IsLooking = true
             };
             ActivePeepers[id] = newState;
+            Log.Info(LogSource, $"Peeper detected: {name}@{world}");
             _ = SendAlert(newState, GetLocalPlayerTargetName());
 
             plugin.Config.Stats.IncrementPeepsTracked();
@@ -276,6 +280,8 @@ public class CordiPeepService : IDisposable
 
     private void UpdatePeeperStateLoss(PeeperState state)
     {
+        var duration = (DateTime.Now - state.StartTime).TotalSeconds;
+        Log.Info(LogSource, $"Peeper left: {state.Name}@{state.World} (duration: {duration:F1}s)");
         state.IsLooking = false;
         state.EndTime = DateTime.Now;
 
@@ -435,6 +441,7 @@ public class CordiPeepService : IDisposable
                 catch (Exception ex)
                 {
                     Service.Log.Error(ex, "Error playing sound via NAudio");
+                    Log.Error(LogSource, $"Sound playback error: {ex.Message}");
                 }
             });
             _lastSoundPlayTime = DateTime.Now;
@@ -491,10 +498,12 @@ public class CordiPeepService : IDisposable
                 {
                     Service.TargetManager.Target = target;
                     Service.Log.Info($"[CordiPeep] \u2705 TARGETED: {target.Name} (ID: {target.GameObjectId:X})");
+                    Log.Info(LogSource, $"Targeted via reaction: {target.Name}");
                 }
                 else
                 {
                     Service.Log.Warning($"[CordiPeep] \u26a0\ufe0f Could not find entity {peeper.Name}@{peeper.World} in object table.");
+                    Log.Warning(LogSource, $"Target not found: {peeper.Name}@{peeper.World}");
                 }
             }
             catch (Exception ex)

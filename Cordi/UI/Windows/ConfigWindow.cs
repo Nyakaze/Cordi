@@ -44,6 +44,8 @@ public sealed class ConfigWindow : Window, IDisposable
     private TrackerTab trackerTab;
 
 
+    private LogsTab logsTab;
+
     private int selectedTab = 1;
 
     public ConfigWindow(CordiPlugin plugin)
@@ -64,6 +66,7 @@ public sealed class ConfigWindow : Window, IDisposable
         this.combinedWindowTab = new CombinedWindowTab(plugin, theme);
         this.settingsTab = new SettingsTab(plugin, theme);
         this.trackerTab = new TrackerTab(plugin, theme);
+        this.logsTab = new LogsTab(plugin, theme);
 
         // Apply saved font settings
         UiTheme.GlobalFontScale = plugin.Config.Font.GlobalScale;
@@ -154,6 +157,9 @@ public sealed class ConfigWindow : Window, IDisposable
 #if DEBUG
                 DrawSidebarButton("Debug", 3);
 #endif
+
+                if (plugin.IsLogsTabVisible)
+                    DrawSidebarButton("Logs", 99);
             }
             theme.ApplyFontScale();
         }
@@ -203,6 +209,10 @@ public sealed class ConfigWindow : Window, IDisposable
 
                 case 12:
                     settingsTab.Draw();
+                    break;
+
+                case 99:
+                    logsTab.Draw();
                     break;
             }
         }

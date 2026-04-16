@@ -27,6 +27,7 @@ public class Configuration : IPluginConfiguration
     public CombinedWindowConfig CombinedWindow { get; set; } = new();
     public FontConfig Font { get; set; } = new();
     public ThroughputStats Stats { get; set; } = new();
+    public bool LogsTabVisible { get; set; }
 
 
     [JsonIgnore] private IDalamudPluginInterface pluginInterface;
