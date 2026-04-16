@@ -1,3 +1,12 @@
+## [2.0.4](https://github.com/Nyakaze/Cordi/compare/2.0.2...2.0.4) (16-04-2026)
+
+### Activitys
+ - **Updated:** Time related placeholders now update title correctly
+ - **Changed:** Recognition of Activitys to be more accurate.
+
+### Log Tab
+ - **Added:** Log Tab to see Plugin Logs. Visible when pressed Ctrl + Shift + L while Cordi window is selected.
+
 ## [2.0.2](https://github.com/Nyakaze/Cordi/compare/2.0.1...2.0.2) (14-03-2026)
 
 ### General
