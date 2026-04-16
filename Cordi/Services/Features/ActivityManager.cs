@@ -32,6 +32,31 @@ namespace Cordi.Services
         private bool _hasLoggedPresenceReceived = false;
         private string _lastLoggedTitle = string.Empty;
 
+        // Periodic re-sync state. All ProcessPresence execution is marshalled onto the
+        // Dalamud framework thread to keep HonorificBridge + cachedLocalPlayer +
+        // _lastBroadcastTitle single-threaded. OnPresenceUpdated fires on a DSharpPlus
+        // pool thread; instead of invoking ProcessPresence directly it writes
+        // _cachedPresence and flips the volatile flags below. OnFrameworkUpdate then has
+        // three branches:
+        //   (1) reactive drain — Discord-originated field/state changes (song skip, pause,
+        //       resume, metadata edits) picked up on the next frame (~16 ms at 60 fps),
+        //       distinct from and much faster than the placeholder refresh cadence;
+        //   (2) idle short-circuit — no active broadcast → loop halts entirely and waits
+        //       to be re-armed by the next presence update (req 3);
+        //   (3) time-placeholder refresh — 1 Hz tick so {elapsed}/{duration} advance and
+        //       cycling formats rotate; dedup in the SetTitle path keeps static titles
+        //       silent.
+        // Writing _cachedPresence before the volatile _hasPendingPresenceUpdate
+        // establishes a release barrier so the framework thread sees the new reference
+        // whenever it observes the flag.
+        private DateTime _lastRefreshTick = DateTime.MinValue;
+        private string _lastBroadcastTitle = string.Empty;
+        private volatile bool _hasPendingPresenceUpdate = false;
+        private volatile bool _isIdle = true;
+        private volatile bool _disposed = false;
+
+        private const double RefreshIntervalSeconds = 1.0;
+
         private CordiLogService Log => _plugin.LogService;
         private const string LogSource = "Activity";
 
@@ -49,8 +74,31 @@ namespace Cordi.Services
 
         private void OnFrameworkUpdate(IFramework framework)
         {
-            if ((DateTime.Now - _lastCycleSwap).TotalSeconds < 1) return;
+            if (_disposed) return;
 
+            // (1) Reactive fast path — drain any Discord-originated presence update. This
+            // covers song skip / pause / resume / field edits with ~1 frame of latency
+            // (≈16 ms at 60 fps) instead of waiting up to a full second for the refresh
+            // tick. Reading _hasPendingPresenceUpdate (volatile) also establishes an
+            // acquire barrier so _cachedPresence is guaranteed visible.
+            if (_hasPendingPresenceUpdate)
+            {
+                _hasPendingPresenceUpdate = false;
+                _lastRefreshTick = DateTime.Now;
+                ProcessPresence(_cachedPresence, isUpdateLoop: false);
+                return;
+            }
+
+            // (2) Idle short-circuit (req 3) — nothing is being broadcast, so there is no
+            // time placeholder to advance and no cycling to rotate. ClearTitle sets this
+            // flag; OnPresenceUpdated clears it when a new presence arrives.
+            if (_isIdle) return;
+
+            // (3) Time-placeholder refresh — slow 1 Hz tick. Static titles cost one
+            // RenderTitle pass per second but no IPC, because SetTitle dedupes on the
+            // rendered string.
+            if ((DateTime.Now - _lastRefreshTick).TotalSeconds < RefreshIntervalSeconds) return;
+            _lastRefreshTick = DateTime.Now;
             ProcessPresence(_cachedPresence, isUpdateLoop: true);
         }
 
@@ -60,7 +108,6 @@ namespace Cordi.Services
 
             if (e.User.Id != targetId)
             {
-                // Log mismatched presence updates periodically to avoid spam
                 if ((DateTime.Now - _lastDebugLog).TotalSeconds >= 30)
                 {
                     Service.Log.Debug($"[ActivityManager] Presence update from user {e.User.Id} ('{e.User.Username}') ignored — does not match TargetUserId {targetId}.");
@@ -87,9 +134,13 @@ namespace Cordi.Services
                 }
             }
 
+            // Hand off to the framework-thread tick. ORDER MATTERS: _cachedPresence must
+            // be written before the volatile _hasPendingPresenceUpdate flag — the latter
+            // acts as a release barrier, so any framework-thread reader that sees the
+            // flag is guaranteed to see the matching presence reference.
             _cachedPresence = e.PresenceAfter;
-
-            ProcessPresence(e.PresenceAfter, isUpdateLoop: false);
+            _isIdle = false;
+            _hasPendingPresenceUpdate = true;
             return Task.CompletedTask;
         }
 
@@ -246,11 +297,17 @@ namespace Cordi.Services
                 Log.Info(LogSource, $"Setting title: \"{title}\"");
                 _lastLoggedTitle = title;
             }
-
             try
             {
                 var typeConf = best.Config;
-                _honorific.SetTitle(player, title, config.PrefixTitle, typeConf.Color, typeConf.Glow, typeConf.GradientColourSet, typeConf.GradientAnimationStyle);
+                // Only push when the rendered title actually changed — this is what keeps
+                // static titles from re-broadcasting every second while still allowing
+                // time-placeholder titles to tick.
+                if (title != _lastBroadcastTitle)
+                {
+                    _honorific.SetTitle(player, title, config.PrefixTitle, typeConf.Color, typeConf.Glow, typeConf.GradientColourSet, typeConf.GradientAnimationStyle);
+                    _lastBroadcastTitle = title;
+                }
             }
             catch (Exception ex)
             {
@@ -469,16 +526,28 @@ namespace Cordi.Services
 
         private void ClearTitle()
         {
+            // Mark idle so the 1 Hz refresh loop halts until OnPresenceUpdated arms it
+            // again (req 3). Always forward the clear to Honorific — do NOT dedup on
+            // _lastBroadcastTitle here, so a transition from an active title (Spotify
+            // paused, activity removed, config disabled) always propagates to peers via
+            // Lightless Sync.
+            _isIdle = true;
             var local = _plugin.cachedLocalPlayer;
             if (local != null)
             {
                 _honorific.ClearTitle(local);
             }
+            _lastBroadcastTitle = string.Empty;
         }
 
         public void Dispose()
         {
             Service.Log.Info("[ActivityManager] Disposing — unsubscribing from events.");
+            // Set _disposed before unsubscribing: OnFrameworkUpdate's first check is the
+            // _disposed flag, so any in-flight tick exits without touching state.
+            _disposed = true;
+            _hasPendingPresenceUpdate = false;
+            _isIdle = true;
             _discord.OnPresenceUpdated -= OnPresenceUpdated;
             Service.Framework.Update -= OnFrameworkUpdate;
         }
