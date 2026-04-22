@@ -116,8 +116,6 @@ public class CordiPeepPanel
         bool showTarget = config.ShowCurrentTarget && !string.IsNullOrEmpty(peeper.CurrentTargetName) && !isTargetLocalPlayer;
         float rowHeight = ImGui.GetTextLineHeight() + style.FramePadding.Y * 2;
 
-        using var textColorRaii = ImRaii.PushColor(ImGuiCol.Text, isActive ? _plugin.Config.CordiPeep.TargetingHighlightColor : ImGui.GetStyle().Colors[(int)ImGuiCol.TextDisabled]);
-
         using var headerHoveredRaii = ImRaii.PushColor(ImGuiCol.HeaderHovered, new Vector4(0f, 0f, 0f, 0f));
         using var headerActiveRaii = ImRaii.PushColor(ImGuiCol.HeaderActive, new Vector4(0f, 0f, 0f, 0f));
 
@@ -251,7 +249,7 @@ public class CordiPeepPanel
         uint textColor;
         if (isActive)
         {
-            textColor = ImGui.GetColorU32(ImGuiCol.Text);
+            textColor = ImGui.GetColorU32(_plugin.Config.CordiPeep.TargetingHighlightColor);
         }
         else
         {
