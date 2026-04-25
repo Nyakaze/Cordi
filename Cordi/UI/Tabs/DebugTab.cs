@@ -36,6 +36,12 @@ public class DebugTab : ConfigTabBase
     private DateTime _lastGuildFetch = DateTime.MinValue;
     private readonly TimeSpan _cacheInterval = TimeSpan.FromSeconds(5);
 
+    private string _slashCmdDebugFilter = string.Empty;
+    private bool _slashCmdShowEnabled = true;
+    private bool _slashCmdShowDisabled = true;
+    private bool _slashCmdShowEmotes = false;
+    private bool _slashCmdShowUser = true;
+
     public override string Label => "Debug";
 
     public DebugTab(CordiPlugin plugin, UiTheme theme) : base(plugin, theme)
@@ -88,6 +94,12 @@ public class DebugTab : ConfigTabBase
         theme.SpacerY(2f);
 
         DrawStateInspector();
+
+        theme.SpacerY(2f);
+        ImGui.Separator();
+        theme.SpacerY(2f);
+
+        DrawSlashCommandsDebug();
 
     }
 
@@ -1069,6 +1081,210 @@ public class DebugTab : ConfigTabBase
                                 ImGui.Text(kvp.Value.EmotedBack ? "YES" : "NO");
                                 if (kvp.Value.EmotedBack) ImGui.TextColored(UiTheme.ColorSuccessText, "Done");
                             }
+                        }
+                    }
+                }
+            }
+        );
+    }
+
+    private void DrawSlashCommandsDebug()
+    {
+        var config = plugin.Config.SlashCommands;
+        var userCommands = config.Commands;
+        var emoteCommands = plugin.SlashCommandService?.EmoteCommands ?? new();
+        int userCount = userCommands.Count;
+        int emoteCount = emoteCommands.Count;
+        int totalCommands = userCount + emoteCount;
+        int enabledCount = userCommands.Count(c => c.IsEnabled);
+        int groupCount = config.Groups.Count;
+
+        bool unused = true;
+        theme.DrawPluginCardAuto(
+            id: "slash-commands-debug",
+            enabled: ref unused,
+            showCheckbox: false,
+            title: "Slash Commands",
+            drawContent: (avail) =>
+            {
+                // Overview stats
+                ImGui.TextColored(theme.MutedText, "Overview");
+                theme.SpacerY(0.3f);
+
+                using (var statsTable = ImRaii.Table("##slashStats", 2, ImGuiTableFlags.SizingStretchProp))
+                {
+                    if (statsTable)
+                    {
+                        ImGui.TableSetupColumn("Label", ImGuiTableColumnFlags.WidthFixed, 160f * ImGuiHelpers.GlobalScale);
+                        ImGui.TableSetupColumn("Value", ImGuiTableColumnFlags.WidthStretch);
+
+                        void StatRow(string label, string value, Vector4? color = null)
+                        {
+                            ImGui.TableNextRow();
+                            ImGui.TableNextColumn();
+                            ImGui.TextColored(theme.MutedText, label);
+                            ImGui.TableNextColumn();
+                            if (color.HasValue)
+                                ImGui.TextColored(color.Value, value);
+                            else
+                                ImGui.TextUnformatted(value);
+                        }
+
+                        StatRow("Feature Enabled", config.Enabled ? "Yes" : "No",
+                            config.Enabled ? UiTheme.ColorSuccessText : UiTheme.ColorDangerText);
+                        StatRow("Guild ID", string.IsNullOrEmpty(config.GuildId) ? "(not set)" : config.GuildId);
+                        StatRow("Channel Restriction", string.IsNullOrEmpty(config.CommandChannelId) ? "None" : config.CommandChannelId);
+                        StatRow("Total Commands", totalCommands.ToString());
+                        StatRow("User Commands", userCount.ToString());
+                        StatRow("Emote Commands", $"{emoteCount} (always available via /emote)");
+                        StatRow("Enabled / Limit", $"{enabledCount} / 98",
+                            enabledCount >= 98 ? UiTheme.ColorDangerText : (Vector4?)null);
+                        StatRow("Groups", groupCount.ToString());
+                        StatRow("Bot Connected", plugin.SlashCommandService != null ? "Yes" : "No",
+                            plugin.SlashCommandService != null ? UiTheme.ColorSuccessText : UiTheme.ColorDangerText);
+                    }
+                }
+
+                theme.SpacerY(1f);
+                ImGui.Separator();
+                theme.SpacerY(1f);
+
+                // Groups overview
+                if (config.Groups.Count > 0)
+                {
+                    ImGui.TextColored(theme.MutedText, "Groups");
+                    theme.SpacerY(0.3f);
+
+                    using (var groupTable = ImRaii.Table("##slashGroups", 3, ImGuiTableFlags.BordersInnerH | ImGuiTableFlags.SizingStretchProp))
+                    {
+                        if (groupTable)
+                        {
+                            ImGui.TableSetupColumn("Name", ImGuiTableColumnFlags.WidthStretch);
+                            ImGui.TableSetupColumn("Commands", ImGuiTableColumnFlags.WidthFixed, 80f * ImGuiHelpers.GlobalScale);
+                            ImGui.TableSetupColumn("Enabled", ImGuiTableColumnFlags.WidthFixed, 80f * ImGuiHelpers.GlobalScale);
+                            ImGui.TableHeadersRow();
+
+                            foreach (var group in config.Groups.OrderBy(g => g.Name))
+                            {
+                                var cmds = userCommands.Where(c =>
+                                    string.Equals(c.Group, group.Name, StringComparison.OrdinalIgnoreCase)).ToList();
+                                int en = cmds.Count(c => c.IsEnabled);
+
+                                ImGui.TableNextRow();
+                                ImGui.TableNextColumn();
+                                ImGui.TextUnformatted(group.Name);
+                                ImGui.TableNextColumn();
+                                ImGui.TextUnformatted(cmds.Count.ToString());
+                                ImGui.TableNextColumn();
+                                ImGui.TextColored(en > 0 ? UiTheme.ColorSuccessText : theme.MutedText, en.ToString());
+                            }
+                        }
+                    }
+
+                    theme.SpacerY(1f);
+                    ImGui.Separator();
+                    theme.SpacerY(1f);
+                }
+
+                // Command list with filters
+                ImGui.TextColored(theme.MutedText, "Command List");
+                theme.SpacerY(0.3f);
+
+                ImGui.SetNextItemWidth(avail);
+                ImGui.InputTextWithHint("##slashDebugSearch", "Filter by name, command, or group...", ref _slashCmdDebugFilter, 64);
+                theme.SpacerY(0.3f);
+
+                // Filter toggles
+                ImGui.Checkbox("Enabled", ref _slashCmdShowEnabled);
+                ImGui.SameLine();
+                ImGui.Checkbox("Disabled", ref _slashCmdShowDisabled);
+                ImGui.SameLine();
+                ImGui.Checkbox("User", ref _slashCmdShowUser);
+                ImGui.SameLine();
+                ImGui.Checkbox("Emotes", ref _slashCmdShowEmotes);
+                theme.SpacerY(0.5f);
+
+                // Build combined list from user commands + in-memory emotes
+                var combined = new List<CustomSlashCommand>();
+                if (_slashCmdShowUser)
+                {
+                    IEnumerable<CustomSlashCommand> userFiltered = userCommands;
+                    if (!_slashCmdShowEnabled)
+                        userFiltered = userFiltered.Where(c => !c.IsEnabled);
+                    if (!_slashCmdShowDisabled)
+                        userFiltered = userFiltered.Where(c => c.IsEnabled);
+                    combined.AddRange(userFiltered);
+                }
+                if (_slashCmdShowEmotes)
+                    combined.AddRange(emoteCommands);
+
+                if (!string.IsNullOrWhiteSpace(_slashCmdDebugFilter))
+                {
+                    var f = _slashCmdDebugFilter;
+                    combined = combined.Where(c =>
+                        c.Name.Contains(f, StringComparison.OrdinalIgnoreCase) ||
+                        c.GameCommand.Contains(f, StringComparison.OrdinalIgnoreCase) ||
+                        (c.Group ?? "").Contains(f, StringComparison.OrdinalIgnoreCase) ||
+                        (c.Description ?? "").Contains(f, StringComparison.OrdinalIgnoreCase)).ToList();
+                }
+
+                var list = combined
+                    .OrderBy(c => c.IsEmote)
+                    .ThenByDescending(c => c.IsEnabled)
+                    .ThenBy(c => c.Name)
+                    .ToList();
+
+                ImGui.TextColored(theme.MutedText, $"Showing {list.Count} of {totalCommands}");
+                theme.SpacerY(0.3f);
+
+                using (var cmdTable = ImRaii.Table("##slashCmdList", 6,
+                    ImGuiTableFlags.BordersInnerH | ImGuiTableFlags.SizingStretchProp | ImGuiTableFlags.ScrollY,
+                    new Vector2(0, 300f * ImGuiHelpers.GlobalScale)))
+                {
+                    if (cmdTable)
+                    {
+                        ImGui.TableSetupColumn("##status", ImGuiTableColumnFlags.WidthFixed, 14f * ImGuiHelpers.GlobalScale);
+                        ImGui.TableSetupColumn("Name", ImGuiTableColumnFlags.WidthFixed, 120f * ImGuiHelpers.GlobalScale);
+                        ImGui.TableSetupColumn("Game Cmd", ImGuiTableColumnFlags.WidthFixed, 120f * ImGuiHelpers.GlobalScale);
+                        ImGui.TableSetupColumn("Type", ImGuiTableColumnFlags.WidthFixed, 50f * ImGuiHelpers.GlobalScale);
+                        ImGui.TableSetupColumn("Group", ImGuiTableColumnFlags.WidthFixed, 80f * ImGuiHelpers.GlobalScale);
+                        ImGui.TableSetupColumn("Params", ImGuiTableColumnFlags.WidthStretch);
+                        ImGui.TableHeadersRow();
+
+                        foreach (var cmd in list)
+                        {
+                            ImGui.TableNextRow();
+                            ImGui.TableNextColumn();
+
+                            // Status dot
+                            var dotColor = cmd.IsEmote
+                                ? new Vector4(0.3f, 0.7f, 1f, 1f) // Blue for always-available emotes
+                                : cmd.IsEnabled ? UiTheme.ColorSuccessText : new Vector4(0.5f, 0.5f, 0.5f, 1f);
+                            ImGui.TextColored(dotColor, (cmd.IsEmote || cmd.IsEnabled) ? "*" : " ");
+
+                            ImGui.TableNextColumn();
+                            if (!cmd.IsEnabled) ImGui.PushStyleVar(ImGuiStyleVar.Alpha, 0.5f);
+                            ImGui.TextUnformatted($"/{cmd.Name}");
+
+                            ImGui.TableNextColumn();
+                            ImGui.TextUnformatted(cmd.GameCommand);
+
+                            ImGui.TableNextColumn();
+                            ImGui.TextColored(theme.MutedText, cmd.IsEmote ? "Emote" : "User");
+                            if (cmd.IsEmote && ImGui.IsItemHovered())
+                                ImGui.SetTooltip("Embedded — always available via /emote");
+
+                            ImGui.TableNextColumn();
+                            ImGui.TextUnformatted(cmd.Group ?? "");
+
+                            ImGui.TableNextColumn();
+                            if (cmd.Parameters is { Count: > 0 })
+                            {
+                                var paramStr = string.Join(", ", cmd.Parameters.Select(p =>
+                                    p.Required ? $"{p.Name}*" : p.Name));
+                                ImGui.TextColored(theme.MutedText, paramStr);
+                            }
+                            if (!cmd.IsEnabled) ImGui.PopStyleVar();
                         }
                     }
                 }

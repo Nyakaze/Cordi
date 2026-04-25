@@ -92,6 +92,9 @@ public class DiscordHandler : IDisposable
             // Bind Cache
             _plugin.ChannelCache.Bind(_client);
 
+            // Bind Slash Commands
+            _plugin.SlashCommandService.Bind(_client);
+
             _client.Ready += OnReady;
             _client.MessageCreated += MessageCreatedHandler;
             _client.MessageReactionAdded += MessageReactionAddedHandler;
@@ -123,11 +126,25 @@ public class DiscordHandler : IDisposable
         return OnPresenceUpdated?.Invoke(sender, e) ?? Task.CompletedTask;
     }
 
-    private Task OnReady(DiscordClient sender, ReadyEventArgs e)
+    private async Task OnReady(DiscordClient sender, ReadyEventArgs e)
     {
-
         Logger.Info("DiscordHandler READY!!");
-        return Task.CompletedTask;
+
+        // Auto-register slash commands if enabled
+        if (_plugin.Config.SlashCommands.Enabled)
+        {
+            try
+            {
+                // Populate emote commands from game data on first run
+                _plugin.SlashCommandService.PopulateEmoteCommands();
+
+                await _plugin.SlashCommandService.RegisterCommandsAsync();
+            }
+            catch (Exception ex)
+            {
+                Log.Error(LogSource, $"Failed to auto-register slash commands: {ex.Message}");
+            }
+        }
     }
 
     private Task MessageReactionAddedHandler(DiscordClient sender, MessageReactionAddEventArgs e)
@@ -506,6 +523,7 @@ public class DiscordHandler : IDisposable
         Logger.Info($"[{_instanceId}] Disconnecting Discord client...");
 
         _plugin.ChannelCache.Unbind();
+        _plugin.SlashCommandService.Unbind();
 
         await _client.DisconnectAsync();
         _client.MessageCreated -= MessageCreatedHandler;

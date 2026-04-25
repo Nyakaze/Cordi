@@ -52,6 +52,7 @@ public class CordiPlugin : IDalamudPlugin
     public ActivityManager ActivityManager { get; private set; }
     public HonorificBridge HonorificBridge { get; private set; }
     public DiscordChannelCache ChannelCache { get; private set; }
+    public DiscordSlashCommandService SlashCommandService { get; private set; }
 
 
     static readonly IPluginLog Logger = Service.Log;
@@ -117,6 +118,7 @@ public class CordiPlugin : IDalamudPlugin
         ChannelCache = new DiscordChannelCache(this);
         AdvertisementFilterService = new AdvertisementFilterService(this, Webhook);
         Discord = new DiscordHandler(this, Webhook, AdvertisementFilterService);
+        SlashCommandService = new DiscordSlashCommandService(this);
         EmbedFactory = new DiscordEmbedFactory(Lodestone);
 
         NotificationManager = new NotificationManager();
@@ -382,6 +384,7 @@ public class CordiPlugin : IDalamudPlugin
         // Unregister draw callback FIRST to stop all ImGui rendering immediately
         PluginInterface.UiBuilder.Draw -= DrawUI;
 
+        this.SlashCommandService?.Dispose();
         this.Discord?.Stop();
 
         this.commandManager.Dispose();
