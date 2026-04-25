@@ -157,7 +157,14 @@ namespace Cordi.Services
                     ActivityTypeConfig conf = null;
                     if (a.ActivityType == ActivityType.Playing && !string.IsNullOrEmpty(a.Name) && config.GameConfigs.TryGetValue(a.Name, out var gameConf))
                     {
+                        var playingConf = GetConfigForType(ActivityType.Playing, config);
+                        if (playingConf == null || !playingConf.Enabled)
+                        {
+                            if (!isUpdateLoop) Service.Log.Debug($"[ActivityManager] Activity '{a.Name}' ({a.ActivityType}) matched game override but Playing type is disabled — skipped.");
+                            continue;
+                        }
                         if (!isUpdateLoop) Service.Log.Debug($"[ActivityManager] Activity '{a.Name}' ({a.ActivityType}) matched game override config.");
+                        gameConf.Priority = playingConf.Priority;
                         conf = gameConf;
                     }
                     else
@@ -174,6 +181,11 @@ namespace Cordi.Services
                         if (IsFilteredOut(a, conf, isUpdateLoop))
                         {
                             if (!isUpdateLoop) Service.Log.Debug($"[ActivityManager] Activity '{a.Name}' ({a.ActivityType}) matched a blacklist filter — skipped.");
+                            continue;
+                        }
+                        if (a.ActivityType == ActivityType.Playing && config.TypeConfigs.TryGetValue(ActivityType.Playing, out var mainPlayingConf) && IsFilteredOut(a, mainPlayingConf, isUpdateLoop))
+                        {
+                            if (!isUpdateLoop) Service.Log.Debug($"[ActivityManager] Activity '{a.Name}' ({a.ActivityType}) matched a main Playing blacklist filter — skipped.");
                             continue;
                         }
                         if (!isUpdateLoop) Service.Log.Debug($"[ActivityManager] Activity '{a.Name}' ({a.ActivityType}) added as candidate (Priority={conf.Priority}).");

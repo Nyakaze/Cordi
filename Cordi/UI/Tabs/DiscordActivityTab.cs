@@ -116,7 +116,7 @@ public class DiscordActivityTab : ConfigTabBase
                     config.GameConfigs[newGameInputState] = new ActivityTypeConfig
                     {
                         Enabled = true,
-                        Priority = 10,
+                        Priority = 0,
                         Format = "Playing {name}"
                     };
                     newGameInputState = "";
