@@ -153,30 +153,41 @@ public class DiscordSlashCommandService : IDisposable
     // ─── Command Building ───────────────────────────────────────────────
 
     /// <summary>
-    /// Builds the built-in /cordi management command.
+    /// Builds the built-in /cordi management command with subcommand groups:
+    /// /cordi command enable|disable|list
+    /// /cordi group enable|disable|list
     /// </summary>
     private DiscordApplicationCommand BuildManageCommand()
     {
-        var commandOption = new DiscordApplicationCommandOption(
-            "command", "The command name", ApplicationCommandOptionType.String, true);
-        var groupOption = new DiscordApplicationCommandOption(
-            "group", "The group name", ApplicationCommandOptionType.String, true);
+        var nameOption = new DiscordApplicationCommandOption(
+            "name", "The command name", ApplicationCommandOptionType.String, true);
+        var groupNameOption = new DiscordApplicationCommandOption(
+            "name", "The group name", ApplicationCommandOptionType.String, true);
 
-        var subcommands = new List<DiscordApplicationCommandOption>
-        {
-            new("enable", "Enable a command", ApplicationCommandOptionType.SubCommand, false, null,
-                new[] { commandOption }),
-            new("disable", "Disable a command", ApplicationCommandOptionType.SubCommand, false, null,
-                new[] { commandOption }),
-            new("enable-group", "Enable all commands in a group", ApplicationCommandOptionType.SubCommand, false, null,
-                new[] { groupOption }),
-            new("disable-group", "Disable all commands in a group", ApplicationCommandOptionType.SubCommand, false,
-                null, new[] { groupOption }),
-            new("list", "List all commands and their status", ApplicationCommandOptionType.SubCommand),
-            new("groups", "List all groups and their status", ApplicationCommandOptionType.SubCommand),
-        };
+        var commandGroup = new DiscordApplicationCommandOption(
+            "command", "Manage individual commands", ApplicationCommandOptionType.SubCommandGroup, false, null,
+            new[]
+            {
+                new DiscordApplicationCommandOption("enable", "Enable a command", ApplicationCommandOptionType.SubCommand, false, null,
+                    new[] { nameOption }),
+                new DiscordApplicationCommandOption("disable", "Disable a command", ApplicationCommandOptionType.SubCommand, false, null,
+                    new[] { nameOption }),
+                new DiscordApplicationCommandOption("list", "List all commands and their status", ApplicationCommandOptionType.SubCommand),
+            });
 
-        return new DiscordApplicationCommand(ManageCommandName, "Manage Cordi slash commands [Cordi]", subcommands);
+        var groupGroup = new DiscordApplicationCommandOption(
+            "cmdgroup", "Manage command groups", ApplicationCommandOptionType.SubCommandGroup, false, null,
+            new[]
+            {
+                new DiscordApplicationCommandOption("enable", "Enable all commands in a group", ApplicationCommandOptionType.SubCommand, false, null,
+                    new[] { groupNameOption }),
+                new DiscordApplicationCommandOption("disable", "Disable all commands in a group", ApplicationCommandOptionType.SubCommand, false, null,
+                    new[] { groupNameOption }),
+                new DiscordApplicationCommandOption("list", "List all groups and their status", ApplicationCommandOptionType.SubCommand),
+            });
+
+        return new DiscordApplicationCommand(ManageCommandName, "Manage Cordi slash commands [Cordi]",
+            new[] { commandGroup, groupGroup });
     }
 
     /// <summary>
@@ -540,37 +551,62 @@ public class DiscordSlashCommandService : IDisposable
 
     private async Task HandleManageCommand(DiscordInteraction interaction, SlashCommandConfig config)
     {
-        var subcommand = interaction.Data.Options?.FirstOrDefault();
-        if (subcommand == null)
+        // First level: subcommand group ("command" or "group")
+        var subGroup = interaction.Data.Options?.FirstOrDefault();
+        if (subGroup == null)
         {
             await RespondAsync(interaction, "Unknown subcommand.", true);
             return;
         }
 
-        Log.Info(LogSource, $"/cordi {subcommand.Name} invoked by {interaction.User.Username}");
-
-        switch (subcommand.Name)
+        // Second level: subcommand ("enable", "disable", "list")
+        var subCommand = subGroup.Options?.FirstOrDefault();
+        if (subCommand == null)
         {
-            case "enable":
-                await HandleEnableDisable(interaction, config, subcommand, true);
+            await RespondAsync(interaction, "Unknown subcommand.", true);
+            return;
+        }
+
+        Log.Info(LogSource, $"/cordi {subGroup.Name} {subCommand.Name} invoked by {interaction.User.Username}");
+
+        switch (subGroup.Name)
+        {
+            case "command":
+                switch (subCommand.Name)
+                {
+                    case "enable":
+                        await HandleEnableDisable(interaction, config, subCommand, true);
+                        break;
+                    case "disable":
+                        await HandleEnableDisable(interaction, config, subCommand, false);
+                        break;
+                    case "list":
+                        await HandleListCommands(interaction, config);
+                        break;
+                    default:
+                        await RespondAsync(interaction, $"Unknown subcommand: `{subCommand.Name}`", true);
+                        break;
+                }
                 break;
-            case "disable":
-                await HandleEnableDisable(interaction, config, subcommand, false);
-                break;
-            case "enable-group":
-                await HandleGroupEnableDisable(interaction, config, subcommand, true);
-                break;
-            case "disable-group":
-                await HandleGroupEnableDisable(interaction, config, subcommand, false);
-                break;
-            case "list":
-                await HandleListCommands(interaction, config);
-                break;
-            case "groups":
-                await HandleListGroups(interaction, config);
+            case "group":
+                switch (subCommand.Name)
+                {
+                    case "enable":
+                        await HandleGroupEnableDisable(interaction, config, subCommand, true);
+                        break;
+                    case "disable":
+                        await HandleGroupEnableDisable(interaction, config, subCommand, false);
+                        break;
+                    case "list":
+                        await HandleListGroups(interaction, config);
+                        break;
+                    default:
+                        await RespondAsync(interaction, $"Unknown subcommand: `{subCommand.Name}`", true);
+                        break;
+                }
                 break;
             default:
-                await RespondAsync(interaction, $"Unknown subcommand: `{subcommand.Name}`", true);
+                await RespondAsync(interaction, $"Unknown subcommand group: `{subGroup.Name}`", true);
                 break;
         }
     }
@@ -578,7 +614,7 @@ public class DiscordSlashCommandService : IDisposable
     private async Task HandleEnableDisable(DiscordInteraction interaction, SlashCommandConfig config,
         DiscordInteractionDataOption subcommand, bool enable)
     {
-        var cmdNameOption = subcommand.Options?.FirstOrDefault(o => o.Name == "command");
+        var cmdNameOption = subcommand.Options?.FirstOrDefault(o => o.Name == "name");
         var cmdName = cmdNameOption?.Value?.ToString()?.ToLower()?.Trim();
 
         if (string.IsNullOrEmpty(cmdName))
@@ -633,7 +669,7 @@ public class DiscordSlashCommandService : IDisposable
     private async Task HandleGroupEnableDisable(DiscordInteraction interaction, SlashCommandConfig config,
         DiscordInteractionDataOption subcommand, bool enable)
     {
-        var groupOption = subcommand.Options?.FirstOrDefault(o => o.Name == "group");
+        var groupOption = subcommand.Options?.FirstOrDefault(o => o.Name == "name");
         var groupName = groupOption?.Value?.ToString()?.Trim();
 
         if (string.IsNullOrEmpty(groupName))

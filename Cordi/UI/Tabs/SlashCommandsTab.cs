@@ -58,6 +58,7 @@ public class SlashCommandsTab : ConfigTabBase
                 theme.SpacerY(0.5f);
                 ImGui.TextWrapped("Register custom Discord slash commands that execute in-game commands. " +
                                   "Commands are registered per-guild and require the bot to have the 'applications.commands' scope.");
+                
                 theme.SpacerY(1f);
 
                 // Guild ID
