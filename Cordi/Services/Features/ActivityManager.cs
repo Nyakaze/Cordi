@@ -325,6 +325,8 @@ namespace Cordi.Services
             string details = "";
             string state = "";
             string album = "";
+            string largeImage = "";
+            string smallImage = "";
 
             string elapsed = "";
             string duration = "";
@@ -348,6 +350,8 @@ namespace Cordi.Services
                         try { if (string.IsNullOrEmpty(details)) details = rp.Details ?? ""; } catch { }
                         try { if (string.IsNullOrEmpty(state)) state = rp.State ?? ""; } catch { }
                         try { album = rp.LargeImageText ?? ""; } catch { }
+                        try { largeImage = rp.LargeImageText ?? ""; } catch { }
+                        try { smallImage = rp.SmallImageText ?? ""; } catch { }
 
                         DateTimeOffset? start = null;
                         DateTimeOffset? end = null;
@@ -377,7 +381,7 @@ namespace Cordi.Services
                         }
                     }
 
-                    if (!silent) Service.Log.Debug($"[ActivityManager] RenderTitle extracted — name='{name}', details='{details}', state='{state}', album='{album}', elapsed='{elapsed}', duration='{duration}'");
+                    if (!silent) Service.Log.Debug($"[ActivityManager] RenderTitle extracted — name='{name}', details='{details}', state='{state}', album='{album}', largeImage='{largeImage}', smallImage='{smallImage}', elapsed='{elapsed}', duration='{duration}'");
                 }
                 catch (Exception ex)
                 {
@@ -405,6 +409,7 @@ namespace Cordi.Services
 
             result = result.Replace("{track}", details).Replace("{artist}", state);
             result = result.Replace("{album}", album);
+            result = result.Replace("{large_image}", largeImage).Replace("{small_image}", smallImage);
 
             result = result.Replace("{elapsed}", elapsed)
                            .Replace("{duration}", duration)
@@ -477,6 +482,8 @@ namespace Cordi.Services
                 { "{details}", "" },
                 { "{state}", "" },
                 { "{album}", "" },
+                { "{large_image}", "" },
+                { "{small_image}", "" },
             };
 
             try
@@ -492,6 +499,8 @@ namespace Cordi.Services
                     try { if (string.IsNullOrEmpty(values["{details}"])) values["{details}"] = rp.Details ?? ""; } catch { }
                     try { if (string.IsNullOrEmpty(values["{state}"])) values["{state}"] = rp.State ?? ""; } catch { }
                     try { values["{album}"] = rp.LargeImageText ?? ""; } catch { }
+                    try { values["{large_image}"] = rp.LargeImageText ?? ""; } catch { }
+                    try { values["{small_image}"] = rp.SmallImageText ?? ""; } catch { }
                 }
             }
             catch { }

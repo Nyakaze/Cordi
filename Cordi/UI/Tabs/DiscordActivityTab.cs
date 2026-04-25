@@ -342,6 +342,8 @@ public class DiscordActivityTab : ConfigTabBase
                     tip += "- {name}: Activity Name\n";
                     tip += "- {details}: Track / Details\n";
                     tip += "- {state}: Artist / Status\n";
+                    tip += "- {large_image}: Large Image Text\n";
+                    tip += "- {small_image}: Small Image Text\n";
                     tip += "- {elapsed}, {duration}, {time_start}, {time_end}\n";
 
                     ImGui.SetTooltip(tip);

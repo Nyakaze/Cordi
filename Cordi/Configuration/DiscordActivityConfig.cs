@@ -48,7 +48,6 @@ public class ActivityTypeConfig
     public int? GradientColourSet { get; set; } = null;
     public int? GradientAnimationStyle { get; set; } = null;
 
-
     public List<FilterRule> Filters { get; set; } = new();
 }
 
