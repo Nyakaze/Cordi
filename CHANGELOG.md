@@ -1,3 +1,17 @@
+## [2.0.5](https://github.com/Nyakaze/Cordi/compare/2.0.4...2.0.5) (25-04-2026)
+
+### Slash Commands
+ -**Added:** All Emotes beeing avaiable through Discord Commands.
+ -**Added:** Custom Commands which will be executed ingame when called through Discord.
+ -**Added:** Option to enable/disable Custom Commands and Groups through Discord.
+
+### Activitys
+ - **Fixed:** Some bugs where prioritys were set wrong and blacklisting not working.
+ - **Added:** Placeholder for small and large image Texts.
+
+### Peeper
+ - **Fixed:** A bug where the context menu text had the wrong color.
+
 ## [2.0.4](https://github.com/Nyakaze/Cordi/compare/2.0.2...2.0.4) (16-04-2026)
 
 ### Activitys
