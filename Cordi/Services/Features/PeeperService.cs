@@ -312,6 +312,8 @@ public class CordiPeepService : IDisposable
             Service.ObjectTable.LocalPlayer != null &&
             (Service.ObjectTable.LocalPlayer.StatusFlags & Dalamud.Game.ClientState.Objects.Enums.StatusFlags.InCombat) != 0)
             return;
+        if (plugin.Config.CordiPeep.DisableDiscordInPvP && Service.ClientState.IsPvP)
+            return;
         if (blacklistEntry?.DisableDiscord == true) return;
 
         var channelIdStr = plugin.Config.CordiPeep.DiscordChannelId;
@@ -403,6 +405,8 @@ public class CordiPeepService : IDisposable
         if (plugin.Config.CordiPeep.DisableSoundInCombat &&
             Service.ObjectTable.LocalPlayer != null &&
             (Service.ObjectTable.LocalPlayer.StatusFlags & Dalamud.Game.ClientState.Objects.Enums.StatusFlags.InCombat) != 0)
+            return;
+        if (plugin.Config.CordiPeep.DisableSoundInPvP && Service.ClientState.IsPvP)
             return;
         if ((DateTime.Now - _lastSoundPlayTime) < _minAlertInterval) return;
 

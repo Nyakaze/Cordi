@@ -313,6 +313,14 @@ public class TrackerTab : ConfigTabBase
                 })) { }
                 theme.HoverHandIfItem();
 
+                bool dDisablePvP = plugin.Config.CordiPeep.DisableDiscordInPvP;
+                if (theme.ConfigCheckbox("Disable Notifications in PvP##btn-disable-discord-in-pvp", ref dDisablePvP, () =>
+                {
+                    plugin.Config.CordiPeep.DisableDiscordInPvP = dDisablePvP;
+                    plugin.Config.Save();
+                })) { }
+                theme.HoverHandIfItem();
+
                 theme.SpacerY(0.5f);
 
 
@@ -627,6 +635,14 @@ public class TrackerTab : ConfigTabBase
                 if (theme.ConfigCheckbox("Disable in Combat##btn-disable-sound-in-combat", ref sDisableCombat, () =>
                 {
                     plugin.Config.CordiPeep.DisableSoundInCombat = sDisableCombat;
+                    plugin.Config.Save();
+                })) { }
+                theme.HoverHandIfItem();
+
+                bool sDisablePvP = plugin.Config.CordiPeep.DisableSoundInPvP;
+                if (theme.ConfigCheckbox("Disable in PvP##btn-disable-sound-in-pvp", ref sDisablePvP, () =>
+                {
+                    plugin.Config.CordiPeep.DisableSoundInPvP = sDisablePvP;
                     plugin.Config.Save();
                 })) { }
                 theme.HoverHandIfItem();

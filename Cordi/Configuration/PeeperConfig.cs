@@ -27,6 +27,9 @@ public class CordiPeepConfig
     public bool DisableSoundInCombat { get; set; } = false;
     public bool DisableDiscordInCombat { get; set; } = false;
 
+    public bool DisableSoundInPvP { get; set; } = false;
+    public bool DisableDiscordInPvP { get; set; } = false;
+
 
     public bool SoundEnabled { get; set; } = true;
     public float SoundVolume { get; set; } = 1.0f;
