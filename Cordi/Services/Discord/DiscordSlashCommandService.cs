@@ -1,10 +1,12 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using Cordi.Configuration;
 using Cordi.Core;
+using Cordi.Services.Features;
 using Dalamud.Plugin.Services;
 using DSharpPlus;
 using DSharpPlus.Entities;
@@ -32,12 +34,15 @@ public class DiscordSlashCommandService : IDisposable
     /// </summary>
     public List<CustomSlashCommand> EmoteCommands { get; } = new();
 
+    private readonly ScreenshotService _screenshotService;
+
     private CordiLogService Log => _plugin.LogService;
     private const string LogSource = "SlashCommands";
 
-    public DiscordSlashCommandService(CordiPlugin plugin)
+    public DiscordSlashCommandService(CordiPlugin plugin, ScreenshotService screenshotService)
     {
         _plugin = plugin;
+        _screenshotService = screenshotService;
     }
 
     public void Bind(DiscordClient client)
@@ -186,8 +191,12 @@ public class DiscordSlashCommandService : IDisposable
                 new DiscordApplicationCommandOption("list", "List all groups and their status", ApplicationCommandOptionType.SubCommand),
             });
 
+        var screenshotCommand = new DiscordApplicationCommandOption(
+            "screenshot", "Capture and send a screenshot of the current game state",
+            ApplicationCommandOptionType.SubCommand);
+
         return new DiscordApplicationCommand(ManageCommandName, "Manage Cordi slash commands [Cordi]",
-            new[] { commandGroup, groupGroup });
+            new[] { commandGroup, groupGroup, screenshotCommand });
     }
 
     /// <summary>
@@ -551,11 +560,19 @@ public class DiscordSlashCommandService : IDisposable
 
     private async Task HandleManageCommand(DiscordInteraction interaction, SlashCommandConfig config)
     {
-        // First level: subcommand group ("command" or "group")
+        // First level: subcommand group ("command" or "cmdgroup") or subcommand ("screenshot")
         var subGroup = interaction.Data.Options?.FirstOrDefault();
         if (subGroup == null)
         {
             await RespondAsync(interaction, "Unknown subcommand.", true);
+            return;
+        }
+
+        // Handle top-level subcommands (not in a group)
+        if (subGroup.Name == "screenshot")
+        {
+            Log.Info(LogSource, $"/cordi screenshot invoked by {interaction.User.Username}");
+            await HandleScreenshotCommand(interaction);
             return;
         }
 
@@ -588,7 +605,7 @@ public class DiscordSlashCommandService : IDisposable
                         break;
                 }
                 break;
-            case "group":
+            case "cmdgroup":
                 switch (subCommand.Name)
                 {
                     case "enable":
@@ -780,6 +797,66 @@ public class DiscordSlashCommandService : IDisposable
         }
 
         await RespondAsync(interaction, string.Join("\n", lines), true);
+    }
+
+    // ─── /cordi screenshot ────────────────────────────────────────────
+
+    private async Task HandleScreenshotCommand(DiscordInteraction interaction)
+    {
+        try
+        {
+            // Defer the response since screenshot capture may take a moment
+            await interaction.CreateResponseAsync(InteractionResponseType.DeferredChannelMessageWithSource);
+
+            // Verify the player is logged in
+            bool isLoggedIn = await CordiPlugin.Framework.RunOnFrameworkThread(() => Service.ClientState.IsLoggedIn);
+            if (!isLoggedIn)
+            {
+                await interaction.EditOriginalResponseAsync(
+                    new DiscordWebhookBuilder().WithContent("Cannot capture screenshot: no game is currently active (not logged in)."));
+                return;
+            }
+
+            // Capture on the framework thread to ensure the game window is accessible
+            MemoryStream? screenshotStream = null;
+            await CordiPlugin.Framework.RunOnFrameworkThread(() =>
+            {
+                screenshotStream = _screenshotService.CaptureGameWindow();
+            });
+
+            if (screenshotStream == null)
+            {
+                await interaction.EditOriginalResponseAsync(
+                    new DiscordWebhookBuilder().WithContent("Screenshot capture failed. The game window may be minimized or unavailable."));
+                return;
+            }
+
+            using (screenshotStream)
+            {
+                var timestamp = DateTime.Now.ToString("yyyy-MM-dd_HH-mm-ss");
+                var fileName = $"ffxiv_screenshot_{timestamp}.png";
+
+                await interaction.EditOriginalResponseAsync(
+                    new DiscordWebhookBuilder()
+                        .WithContent($"Screenshot captured at {DateTime.Now:HH:mm:ss}")
+                        .AddFile(fileName, screenshotStream));
+            }
+
+            Log.Info(LogSource, "Screenshot sent successfully.");
+        }
+        catch (Exception ex)
+        {
+            Log.Error(LogSource, $"Screenshot command failed: {ex.Message}");
+            try
+            {
+                await interaction.EditOriginalResponseAsync(
+                    new DiscordWebhookBuilder().WithContent($"Screenshot failed: {ex.Message}"));
+            }
+            catch
+            {
+                // If we couldn't even defer, try a direct response
+            }
+        }
     }
 
     // ─── Helpers ────────────────────────────────────────────────────────
