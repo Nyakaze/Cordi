@@ -15,8 +15,8 @@ public class CombinedWindow : Window
     private readonly EmoteLogPanel _emoteLogPanel;
     private readonly CordiPeepPanel _peepPanel;
     private readonly UiTheme _theme = new UiTheme();
-    private ImRaii.Color? _opacityScope;
-    private ImRaii.Style? _borderScope;
+    private ImRaii.ColorDisposable? _opacityScope;
+    private ImRaii.StyleDisposable? _borderScope;
 
     public CombinedWindow(CordiPlugin plugin) : base("Emote Log & Peeper###CordiCombo", ImGuiWindowFlags.None)
     {

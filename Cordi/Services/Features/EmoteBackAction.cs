@@ -26,7 +26,7 @@ public class EmoteBackAction
 
         await CordiPlugin.Framework.RunOnFrameworkThread(() =>
         {
-            var localPlayer = Service.ClientState.LocalPlayer;
+            var localPlayer = Service.ObjectTable.LocalPlayer;
             if (localPlayer == null) return;
 
             savedRotation = localPlayer.Rotation;
@@ -53,7 +53,7 @@ public class EmoteBackAction
 
         await CordiPlugin.Framework.RunOnFrameworkThread(() =>
         {
-            var localPlayer = Service.ClientState.LocalPlayer;
+            var localPlayer = Service.ObjectTable.LocalPlayer;
             if (localPlayer == null) return;
 
             if (!keepTarget)

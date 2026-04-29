@@ -177,12 +177,12 @@ public sealed class UiTheme
         if (border)
             color.Push(ImGuiCol.Border, WindowBorder);
 
-        var child = ImRaii.Child(id, minSize, border);
+        ImGui.BeginChild(id, minSize, border);
         float gap = Gap(0.25f);
 
         return new ActionDisposable(() =>
         {
-            child.Dispose();
+            ImGui.EndChild();
             color.Dispose();
             style.Dispose();
             ImGui.Dummy(new Vector2(0, gap));

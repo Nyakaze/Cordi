@@ -317,7 +317,7 @@ public class CordiPlugin : IDalamudPlugin
 
     private void OnFrameworkUpdate(IFramework framework)
     {
-        cachedLocalPlayer = Service.ClientState.LocalPlayer;
+        cachedLocalPlayer = Service.ObjectTable.LocalPlayer;
 
         // Ctrl+Shift+L toggles hidden Logs tab (edge-triggered, only when config window is open)
         bool ctrl = Service.KeyState[0x11];   // VK_CONTROL
@@ -336,7 +336,7 @@ public class CordiPlugin : IDalamudPlugin
     private async void OnLoginEvent()
     {
         LogService.Info("Plugin", "Player logged in");
-        cachedLocalPlayer = await Service.Framework.RunOnFrameworkThread(() => Service.ClientState.LocalPlayer);
+        cachedLocalPlayer = await Service.Framework.RunOnFrameworkThread(() => Service.ObjectTable.LocalPlayer);
         if (Config.CordiPeep.OpenOnLogin)
         {
             CordiPeepWindow.IsOpen = true;
@@ -356,23 +356,23 @@ public class CordiPlugin : IDalamudPlugin
         cachedLocalPlayer = null;
     }
 
-    private void ChatOnChatMessage(XivChatType type, int timestamp, ref SeString sender, ref SeString message, ref bool ishandled)
+    private void ChatOnChatMessage(Dalamud.Game.Chat.IHandleableChatMessage message)
     {
-        if (ishandled) return;
+        if (message.IsHandled) return;
 
-        if (type == XivChatType.RetainerSale) return;
+        if (message.LogKind == XivChatType.RetainerSale) return;
 
         var msg = new ChatMessage
         {
-            ChatType = type,
-            Message = message,
-            Sender = sender,
-            SenderName = sender.TextValue,
+            ChatType = message.LogKind,
+            Message = message.Message,
+            Sender = message.Sender,
+            SenderName = message.Sender.TextValue,
             SenderWorld = ""
         };
-        if (Config.MappingCache.ContainsKey(type))
+        if (Config.MappingCache.ContainsKey(message.LogKind))
         {
-            LogService.Debug("ChatRouter", $"[{type}] {msg.SenderName}: {msg.Message.TextValue}");
+            LogService.Debug("ChatRouter", $"[{message.LogKind}] {msg.SenderName}: {msg.Message.TextValue}");
         }
         _router.RouteAsync(msg, Discord);
 

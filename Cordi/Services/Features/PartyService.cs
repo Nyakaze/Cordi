@@ -62,7 +62,7 @@ public class PartyService : IDisposable
 
         _lastPartyCheck = DateTime.Now;
 
-        if (Service.ClientState.LocalPlayer == null) return;
+        if (Service.ObjectTable.LocalPlayer == null) return;
 
         var partyList = Service.PartyList;
 
@@ -241,7 +241,7 @@ public class PartyService : IDisposable
 
             if (!plugin.Config.Party.IncludeSelf)
             {
-                var localPlayer = Service.ClientState.LocalPlayer;
+                var localPlayer = Service.ObjectTable.LocalPlayer;
                 if (localPlayer != null && name == localPlayer.Name.TextValue && (world == "Unknown" || world == localPlayer.HomeWorld.Value.Name.ToString()))
                 {
                     Service.Log.Debug($"[PartyService] Skipping notification for self: {name}@{world}");
@@ -415,7 +415,7 @@ public class PartyService : IDisposable
 
             if (!plugin.Config.Party.IncludeSelf)
             {
-                var localPlayer = Service.ClientState.LocalPlayer;
+                var localPlayer = Service.ObjectTable.LocalPlayer;
                 if (localPlayer != null && name == localPlayer.Name.TextValue && (world == "Unknown" || world == localPlayer.HomeWorld.Value.Name.ToString()))
                 {
                     Service.Log.Debug($"[PartyService] Skipping leave notification for self: {name}@{world}");

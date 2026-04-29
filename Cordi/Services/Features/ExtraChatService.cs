@@ -7,6 +7,7 @@ using Newtonsoft.Json.Linq;
 using Cordi.Core;
 using Dalamud.Game.ClientState.Objects.SubKinds;
 using Cordi.Configuration.External;
+using FFXIVClientStructs.FFXIV.Client.Game.UI;
 
 namespace Cordi.Services.Features
 {
@@ -68,7 +69,12 @@ namespace Cordi.Services.Features
                 var root = JsonConvert.DeserializeObject<ExtraChatRoot>(json, settings);
                 if (root?.Configs == null) return 0;
 
-                ulong contentId = CordiPlugin.ClientState.LocalContentId;
+                ulong contentId;
+                unsafe
+                {
+                    var playerState = PlayerState.Instance();
+                    contentId = playerState != null ? playerState->ContentId : 0UL;
+                }
                 if (contentId == 0) return 0; // Not logged in
 
                 if (!root.Configs.TryGetValue(contentId, out var charConfig))

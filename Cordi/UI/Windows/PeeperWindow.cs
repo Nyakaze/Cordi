@@ -14,8 +14,8 @@ public class CordiPeepWindow : Window
     private readonly CordiPlugin _plugin;
     private readonly CordiPeepPanel _panel;
     private readonly UiTheme _theme = new UiTheme();
-    private ImRaii.Color? _opacityScope;
-    private ImRaii.Style? _borderScope;
+    private ImRaii.ColorDisposable? _opacityScope;
+    private ImRaii.StyleDisposable? _borderScope;
 
     public CordiPeepWindow(CordiPlugin plugin) : base("Peeper###Cordi Peep", ImGuiWindowFlags.None)
     {

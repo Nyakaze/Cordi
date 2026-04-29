@@ -104,7 +104,7 @@ public class DiscordCommandHandler
         {
             await CordiPlugin.Framework.RunOnFrameworkThread(() =>
             {
-                var localPlayer = Service.ClientState.LocalPlayer;
+                var localPlayer = Service.ObjectTable.LocalPlayer;
                 if (localPlayer != null)
                 {
                     savedRotation = localPlayer.Rotation;
@@ -117,7 +117,7 @@ public class DiscordCommandHandler
                 {
                     CordiPlugin.Framework.RunOnFrameworkThread(() =>
                     {
-                        var currentLocalPlayer = Service.ClientState.LocalPlayer;
+                        var currentLocalPlayer = Service.ObjectTable.LocalPlayer;
                         if (currentLocalPlayer != null)
                         {
                             var currentTarget = Service.TargetManager.Target;
