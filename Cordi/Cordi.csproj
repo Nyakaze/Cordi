@@ -7,6 +7,7 @@
     <PackageLicenseExpression>AGPL-3.0-or-later</PackageLicenseExpression>
     <IsPackable>false</IsPackable>
     <UseWindowsForms>true</UseWindowsForms>
+    <DalamudApiLevel>15</DalamudApiLevel>
   </PropertyGroup>
 
   <ItemGroup>
