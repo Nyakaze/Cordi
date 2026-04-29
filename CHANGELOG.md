@@ -1,3 +1,8 @@
+## [2.1.2](https://github.com/Nyakaze/Cordi/compare/2.0.4...2.0.5) (29-04-2026)
+
+### General
+ - **UPDATE:** API15 Update
+
 ## [2.0.5](https://github.com/Nyakaze/Cordi/compare/2.0.4...2.0.5) (25-04-2026)
 
 ### Slash Commands
