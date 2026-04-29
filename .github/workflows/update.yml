@@ -18,7 +18,7 @@ jobs:
   Build:
     runs-on: ubuntu-latest
     env:
-      DALAMUD_ARCHIVE_URL: https://goatcorp.github.io/dalamud-distrib/stg/latest.zip
+      DALAMUD_ARCHIVE_URL: https://goatcorp.github.io/dalamud-distrib/api15/latest.zip
       DALAMUD_HOME: ${{ github.workspace }}/dalamud
 
     steps:
