@@ -67,11 +67,18 @@ namespace Cordi.Services
                 return;
             }
 
-            if (_isIdle) return;
+            if (_isIdle && !IsCustomAlwaysOn()) return;
 
             if ((DateTime.Now - _lastRefreshTick).TotalSeconds < RefreshIntervalSeconds) return;
             _lastRefreshTick = DateTime.Now;
             ProcessPresence(_cachedPresence, isUpdateLoop: true);
+        }
+
+        private bool IsCustomAlwaysOn()
+        {
+            var cfg = _plugin.Config.ActivityConfig;
+            if (cfg == null || !cfg.Enabled) return false;
+            return cfg.TypeConfigs.TryGetValue(ActivityType.Custom, out var c) && c.Enabled;
         }
 
         private Task OnPresenceUpdated(DiscordClient sender, PresenceUpdateEventArgs e)
@@ -129,7 +136,9 @@ namespace Cordi.Services
                 return;
             }
 
-            if (config.TargetUserId == 0)
+            bool customAlwaysOn = config.TypeConfigs.TryGetValue(ActivityType.Custom, out var customAlwaysOnConf) && customAlwaysOnConf.Enabled;
+
+            if (config.TargetUserId == 0 && !customAlwaysOn)
             {
                 if (!isUpdateLoop) Service.Log.Warning("[ActivityManager] TargetUserId is not set (0). No presence will be tracked.");
                 ClearTitle();
@@ -139,11 +148,8 @@ namespace Cordi.Services
             if (presence == null)
             {
                 if (!isUpdateLoop) Service.Log.Debug("[ActivityManager] Cached presence is null — no presence data received yet.");
-                ClearTitle();
-                return;
             }
-
-            if (presence.Activities == null || !presence.Activities.Any())
+            else if (presence.Activities == null || !presence.Activities.Any())
             {
                 if (!isUpdateLoop) Service.Log.Debug("[ActivityManager] Presence has no activities.");
             }
