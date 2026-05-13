@@ -18,7 +18,6 @@ namespace Cordi.Services
     public class ActivityManager : IDisposable
     {
         private readonly CordiPlugin _plugin;
-        private readonly DiscordHandler _discord;
         private readonly HonorificBridge _honorific;
 
         private ActivityType? _currentCyclingType;
@@ -43,19 +42,15 @@ namespace Cordi.Services
         private CordiLogService Log => _plugin.LogService;
         private const string LogSource = "Activity";
 
-        public ActivityManager(CordiPlugin plugin, DiscordHandler discord, HonorificBridge honorific)
+        public ActivityManager(CordiPlugin plugin, HonorificBridge honorific)
         {
             _plugin = plugin;
-            _discord = discord;
             _honorific = honorific;
-
-            _discord.OnPresenceUpdated += OnPresenceUpdated;
-            Service.Framework.Update += OnFrameworkUpdate;
 
             Service.Log.Info("[ActivityManager] Initialized and listening for presence updates.");
         }
 
-        private void OnFrameworkUpdate(IFramework framework)
+        public void OnFrameworkUpdate(IFramework framework)
         {
             if (_disposed) return;
 
@@ -81,7 +76,7 @@ namespace Cordi.Services
             return cfg.TypeConfigs.TryGetValue(ActivityType.Custom, out var c) && c.Enabled;
         }
 
-        private Task OnPresenceUpdated(DiscordClient sender, PresenceUpdateEventArgs e)
+        public Task OnPresenceUpdated(DiscordClient sender, PresenceUpdateEventArgs e)
         {
             var targetId = _plugin.Config.ActivityConfig.TargetUserId;
 
@@ -535,8 +530,6 @@ namespace Cordi.Services
             _disposed = true;
             _hasPendingPresenceUpdate = false;
             _isIdle = true;
-            _discord.OnPresenceUpdated -= OnPresenceUpdated;
-            Service.Framework.Update -= OnFrameworkUpdate;
         }
     }
 }

@@ -21,6 +21,20 @@ public class ChatMessenger : IAsyncDisposable
 
     public TimeSpan MinInterval { get; init; } = TimeSpan.FromSeconds(1.0);
     public int MaxLength { get; init; } = 450;
+    public int MaxPending { get; init; } = 50;
+
+    private long _pending;
+    private long _sent;
+    private long _failed;
+    private long _dropped;
+
+    public long Pending => Interlocked.Read(ref _pending);
+    public long Sent => Interlocked.Read(ref _sent);
+    public long Failed => Interlocked.Read(ref _failed);
+    public long Dropped => Interlocked.Read(ref _dropped);
+
+    public event Action<XivChatType, string, Exception>? OnSendFailed;
+    public event Action<XivChatType, string>? OnSendDropped;
 
     private DateTime _lastSendUtc = DateTime.MinValue;
     private readonly MethodInfo? _sendMessageMI;
@@ -41,7 +55,25 @@ public class ChatMessenger : IAsyncDisposable
 
     public async Task SendAsync(XivChatType type, string message, string? tellTarget = null, bool echoLocally = false, CancellationToken ct = default)
     {
-        await _gate.WaitAsync(ct).ConfigureAwait(false);
+        if (Interlocked.Read(ref _pending) >= MaxPending)
+        {
+            Interlocked.Increment(ref _dropped);
+            _chat.PrintError($"[Cordi] Dropped {type} send — pending backlog full ({MaxPending}).");
+            OnSendDropped?.Invoke(type, message);
+            return;
+        }
+
+        Interlocked.Increment(ref _pending);
+        try
+        {
+            await _gate.WaitAsync(ct).ConfigureAwait(false);
+        }
+        catch
+        {
+            Interlocked.Decrement(ref _pending);
+            throw;
+        }
+
         try
         {
             if (!_clientState.IsLoggedIn)
@@ -111,7 +143,17 @@ public class ChatMessenger : IAsyncDisposable
                     tcs.SetException(ex);
                 }
             });
-            await tcs.Task.ConfigureAwait(false);
+            try
+            {
+                await tcs.Task.ConfigureAwait(false);
+                Interlocked.Increment(ref _sent);
+            }
+            catch (Exception ex)
+            {
+                Interlocked.Increment(ref _failed);
+                OnSendFailed?.Invoke(type, message, ex);
+                throw;
+            }
 
             _lastSendUtc = DateTime.UtcNow;
             if (echoLocally) _chat.Print($"[→ {type}] {msg}");
@@ -119,6 +161,7 @@ public class ChatMessenger : IAsyncDisposable
         finally
         {
             _gate.Release();
+            Interlocked.Decrement(ref _pending);
         }
     }
 

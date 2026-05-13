@@ -42,6 +42,7 @@ public sealed class ConfigWindow : Window, IDisposable
     private CombinedWindowTab combinedWindowTab;
     private SettingsTab settingsTab;
     private TrackerTab trackerTab;
+    private PlayerTrackerTab playerTrackerTab;
     private SlashCommandsTab slashCommandsTab;
 
 
@@ -67,6 +68,7 @@ public sealed class ConfigWindow : Window, IDisposable
         this.combinedWindowTab = new CombinedWindowTab(plugin, theme);
         this.settingsTab = new SettingsTab(plugin, theme);
         this.trackerTab = new TrackerTab(plugin, theme);
+        this.playerTrackerTab = new PlayerTrackerTab(plugin, theme);
         this.slashCommandsTab = new SlashCommandsTab(plugin, theme);
         this.logsTab = new LogsTab(plugin, theme);
 
@@ -154,6 +156,7 @@ public sealed class ConfigWindow : Window, IDisposable
                 // DrawSidebarButton("Combined", 9);
                 DrawSidebarButton("Activity", 5);
                 DrawSidebarButton("Party & Players", 6);
+                DrawSidebarButton("Player Tracker", 14);
                 DrawSidebarButton("Slash Commands", 13);
                 DrawSidebarButton("Settings", 12);
 
@@ -216,6 +219,10 @@ public sealed class ConfigWindow : Window, IDisposable
 
                 case 13:
                     slashCommandsTab.Draw();
+                    break;
+
+                case 14:
+                    playerTrackerTab.Draw();
                     break;
 
                 case 99:

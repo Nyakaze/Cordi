@@ -39,7 +39,7 @@ public class DiscordHandler : IDisposable
     private readonly DiscordWebhookService _webhooks;
     private readonly AdvertisementFilterService _adFilter;
     private readonly DiscordMessageRouter _messageRouter;
-    private readonly DiscordCommandHandler _commandHandler;
+    public DiscordMessageRouter MessageRouter => _messageRouter;
 
     private CordiLogService Log => _plugin.LogService;
     private const string LogSource = "Discord";
@@ -50,14 +50,14 @@ public class DiscordHandler : IDisposable
         _webhooks = webhooks;
         _adFilter = adFilter;
         _messageRouter = new DiscordMessageRouter(plugin);
-        _commandHandler = new DiscordCommandHandler(plugin);
+        _processedMessages = new Cordi.Core.Caching.Cache<ulong, DateTime>(
+            "discord.processedMessages", plugin.CacheRegistry,
+            maxSize: 1000, ttl: TimeSpan.FromMinutes(10));
 
         _intent = DiscordIntents.AllUnprivileged | DiscordIntents.MessageContents | DiscordIntents.Guilds | DiscordIntents.GuildWebhooks | DiscordIntents.GuildMessageReactions | DiscordIntents.GuildMembers | DiscordIntents.GuildPresences;
     }
 
-    private readonly ConcurrentDictionary<string, List<(string Content, DateTime Timestamp, ulong MessageId)>> _messageBuffer = new();
-    private readonly ConcurrentDictionary<string, DateTime> _penaltyBox = new();
-    private readonly ConcurrentDictionary<ulong, DateTime> _processedMessages = new();
+    private readonly Cordi.Core.Caching.Cache<ulong, DateTime> _processedMessages;
 
     public async Task Start()
     {
@@ -119,6 +119,7 @@ public class DiscordHandler : IDisposable
     }
 
     public event Func<MessageReactionAddEventArgs, Task> OnReactionAdded;
+    public event Func<MessageCreateEventArgs, Task> OnMessageCreated;
     public event Func<DiscordClient, PresenceUpdateEventArgs, Task> OnPresenceUpdated;
 
     private Task OnPresenceUpdatedHandler(DiscordClient sender, PresenceUpdateEventArgs e)
@@ -155,69 +156,25 @@ public class DiscordHandler : IDisposable
         return Task.CompletedTask;
     }
 
-    async Task MessageCreatedHandler(DiscordClient sender, MessageCreateEventArgs message)
+    private async Task MessageCreatedHandler(DiscordClient sender, MessageCreateEventArgs e)
     {
         if (sender != _client) return;
-        if (message.Author.IsBot || message.Message.WebhookMessage || (sender.CurrentUser != null && message.Author.Id == sender.CurrentUser.Id)) return;
+        if (e.Author.IsBot || e.Message.WebhookMessage
+            || (sender.CurrentUser != null && e.Author.Id == sender.CurrentUser.Id)) return;
 
-        // Deduplication
-        if (!_processedMessages.TryAdd(message.Message.Id, DateTime.UtcNow))
+        if (!_processedMessages.TryAdd(e.Message.Id, DateTime.UtcNow))
         {
-            Logger.Debug($"[DiscordHandler {_instanceId}] Ignored duplicate message ID: {message.Message.Id}");
+            Logger.Debug($"[DiscordHandler {_instanceId}] Ignored duplicate message ID: {e.Message.Id}");
             return;
         }
 
-        Logger.Info($"[DiscordHandler {_instanceId}] Processing message {message.Message.Id} from {message.Author.Username} in {message.Channel.Name} ({message.Channel.Id})");
-        Log.Debug(LogSource, $"Received from {message.Author.Username} in #{message.Channel.Name}: {message.Message.Content}");
-
-        // Simple periodic cleanup of deduplication cache
-        if (_processedMessages.Count > 1000)
-        {
-            var old = DateTime.UtcNow.AddMinutes(-10);
-            foreach (var key in _processedMessages.Keys.ToList())
-            {
-                if (_processedMessages.TryGetValue(key, out var ts) && ts < old)
-                    _processedMessages.TryRemove(key, out _);
-            }
-        }
+        Logger.Info($"[DiscordHandler {_instanceId}] Processing message {e.Message.Id} from {e.Author.Username} in {e.Channel.Name} ({e.Channel.Id})");
+        Log.Debug(LogSource, $"Received from {e.Author.Username} in #{e.Channel.Name}: {e.Message.Content}");
 
         _plugin.Config.Stats.IncrementTotal();
 
-        _ = _commandHandler.ProcessDiscordCommand(message.Message.Content, message.Channel.Id);
-
-        bool handled = await _messageRouter.RouteExtraChatMessage(message.Message, message.Channel.Id);
-
-        if (!handled)
-        {
-            handled = await _messageRouter.RouteStandardMessage(message.Message, message.Channel.Id);
-
-            if (!handled)
-            {
-                handled = await _messageRouter.RouteTellMessage(message.Message, message.Channel.Id);
-            }
-
-            if (handled)
-            {
-                try { await message.Message.DeleteAsync(); } catch { }
-            }
-        }
-
-        if (message.Message.Content == "STOP BOT") await Stop();
-
-        if (message.Message.Content.StartsWith("Create Channel: "))
-            await message.Guild.CreateChannelAsync(message.Message.Content["Create Channel: ".Length..], ChannelType.Text, parent: message.Channel.Parent);
-
-        if (message.Message.Content.StartsWith("Create ForumChannel: "))
-        {
-            ulong forumChannelID = message.Channel.Parent.Id;
-            var forumChannel = (DiscordForumChannel)message.Guild.GetChannel(forumChannelID);
-            var forumPostBuilder = new ForumPostBuilder
-            {
-                Name = message.Message.Content["Create ForumChannel: ".Length..],
-                Message = new DiscordMessageBuilder().WithContent(" ")
-            };
-            await forumChannel.CreateForumPostAsync(forumPostBuilder);
-        }
+        if (OnMessageCreated != null)
+            await OnMessageCreated.Invoke(e);
     }
 
     public async Task SendMessage(DiscordChannel channel, Dalamud.Game.Text.SeStringHandling.SeString message, string senderName, string senderWorld, XivChatType chatType = XivChatType.None, string? correspondentName = null)
@@ -386,21 +343,20 @@ public class DiscordHandler : IDisposable
         });
     }
 
-    public async Task<ulong> SendWebhookMessage(ulong channelId, string content, string senderName, string senderWorld)
+    public Task<ulong> SendWebhookMessage(ulong channelId, string content, string senderName, string senderWorld)
     {
-        if (_client == null) return 0;
-        try
+        if (_client == null) return Task.FromResult(0UL);
+        var sanitizedContent = DiscordTextSanitizer.Sanitize(content);
+        if (string.IsNullOrWhiteSpace(sanitizedContent)) return Task.FromResult(0UL);
+
+        return QueuedSendAsync($"webhook send (channel {channelId})", "webhook", async () =>
         {
             var channel = await _client.GetChannelAsync(channelId);
-
-            var sanitizedContent = DiscordTextSanitizer.Sanitize(content);
-            if (string.IsNullOrWhiteSpace(sanitizedContent)) return 0;
 
             var avatarUrl = await _plugin.Lodestone.GetAvatarUrlAsync(senderName, senderWorld);
             if (!string.IsNullOrEmpty(avatarUrl) && !Uri.IsWellFormedUriString(avatarUrl, UriKind.Absolute)) avatarUrl = null;
 
             var username = $"{senderName}@{senderWorld}";
-
             var builder = new DiscordWebhookBuilder()
                 .WithUsername(username)
                 .WithContent(sanitizedContent);
@@ -408,18 +364,13 @@ public class DiscordHandler : IDisposable
             if (!string.IsNullOrEmpty(avatarUrl)) builder.WithAvatarUrl(avatarUrl);
 
             return await _webhooks.ExecuteWebhookAsync(channel, builder);
-        }
-        catch (Exception ex)
-        {
-            Logger.Error(ex, "Failed to send webhook message.");
-            return 0;
-        }
+        });
     }
 
-    public async Task<ulong> SendWebhookMessage(ulong channelId, DiscordEmbed embed, string senderName, string senderWorld)
+    public Task<ulong> SendWebhookMessage(ulong channelId, DiscordEmbed embed, string senderName, string senderWorld)
     {
-        if (_client == null) return 0;
-        try
+        if (_client == null) return Task.FromResult(0UL);
+        return QueuedSendAsync($"webhook embed (channel {channelId})", "webhook", async () =>
         {
             var channel = await _client.GetChannelAsync(channelId);
             var avatarUrl = await _plugin.Lodestone.GetAvatarUrlAsync(senderName, senderWorld);
@@ -431,18 +382,13 @@ public class DiscordHandler : IDisposable
                 .AddEmbed(embed);
 
             return await _webhooks.ExecuteWebhookAsync(channel, builder);
-        }
-        catch (Exception ex)
-        {
-            Logger.Error(ex, "Failed to send webhook embed.");
-            return 0;
-        }
+        });
     }
 
-    public async Task<ulong> SendWebhookMessageRaw(ulong channelId, DiscordEmbed embed, string username, string? avatarUrl)
+    public Task<ulong> SendWebhookMessageRaw(ulong channelId, DiscordEmbed embed, string username, string? avatarUrl)
     {
-        if (_client == null) return 0;
-        try
+        if (_client == null) return Task.FromResult(0UL);
+        return QueuedSendAsync($"webhook embed raw (channel {channelId})", "webhook", async () =>
         {
             var channel = await _client.GetChannelAsync(channelId);
 
@@ -454,32 +400,23 @@ public class DiscordHandler : IDisposable
                 builder.WithAvatarUrl(avatarUrl);
 
             return await _webhooks.ExecuteWebhookAsync(channel, builder);
-        }
-        catch (Exception ex)
-        {
-            Logger.Error(ex, "Failed to send raw webhook embed.");
-            return 0;
-        }
+        });
     }
 
-    public async Task EditWebhookMessage(ulong channelId, ulong messageId, DiscordEmbed embed)
+    public Task EditWebhookMessage(ulong channelId, ulong messageId, DiscordEmbed embed)
     {
-        if (_client == null) return;
-        try
+        if (_client == null) return Task.CompletedTask;
+        return QueuedSendAsync($"webhook edit (channel {channelId} msg {messageId})", "webhook", async () =>
         {
             var channel = await _client.GetChannelAsync(channelId);
             await _webhooks.EditWebhookMessageAsync(channel, messageId, new DiscordWebhookBuilder().AddEmbed(embed));
-        }
-        catch (Exception ex)
-        {
-            Logger.Error(ex, "Failed to edit webhook message.");
-        }
+        });
     }
 
-    public async Task AddReaction(ulong channelId, ulong messageId, DiscordEmoji emoji)
+    public Task AddReaction(ulong channelId, ulong messageId, DiscordEmoji emoji)
     {
-        if (_client == null) return;
-        await Helpers.RetryHelper.WithRetryAsync(async () =>
+        if (_client == null) return Task.CompletedTask;
+        return QueuedSendAsync($"add reaction {emoji.Name} on {messageId}", "reaction", async () =>
         {
             var channel = await _client.GetChannelAsync(channelId);
             var msg = await channel.GetMessageAsync(messageId);
@@ -487,15 +424,40 @@ public class DiscordHandler : IDisposable
         });
     }
 
-    public async Task RemoveReaction(ulong channelId, ulong messageId, DiscordEmoji emoji)
+    public Task RemoveReaction(ulong channelId, ulong messageId, DiscordEmoji emoji)
     {
-        if (_client == null) return;
-        await Helpers.RetryHelper.WithRetryAsync(async () =>
+        if (_client == null) return Task.CompletedTask;
+        return QueuedSendAsync($"remove reaction {emoji.Name} on {messageId}", "reaction", async () =>
         {
             var channel = await _client.GetChannelAsync(channelId);
             var msg = await channel.GetMessageAsync(messageId);
             await msg.DeleteOwnReactionAsync(emoji);
         });
+    }
+
+    private async Task<ulong> QueuedSendAsync(string description, string category, Func<Task<ulong>> action)
+    {
+        try
+        {
+            return await _plugin.DiscordSendQueue.RunAsync(description, category, action);
+        }
+        catch (Exception ex)
+        {
+            Logger.Error(ex, $"[DiscordHandler] {description} ultimately failed");
+            return 0;
+        }
+    }
+
+    private async Task QueuedSendAsync(string description, string category, Func<Task> action)
+    {
+        try
+        {
+            await _plugin.DiscordSendQueue.RunAsync(description, category, action);
+        }
+        catch (Exception ex)
+        {
+            Logger.Error(ex, $"[DiscordHandler] {description} ultimately failed");
+        }
     }
 
     public async Task Stop()
@@ -531,35 +493,10 @@ public class DiscordHandler : IDisposable
         _client.Dispose();
         _client = null;
         _webhooks.ClearCache();
-        _messageBuffer.Clear();
-        _penaltyBox.Clear();
         _processedMessages.Clear();
         Logger.Info("Discord client disconnected.");
         _plugin.Config.Discord.BotStarted = false;
         _plugin.Config.Save();
-    }
-
-    public async Task ProcessDiscordCommand(string content, ulong channelId)
-    {
-        await _commandHandler.ProcessDiscordCommand(content, channelId);
-    }
-
-    private async Task HandleTargetCommand(string name, string world, ulong channelId)
-    {
-        await _commandHandler.ProcessDiscordCommand($"{_plugin.Config.Discord.CommandPrefix}target {name} {world}", channelId);
-    }
-
-    private async Task HandleEmoteCommand(string emoteName, string name, string world, ulong channelId)
-    {
-        await _commandHandler.ProcessDiscordCommand($"{_plugin.Config.Discord.CommandPrefix}emote {emoteName} {name} {world}", channelId);
-    }
-
-    private (string? name, string? world) ParsePlayerSpec(string spec)
-        => _commandHandler.ParsePlayerSpec(spec);
-
-    private async Task SendCommandFeedback(ulong channelId, string message)
-    {
-        await _commandHandler.ProcessDiscordCommand($"feedback:{message}", channelId);
     }
 
     public void Dispose()

@@ -838,8 +838,8 @@ public class DebugTab : ConfigTabBase
                 {
                     if (tree5)
                     {
-                        var cache = plugin.Lodestone.AvatarCache;
-                        ImGui.TextUnformatted("Cached Entries: "); ImGui.SameLine(0, 0); ImGui.TextUnformatted(cache.Count.ToString());
+                        var keys = plugin.Lodestone.AvatarCacheKeys;
+                        ImGui.TextUnformatted("Cached Entries: "); ImGui.SameLine(0, 0); ImGui.TextUnformatted(keys.Count.ToString());
 
                         theme.SpacerY(1f);
 
@@ -893,7 +893,7 @@ public class DebugTab : ConfigTabBase
 
                         theme.SpacerY(1f);
 
-                        if (cache.Count > 0)
+                        if (keys.Count > 0)
                         {
                             using (var table = ImRaii.Table("##dbgRunAvatarTable", 3, ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.SizingStretchProp))
                             if (table)
@@ -904,15 +904,13 @@ public class DebugTab : ConfigTabBase
                                 ImGui.TableHeadersRow();
 
 
-                                var keys = cache.Keys.ToList();
-
-                                foreach (var key in keys)
+                                foreach (var key in keys.ToList())
                                 {
                                     ImGui.TableNextRow();
                                     ImGui.TableNextColumn();
                                     ImGui.Text(key);
                                     ImGui.TableNextColumn();
-                                    if (cache.TryGetValue(key, out var url))
+                                    if (plugin.Lodestone.TryGetAvatar(key, out var url))
                                     {
                                         using (ImRaii.PushColor(ImGuiCol.Text, theme.SliderGrab))
                                         {
@@ -1068,18 +1066,19 @@ public class DebugTab : ConfigTabBase
                             ImGui.TableSetupColumn("Emoted Back?");
                             ImGui.TableHeadersRow();
 
-                            foreach (var kvp in cache)
+                            foreach (var key in cache.Keys.ToList())
                             {
+                                if (!cache.TryGet(key, out var value)) continue;
                                 ImGui.TableNextRow();
                                 ImGui.TableNextColumn();
-                                ImGui.Text(kvp.Key.ToString());
+                                ImGui.Text(key.ToString());
                                 ImGui.TableNextColumn();
-                                ImGui.TextUnformatted(kvp.Value.User); ImGui.SameLine(0, 0); ImGui.TextUnformatted("@"); ImGui.SameLine(0, 0); ImGui.TextUnformatted(kvp.Value.World);
+                                ImGui.TextUnformatted(value.User); ImGui.SameLine(0, 0); ImGui.TextUnformatted("@"); ImGui.SameLine(0, 0); ImGui.TextUnformatted(value.World);
                                 ImGui.TableNextColumn();
-                                ImGui.Text(kvp.Value.EmoteName);
+                                ImGui.Text(value.EmoteName);
                                 ImGui.TableNextColumn();
-                                ImGui.Text(kvp.Value.EmotedBack ? "YES" : "NO");
-                                if (kvp.Value.EmotedBack) ImGui.TextColored(UiTheme.ColorSuccessText, "Done");
+                                ImGui.Text(value.EmotedBack ? "YES" : "NO");
+                                if (value.EmotedBack) ImGui.TextColored(UiTheme.ColorSuccessText, "Done");
                             }
                         }
                     }

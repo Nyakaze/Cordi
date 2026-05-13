@@ -32,6 +32,13 @@ using Microsoft.Extensions.DependencyInjection;
 using ECommons;
 
 using Cordi.Configuration;
+using Cordi.Core.Caching;
+using Cordi.Core.Scheduling;
+using Cordi.Domain;
+using Cordi.Services.Discord.Dispatch;
+using Cordi.Services.Discord.Queue;
+using Cordi.Services.Observations;
+using Cordi.Services.Storage;
 using Cordi.UI.Windows;
 using Newtonsoft.Json;
 
@@ -65,6 +72,15 @@ public class CordiPlugin : IDalamudPlugin
     private readonly ChatRouter _router;
     public NotificationManager NotificationManager { get; private set; }
     public CordiLogService LogService { get; private set; }
+    public ICacheRegistry CacheRegistry { get; private set; } = null!;
+    public LocalPlayerProvider LocalPlayer { get; private set; } = null!;
+    public PlayerTrackingService PlayerTracker { get; private set; } = null!;
+    public PlayerObservationDispatcher PlayerObservations { get; private set; } = null!;
+    public NearbyPlayerScanner NearbyScanner { get; private set; } = null!;
+    public DiscordEventDispatcher DiscordDispatcher { get; private set; } = null!;
+    public DiscordSendQueue DiscordSendQueue { get; private set; } = null!;
+    public FrameworkScheduler FrameworkScheduler { get; private set; } = null!;
+    private IPlayerTrackingStorage _playerTrackingStorage = null!;
     public bool IsLogsTabVisible
     {
         get => Config?.LogsTabVisible ?? false;
@@ -110,6 +126,16 @@ public class CordiPlugin : IDalamudPlugin
         InitializeConfig();
 
         LogService = new CordiLogService();
+        CacheRegistry = new CacheRegistry();
+        LocalPlayer = new LocalPlayerProvider();
+
+        var trackerDbPath = Path.Combine(PluginInterface.ConfigDirectory.FullName, "tracked-players.db");
+        _playerTrackingStorage = new LitePlayerTrackingStorage(trackerDbPath);
+        PlayerTracker = new PlayerTrackingService(this, _playerTrackingStorage, CacheRegistry);
+        PlayerTracker.MigrateFromRememberedPlayers(Config.RememberMe.RememberedPlayers);
+
+        PlayerObservations = new PlayerObservationDispatcher(this);
+        NearbyScanner = new NearbyPlayerScanner(this);
 
         PluginInterface.UiBuilder.OpenConfigUi += ToggleConfigUI;
         PluginInterface.UiBuilder.OpenMainUi += ToggleConfigUI;
@@ -132,7 +158,16 @@ public class CordiPlugin : IDalamudPlugin
         HonorificBridge = new HonorificBridge(PluginInterface);
         PartyService = new PartyService(this, NotificationManager);
         RememberMe = new RememberMeService(this);
-        ActivityManager = new ActivityManager(this, Discord, HonorificBridge);
+        ActivityManager = new ActivityManager(this, HonorificBridge);
+
+        DiscordDispatcher = new DiscordEventDispatcher(this);
+        DiscordDispatcher.Bind();
+
+        DiscordSendQueue = new DiscordSendQueue(this);
+        DiscordSendQueue.Start();
+
+        FrameworkScheduler = new FrameworkScheduler(this);
+        FrameworkScheduler.Bind();
 
         configWindow = new ConfigWindow(this);
         discordWindow = new DiscordWindow(this);
@@ -181,7 +216,6 @@ public class CordiPlugin : IDalamudPlugin
         });
 
         Service.Chat.ChatMessage += ChatOnChatMessage;
-        Service.Framework.Update += OnFrameworkUpdate;
         Service.ClientState.Login += OnLoginEvent;
         Service.ClientState.Logout += OnLogoutEvent;
 
@@ -258,6 +292,51 @@ public class CordiPlugin : IDalamudPlugin
         configWindow.Toggle();
     }
 
+    [Command("/cordicache")]
+    [HelpMessage("Shows cache statistics for Cordi")]
+    public void CacheStatsCommand(string command, string args)
+    {
+        var stats = CacheRegistry.All;
+        if (stats.Count == 0)
+        {
+            Service.Chat.Print("[Cordi] No caches registered.");
+            return;
+        }
+
+        Service.Chat.Print($"[Cordi] {stats.Count} cache(s):");
+        foreach (var c in stats.OrderBy(c => c.Name))
+        {
+            long total = c.Hits + c.Misses;
+            double hitRate = total == 0 ? 0 : (c.Hits * 100.0 / total);
+            var age = DateTime.UtcNow - c.CreatedAt;
+            Service.Chat.Print($"  {c.Name}: {c.Count}/{c.Capacity} | {hitRate:F1}% hit ({c.Hits}/{total}) | age {FormatCacheAge(age)}");
+        }
+    }
+
+    private static string FormatCacheAge(TimeSpan t)
+    {
+        if (t.TotalMinutes < 1) return $"{(int)t.TotalSeconds}s";
+        if (t.TotalHours < 1) return $"{(int)t.TotalMinutes}m";
+        if (t.TotalDays < 1) return $"{(int)t.TotalHours}h {(int)(t.TotalMinutes % 60)}m";
+        return $"{(int)t.TotalDays}d {(int)(t.TotalHours % 24)}h";
+    }
+
+    [Command("/cordiqueue")]
+    [HelpMessage("Shows Discord/Game send queue statistics")]
+    public void QueueStatsCommand(string command, string args)
+    {
+        var dq = DiscordSendQueue;
+        Service.Chat.Print($"[Cordi] Discord outbound queue (cap {dq.Capacity}):");
+        Service.Chat.Print($"  pending: {dq.Pending} | sent: {dq.Sent} | retried: {dq.Retried} | failed: {dq.Failed} | dropped: {dq.Dropped}");
+
+        var cm = _chat;
+        if (cm != null)
+        {
+            Service.Chat.Print($"[Cordi] Game chat messenger (cap {cm.MaxPending}):");
+            Service.Chat.Print($"  pending: {cm.Pending} | sent: {cm.Sent} | failed: {cm.Failed} | dropped: {cm.Dropped}");
+        }
+    }
+
     public void ToggleConfigUI() => configWindow.Toggle();
 
     public void UpdateCommandVisibility()
@@ -315,7 +394,7 @@ public class CordiPlugin : IDalamudPlugin
         }
     }
 
-    private void OnFrameworkUpdate(IFramework framework)
+    public void OnFrameworkUpdate(IFramework framework)
     {
         cachedLocalPlayer = Service.ObjectTable.LocalPlayer;
 
@@ -398,13 +477,19 @@ public class CordiPlugin : IDalamudPlugin
         this.Tomestone?.Dispose();
         this.PartyService?.Dispose();
         this.RememberMe?.Dispose();
+        this.FrameworkScheduler?.Dispose();
+        this.NearbyScanner?.Dispose();
+        this.DiscordDispatcher?.Dispose();
+        this.DiscordSendQueue?.Dispose();
+        this.LocalPlayer?.Dispose();
+        this.PlayerTracker?.Dispose();
+        this._playerTrackingStorage?.Dispose();
 
         Service.PluginInterface.UiBuilder.OpenConfigUi -= this.ToggleConfigUI;
         Service.PluginInterface.UiBuilder.OpenMainUi -= this.ToggleConfigUI;
 
         // Unregister framework/chat event handlers
         Service.Chat.ChatMessage -= ChatOnChatMessage;
-        Service.Framework.Update -= OnFrameworkUpdate;
         Service.ClientState.Login -= OnLoginEvent;
         Service.ClientState.Logout -= OnLogoutEvent;
 

@@ -4,6 +4,9 @@ using System.Threading.Tasks;
 using Cordi.Packets.Attributes;
 using Cordi.Services.Discord;
 using Cordi.Core;
+using Cordi.Domain;
+using Cordi.Domain.Observations;
+using Cordi.Domain.Tracking;
 using Dalamud.Game.Text;
 using Dalamud.Game.Text.SeStringHandling;
 using Dalamud.Game.Text.SeStringHandling.Payloads;
@@ -45,7 +48,17 @@ public class TellIncommingPacketHandler : IChatHandler
 
         if (playerLink != null && !string.IsNullOrEmpty(correspondent))
         {
-            await discord.SendMessage(null, msg.Message, playerLink.PlayerName, playerLink.World.Value.Name.ExtractText(), ChatType, correspondent);
+            var senderName = playerLink.PlayerName ?? string.Empty;
+            var senderWorld = playerLink.World.Value.Name.ExtractText();
+
+            _ = CordiPlugin.Plugin.PlayerObservations.FireAsync(new PlayerObservation(
+                Player.FromNameWorld(senderName, senderWorld),
+                new ObservationContext(
+                    Source: ObservationSource.Tell,
+                    TerritoryId: (uint)Service.ClientState.TerritoryType,
+                    At: System.DateTime.UtcNow)));
+
+            await discord.SendMessage(null, msg.Message, senderName, senderWorld, ChatType, correspondent);
 
             var now = System.DateTime.UtcNow;
             bool shouldNotify = false;
@@ -70,7 +83,7 @@ public class TellIncommingPacketHandler : IChatHandler
 
                 string notifMsg = $"U got a Tell from {correspondent} {link}";
                 Logger.Info($"Sending Tell Notification to {notifChannelId}: {notifMsg} | correspondent: {correspondent} | link: {link}");
-                _ = discord.SendWebhookMessage(notifChannelId, notifMsg, playerLink.PlayerName, playerLink.World.Value.Name.ExtractText());
+                _ = discord.SendWebhookMessage(notifChannelId, notifMsg, senderName, senderWorld);
             }
         }
 

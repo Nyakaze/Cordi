@@ -3,6 +3,7 @@ using System.Collections.Concurrent;
 using System.Linq;
 using System.Threading.Tasks;
 using Cordi.Core;
+using Cordi.Core.Caching;
 using Cordi.Services.Discord;
 using Dalamud.Plugin.Services;
 using DSharpPlus;
@@ -17,13 +18,13 @@ public class EmoteDiscordNotifier
     private readonly IPluginLog _logger;
     private readonly EmoteBackAction _emoteBackAction;
 
-    private readonly ConcurrentDictionary<ulong, EmoteLogService.DiscordEmoteState> _messageIdCache;
+    private readonly Cache<ulong, EmoteLogService.DiscordEmoteState> _messageIdCache;
     private readonly ConcurrentDictionary<string, EmoteLogService.DiscordEmoteState> _activeDiscordEmotes;
     private readonly TimeSpan _spamThreshold;
 
     public EmoteDiscordNotifier(
         CordiPlugin plugin,
-        ConcurrentDictionary<ulong, EmoteLogService.DiscordEmoteState> messageIdCache,
+        Cache<ulong, EmoteLogService.DiscordEmoteState> messageIdCache,
         ConcurrentDictionary<string, EmoteLogService.DiscordEmoteState> activeDiscordEmotes,
         TimeSpan spamThreshold,
         EmoteBackAction emoteBackAction)
@@ -107,14 +108,7 @@ public class EmoteDiscordNotifier
 
                 if (state.MessageId != 0)
                 {
-                    _messageIdCache[state.MessageId] = state;
-
-                    if (_messageIdCache.Count > 100)
-                    {
-                        var oldest = _messageIdCache.Keys.OrderBy(x => x).Take(10);
-                        foreach (var cacheKey in oldest) _messageIdCache.TryRemove(cacheKey, out _);
-                    }
-
+                    _messageIdCache.Set(state.MessageId, state);
                     await _plugin.Discord.AddReaction(channelId, state.MessageId, DiscordEmoji.FromUnicode("🔙"));
                 }
             }
@@ -130,7 +124,7 @@ public class EmoteDiscordNotifier
         if (e.User.IsBot) return;
         if (e.Emoji.Name != "🔙") return;
 
-        if (!_messageIdCache.TryGetValue(e.Message.Id, out var state))
+        if (!_messageIdCache.TryGet(e.Message.Id, out var state))
         {
             state = _activeDiscordEmotes.Values.FirstOrDefault(x => x.MessageId == e.Message.Id);
         }

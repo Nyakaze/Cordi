@@ -33,41 +33,6 @@ public class GeneralTab : ConfigTabBase
     public override void Draw()
     {
         theme.SpacerY(2f);
-        bool enabled = true;
-
-        theme.DrawPluginCardAuto(
-            id: "dsc-commands",
-            enabled: ref enabled,
-            showCheckbox: false,
-            title: "Discord Commands",
-            drawContent: (avail) =>
-            {
-                ImGui.TextColored(UiTheme.ColorDangerText, "WARNING: This feature is experimental!");
-                bool allowCommands = plugin.Config.Discord.AllowDiscordCommands;
-                if (ImGui.Checkbox("Enable Discord Commands", ref allowCommands))
-                {
-                    plugin.Config.Discord.AllowDiscordCommands = allowCommands;
-                    plugin.Config.Save();
-                }
-                theme.HoverHandIfItem();
-                if (plugin.Config.Discord.AllowDiscordCommands)
-                {
-                    using (ImRaii.PushIndent())
-                    {
-                        string prefix = plugin.Config.Discord.CommandPrefix;
-                        if (ImGui.InputText("Command Prefix", ref prefix, 10))
-                        {
-                            plugin.Config.Discord.CommandPrefix = prefix;
-                            plugin.Config.Save();
-                        }
-
-                        ImGui.TextWrapped("Available commands:");
-                        ImGui.BulletText("!target PlayerName World - Target a player");
-                        ImGui.BulletText("!emote emotename PlayerName World - Emote at a player");
-                    }
-                }
-            }
-        );
 
         theme.SpacerY(2f);
         ImGui.Separator();

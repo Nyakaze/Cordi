@@ -57,29 +57,25 @@ public class DiscordMessageRouter
         return false;
     }
 
-    public Task<bool> RouteStandardMessage(DiscordMessage message, ulong channelId)
+    public async Task<bool> RouteStandardMessage(DiscordMessage message, ulong channelId)
     {
         var mapping = _plugin.Config.Chat.Mappings.FirstOrDefault(m => m.DiscordChannelId == channelId.ToString());
-        if (mapping != null)
-        {
-            _ = _plugin._chat.SendAsync(mapping.GameChatType, message.Content);
-            Logger.Info($"Forwarding message: {message.Content} to {mapping.GameChatType}");
-            return Task.FromResult(true);
-        }
+        if (mapping == null) return false;
 
-        return Task.FromResult(false);
+        _ = _plugin._chat.SendAsync(mapping.GameChatType, message.Content);
+        Logger.Info($"Forwarding message: {message.Content} to {mapping.GameChatType}");
+        try { await message.DeleteAsync(); } catch { }
+        return true;
     }
 
-    public Task<bool> RouteTellMessage(DiscordMessage message, ulong channelId)
+    public async Task<bool> RouteTellMessage(DiscordMessage message, ulong channelId)
     {
         var tellTarget = _plugin.Config.Chat.TellThreadMappings.FirstOrDefault(x => x.Value == channelId.ToString()).Key;
-        if (!string.IsNullOrEmpty(tellTarget))
-        {
-            _ = _plugin._chat.SendTellAsync(tellTarget, message.Content);
-            Logger.Info($"Forwarding Tell reply: {message.Content} to {tellTarget}");
-            return Task.FromResult(true);
-        }
+        if (string.IsNullOrEmpty(tellTarget)) return false;
 
-        return Task.FromResult(false);
+        _ = _plugin._chat.SendTellAsync(tellTarget, message.Content);
+        Logger.Info($"Forwarding Tell reply: {message.Content} to {tellTarget}");
+        try { await message.DeleteAsync(); } catch { }
+        return true;
     }
 }

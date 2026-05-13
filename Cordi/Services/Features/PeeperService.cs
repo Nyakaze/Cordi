@@ -17,6 +17,9 @@ using Lumina.Excel.Sheets;
 using Dalamud.Bindings.ImGui;
 using Cordi.Core;
 using Cordi.Configuration;
+using Cordi.Domain;
+using Cordi.Domain.Observations;
+using Cordi.Domain.Tracking;
 using Cordi.Extensions;
 using FFXIVClientStructs.FFXIV.Client.Game.Control;
 
@@ -27,7 +30,7 @@ public class CordiPeepService : IDisposable
     private readonly CordiPlugin plugin;
     public readonly ConcurrentDictionary<ulong, PeeperState> ActivePeepers = new();
     public readonly List<PeeperState> History = new();
-    private readonly ConcurrentDictionary<ulong, PeeperState> _messageIdCache = new();
+    private readonly Cordi.Core.Caching.Cache<ulong, PeeperState> _messageIdCache;
     private readonly TimeSpan _minAlertInterval = TimeSpan.FromSeconds(5);
     private readonly List<PeeperState> _simulatedPeepers = new();
 
@@ -82,23 +85,19 @@ public class CordiPeepService : IDisposable
     public CordiPeepService(CordiPlugin plugin)
     {
         this.plugin = plugin;
-        Service.Framework.Update += OnFrameworkUpdate;
+        _messageIdCache = new Cordi.Core.Caching.Cache<ulong, PeeperState>(
+            "peeper.messages", plugin.CacheRegistry,
+            maxSize: 100, ttl: TimeSpan.FromHours(2));
         Service.PluginInterface.UiBuilder.Draw += DrawTargetingDots;
-
-        if (plugin.Discord != null)
-            plugin.Discord.OnReactionAdded += OnDiscordReactionAdded;
     }
 
 
     private readonly HashSet<ulong> currentPeepers = new();
 
-    private DateTime _lastUpdate = DateTime.MinValue;
+    public const double TickIntervalSeconds = 0.25;
 
-    private void OnFrameworkUpdate(IFramework framework)
+    public void OnFrameworkUpdate(IFramework framework)
     {
-        if ((DateTime.Now - _lastUpdate).TotalMilliseconds < 250) return;
-        _lastUpdate = DateTime.Now;
-
         if (!plugin.Config.CordiPeep.Enabled) return;
 
         if (plugin.CordiPeepWindow == null) return;
@@ -233,6 +232,14 @@ public class CordiPeepService : IDisposable
         else
         {
             UpdatePeeperState(id, player.Name.ToString(), player.HomeWorld.Value.Name.ToString());
+
+            _ = plugin.PlayerObservations.FireAsync(new PlayerObservation(
+                Player.FromGameObject(player),
+                new ObservationContext(
+                    Source: ObservationSource.Peeper,
+                    TerritoryId: (uint)Service.ClientState.TerritoryType,
+                    Position: player.Position,
+                    At: DateTime.UtcNow)));
         }
     }
 
@@ -337,19 +344,13 @@ public class CordiPeepService : IDisposable
                 state.DiscordMessageId = await plugin.Discord.SendWebhookMessage(channelId, embed, state.Name, state.World);
                 if (state.DiscordMessageId != 0)
                 {
-                    _messageIdCache[state.DiscordMessageId] = state;
+                    _messageIdCache.Set(state.DiscordMessageId, state);
                     configChanged = true;
                 }
             }
             else
             {
-                _messageIdCache[state.DiscordMessageId] = state;
-
-                if (_messageIdCache.Count > 100)
-                {
-                    var oldest = _messageIdCache.Keys.OrderBy(x => x).Take(10);
-                    foreach (var key in oldest) _messageIdCache.TryRemove(key, out _);
-                }
+                _messageIdCache.Set(state.DiscordMessageId, state);
             }
 
             if (state.DiscordMessageId != 0)
@@ -453,7 +454,7 @@ public class CordiPeepService : IDisposable
         catch (Exception ex) { Service.Log.Error(ex, "Failed to initiate sound playback"); }
     }
 
-    private Task OnDiscordReactionAdded(MessageReactionAddEventArgs e)
+    public Task OnDiscordReactionAdded(MessageReactionAddEventArgs e)
     {
         if (e.User.IsBot) return Task.CompletedTask;
 
@@ -472,7 +473,7 @@ public class CordiPeepService : IDisposable
         Service.Log.Info($"[CordiPeep] \ud83d\udc40 Processing reaction target for MsgID {e.Message.Id}...");
 
         PeeperState peeper = null;
-        if (_messageIdCache.TryGetValue(e.Message.Id, out var cachedPeeper))
+        if (_messageIdCache.TryGet(e.Message.Id, out var cachedPeeper))
         {
             peeper = cachedPeeper;
         }
@@ -653,9 +654,6 @@ public class CordiPeepService : IDisposable
             plugin.Config.Save();
         }
         Service.PluginInterface.UiBuilder.Draw -= DrawTargetingDots;
-        Service.Framework.Update -= OnFrameworkUpdate;
-        if (plugin.Discord != null)
-            plugin.Discord.OnReactionAdded -= OnDiscordReactionAdded;
     }
 
 }

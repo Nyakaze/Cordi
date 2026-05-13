@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Concurrent;
 using System.Linq;
 using System.Threading.Tasks;
 using Cordi.Helpers;
@@ -8,6 +7,7 @@ using Dalamud.Plugin.Services;
 using DSharpPlus;
 using DSharpPlus.Entities;
 using Cordi.Core;
+using Cordi.Core.Caching;
 using Cordi.Configuration;
 
 namespace Cordi.Services.Discord;
@@ -15,12 +15,15 @@ namespace Cordi.Services.Discord;
 public class DiscordWebhookService
 {
     private static readonly IPluginLog Logger = Service.Log;
-    private readonly ConcurrentDictionary<ulong, DiscordWebhook> _webhookCache = new();
+    private readonly Cache<ulong, DiscordWebhook> _webhookCache;
     private readonly CordiPlugin _plugin;
 
     public DiscordWebhookService(CordiPlugin plugin)
     {
         _plugin = plugin;
+        _webhookCache = new Cache<ulong, DiscordWebhook>(
+            "webhook.byChannel", plugin.CacheRegistry,
+            maxSize: 100, ttl: TimeSpan.FromHours(2));
     }
 
     public async Task<DiscordWebhook> GetWebhookAsync(DiscordChannel channel)
@@ -50,7 +53,7 @@ public class DiscordWebhookService
             }
         }
 
-        if (_webhookCache.TryGetValue(channel.Id, out var cachedWebhook))
+        if (_webhookCache.TryGet(channel.Id, out var cachedWebhook))
         {
             return cachedWebhook;
         }
@@ -65,7 +68,7 @@ public class DiscordWebhookService
                 Logger.Info($"Created webhook 'Cordi Hook' in channel {channel.Name}");
             }
 
-            _webhookCache.TryAdd(channel.Id, webhook);
+            _webhookCache.Set(channel.Id, webhook);
             return webhook;
         }
         catch (Exception ex)

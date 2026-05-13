@@ -38,6 +38,7 @@ public class EmoteLogService : IDisposable
     private readonly IPluginLog _logger;
     private readonly EmoteBackAction _emoteBackAction;
     private readonly EmoteDiscordNotifier _discordNotifier;
+    public EmoteDiscordNotifier DiscordNotifier => _discordNotifier;
 
     private readonly List<EmoteLogEntry> _logs = new();
     public IReadOnlyList<EmoteLogEntry> Logs => _logs;
@@ -60,8 +61,8 @@ public class EmoteLogService : IDisposable
         public bool EmotedBack;
     }
 
-    private readonly ConcurrentDictionary<ulong, DiscordEmoteState> _messageIdCache = new();
-    public ConcurrentDictionary<ulong, DiscordEmoteState> MessageIdCache => _messageIdCache;
+    private readonly Cordi.Core.Caching.Cache<ulong, DiscordEmoteState> _messageIdCache;
+    public Cordi.Core.Caching.Cache<ulong, DiscordEmoteState> MessageIdCache => _messageIdCache;
 
     private readonly ConcurrentDictionary<string, DiscordEmoteState> _activeDiscordEmotes = new();
     public ConcurrentDictionary<string, DiscordEmoteState> ActiveDiscordEmotes => _activeDiscordEmotes;
@@ -75,6 +76,9 @@ public class EmoteLogService : IDisposable
         _plugin = plugin;
         _logger = Service.Log;
         _emoteBackAction = new EmoteBackAction(plugin);
+        _messageIdCache = new Cordi.Core.Caching.Cache<ulong, DiscordEmoteState>(
+            "emote.messages", plugin.CacheRegistry,
+            maxSize: 100, ttl: TimeSpan.FromHours(2));
         _discordNotifier = new EmoteDiscordNotifier(plugin, _messageIdCache, _activeDiscordEmotes, _spamThreshold, _emoteBackAction);
 
 
@@ -84,10 +88,6 @@ public class EmoteLogService : IDisposable
 
     public void Initialize()
     {
-        if (_plugin.Discord != null)
-        {
-            _plugin.Discord.OnReactionAdded += _discordNotifier.OnDiscordReactionAdded;
-        }
     }
 
     private void OnEmoteDetour(ulong unk, ulong instigatorAddr, ushort emoteId, ulong targetId, ulong unk2)
@@ -244,9 +244,5 @@ public class EmoteLogService : IDisposable
     public void Dispose()
     {
         _hookEmote?.Dispose();
-        if (_plugin.Discord != null)
-        {
-            _plugin.Discord.OnReactionAdded -= _discordNotifier.OnDiscordReactionAdded;
-        }
     }
 }

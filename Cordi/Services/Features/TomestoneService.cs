@@ -1,10 +1,10 @@
 using System;
-using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net.Http;
 using System.Text.Json;
 using System.Threading.Tasks;
+using Cordi.Core.Caching;
 using Dalamud.Plugin.Services;
 using Lumina.Excel.Sheets;
 using Cordi.Core;
@@ -28,9 +28,9 @@ public class TomestoneService : IDisposable
     private static readonly IPluginLog Logger = Service.Log;
     private readonly CordiPlugin _plugin;
     private readonly HttpClient _httpClient;
-    private readonly ConcurrentDictionary<string, GearInfo> _gearLevelCache = new();
-    private readonly ConcurrentDictionary<string, string> _lodestoneIdCache = new();
-    private readonly ConcurrentDictionary<string, RaidActivity> _raidActivityCache = new();
+    private readonly Cache<string, GearInfo> _gearLevelCache;
+    private readonly Cache<string, string> _lodestoneIdCache;
+    private readonly Cache<string, RaidActivity> _raidActivityCache;
 
     // Mapping from FFXIV class/job abbreviations to Tomestone API format
     private static readonly Dictionary<string, string> ClassJobMapping = new(StringComparer.OrdinalIgnoreCase)
@@ -67,11 +67,19 @@ public class TomestoneService : IDisposable
     public TomestoneService(CordiPlugin plugin)
     {
         _plugin = plugin;
+        _gearLevelCache = new Cache<string, GearInfo>("tomestone.gearLevels", plugin.CacheRegistry,
+            maxSize: 200, ttl: TimeSpan.FromHours(1));
+        _lodestoneIdCache = new Cache<string, string>("tomestone.lodestoneIds", plugin.CacheRegistry,
+            maxSize: 500, ttl: TimeSpan.FromDays(1));
+        _raidActivityCache = new Cache<string, RaidActivity>("tomestone.raidActivity", plugin.CacheRegistry,
+            maxSize: 200, ttl: TimeSpan.FromHours(2));
         _httpClient = new HttpClient
         {
             Timeout = TimeSpan.FromSeconds(10)
         };
-        _httpClient.DefaultRequestHeaders.Add("User-Agent", "Cordi-FFXIV-Plugin/1.0");
+        _httpClient.DefaultRequestHeaders.Add("User-Agent",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36");
+        _httpClient.DefaultRequestHeaders.Add("Accept", "application/json, text/plain, */*");
     }
 
     public Task InitializeAsync()
@@ -86,7 +94,7 @@ public class TomestoneService : IDisposable
     {
         var key = $"{name}@{world}";
 
-        if (_gearLevelCache.TryGetValue(key, out var cachedLevel))
+        if (_gearLevelCache.TryGet(key, out var cachedLevel))
         {
             return cachedLevel;
         }
@@ -97,7 +105,7 @@ public class TomestoneService : IDisposable
             var gearInfo = await GetItemLevelFromTomestoneAsync(name, world, classJob);
             if (gearInfo.ItemLevel > 0)
             {
-                _gearLevelCache[key] = gearInfo;
+                _gearLevelCache.Set(key, gearInfo);
                 Logger.Info($"[Tomestone] Got gear level from JSON API for {name}@{world}: {gearInfo.ItemLevel}");
                 return gearInfo;
             }
@@ -108,7 +116,7 @@ public class TomestoneService : IDisposable
             if (lodestoneLevel > 0)
             {
                 var lodestoneGearInfo = new GearInfo(lodestoneLevel);
-                _gearLevelCache[key] = lodestoneGearInfo;
+                _gearLevelCache.Set(key, lodestoneGearInfo);
                 Logger.Debug($"Got gear level from Lodestone for {name}@{world}: {lodestoneLevel}");
                 return lodestoneGearInfo;
             }
@@ -126,7 +134,7 @@ public class TomestoneService : IDisposable
         var key = $"{name}@{world}";
 
         // Try to get cached Lodestone ID first
-        if (!_lodestoneIdCache.TryGetValue(key, out var lodestoneId))
+        if (!_lodestoneIdCache.TryGet(key, out var lodestoneId))
         {
             // Get Lodestone ID from LodestoneService
             lodestoneId = await _plugin.Lodestone.GetLodestoneIdAsync(name, world);
@@ -138,7 +146,7 @@ public class TomestoneService : IDisposable
             }
 
             // Cache the ID
-            _lodestoneIdCache[key] = lodestoneId;
+            _lodestoneIdCache.Set(key, lodestoneId);
         }
 
         // Create character slug (lowercase name with spaces->hyphens, no apostrophes)
@@ -252,7 +260,7 @@ public class TomestoneService : IDisposable
         var zone = "aac-heavyweight-savage";
 
         // Check cache first
-        if (_raidActivityCache.TryGetValue(key, out var cachedActivity))
+        if (_raidActivityCache.TryGet(key, out var cachedActivity))
         {
             Logger.Debug($"[Tomestone] Using cached raid activity for {name}@{world}");
             return cachedActivity;
@@ -290,7 +298,26 @@ public class TomestoneService : IDisposable
                 }
 
                 var json = await response.Content.ReadAsStringAsync();
-                using var document = JsonDocument.Parse(json);
+                JsonDocument document;
+                try
+                {
+                    document = JsonDocument.Parse(json);
+                }
+                catch (JsonException)
+                {
+                    var contentType = response.Content.Headers.ContentType?.MediaType;
+                    if (contentType == "text/html")
+                    {
+                        Logger.Debug($"[Tomestone] No raid activity tracked for {name}@{world} (HTML response, character likely not on tomestone.gg)");
+                    }
+                    else
+                    {
+                        var preview = json.Length > 500 ? json.Substring(0, 500) : json;
+                        Logger.Warning($"[Tomestone] Unexpected non-JSON response for {name}@{world} (page {currentPage}), Content-Type: {contentType}\nBody preview: {preview}");
+                    }
+                    break;
+                }
+                using var _doc = document;
                 var root = document.RootElement;
 
                 // Navigate to the data array: activities.activities.activities.paginator.data
@@ -369,7 +396,7 @@ public class TomestoneService : IDisposable
             var activity = new RaidActivity(raidEncounters);
 
             // Cache the result
-            _raidActivityCache[key] = activity;
+            _raidActivityCache.Set(key, activity);
 
             return activity;
         }

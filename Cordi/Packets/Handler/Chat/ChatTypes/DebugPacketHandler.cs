@@ -59,10 +59,10 @@ public class DebugPacketHandler : IChatHandler
                 if (string.IsNullOrEmpty(avatarUrl))
                 {
                     var lodestone = CordiPlugin.Plugin.Lodestone;
-                    var cachedKey = lodestone.AvatarCache.Keys.FirstOrDefault(k => k.StartsWith($"{name}@"));
-                    if (cachedKey != null)
+                    var cachedKey = lodestone.AvatarCacheKeys.FirstOrDefault(k => k.StartsWith($"{name}@"));
+                    if (cachedKey != null && lodestone.TryGetAvatar(cachedKey, out var cachedAvatar))
                     {
-                        avatarUrl = lodestone.AvatarCache[cachedKey];
+                        avatarUrl = cachedAvatar;
                         var parts = cachedKey.Split('@', 2);
                         if (parts.Length > 1) world = parts[1];
                     }

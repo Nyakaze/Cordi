@@ -1,8 +1,8 @@
 using System;
-using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using Cordi.Core.Caching;
 using Dalamud.Plugin.Services;
 using NetStone;
 using NetStone.Search.Character;
@@ -17,15 +17,22 @@ public class LodestoneService : IDisposable
     private static readonly IPluginLog Logger = Service.Log;
     private readonly CordiPlugin _plugin;
     private LodestoneClient? _lodestone;
-    private readonly ConcurrentDictionary<string, string> _avatarCache = new();
-    private readonly ConcurrentDictionary<string, int> _gearLevelCache = new();
-    private readonly ConcurrentDictionary<string, string> _characterCache = new();
+    private readonly Cache<string, string> _avatarCache;
+    private readonly Cache<string, int> _gearLevelCache;
+    private readonly Cache<string, string> _characterCache;
 
-    public IReadOnlyDictionary<string, string> AvatarCache => _avatarCache;
+    public IReadOnlyCollection<string> AvatarCacheKeys => _avatarCache.Keys;
+    public bool TryGetAvatar(string key, out string url) => _avatarCache.TryGet(key, out url);
 
     public LodestoneService(CordiPlugin plugin)
     {
         _plugin = plugin;
+        _avatarCache = new Cache<string, string>("lodestone.avatars", plugin.CacheRegistry,
+            maxSize: 500, ttl: TimeSpan.FromHours(6));
+        _gearLevelCache = new Cache<string, int>("lodestone.gearLevels", plugin.CacheRegistry,
+            maxSize: 200, ttl: TimeSpan.FromHours(1));
+        _characterCache = new Cache<string, string>("lodestone.characterIds", plugin.CacheRegistry,
+            maxSize: 1000, ttl: TimeSpan.FromDays(1));
     }
 
     public async Task InitializeAsync()
@@ -40,9 +47,9 @@ public class LodestoneService : IDisposable
             // Load cached character IDs from configuration
             foreach (var kvp in _plugin.Config.Lodestone.CharacterIdCache)
             {
-                _characterCache[kvp.Key] = kvp.Value;
+                _characterCache.Set(kvp.Key, kvp.Value);
             }
-            Logger.Info($"Loaded {_characterCache.Count} cached character IDs from configuration.");
+            Logger.Info($"Loaded {_plugin.Config.Lodestone.CharacterIdCache.Count} cached character IDs from configuration.");
         }
         catch (Exception ex)
         {
@@ -53,7 +60,7 @@ public class LodestoneService : IDisposable
     public async Task<string> GetAvatarUrlAsync(string name, string world)
     {
         var key = $"{name}@{world}";
-        if (_avatarCache.TryGetValue(key, out var cachedUrl))
+        if (_avatarCache.TryGet(key, out var cachedUrl))
         {
             return cachedUrl;
         }
@@ -69,7 +76,7 @@ public class LodestoneService : IDisposable
         // If custom avatar is set, use it
         if (hasCustomAvatar && !string.IsNullOrEmpty(customAvatar))
         {
-            _avatarCache[key] = customAvatar;
+            _avatarCache.Set(key, customAvatar);
             return customAvatar;
         }
 
@@ -77,7 +84,7 @@ public class LodestoneService : IDisposable
         if (character != null && character.Avatar != null)
         {
             var avatar = character.Avatar.ToString();
-            _avatarCache[key] = avatar;
+            _avatarCache.Set(key, avatar);
             return avatar;
         }
 
@@ -87,7 +94,7 @@ public class LodestoneService : IDisposable
     public async Task<int> GetAverageItemLevelAsync(string name, string world)
     {
         var key = $"{name}@{world}";
-        if (_gearLevelCache.TryGetValue(key, out var cachedLevel))
+        if (_gearLevelCache.TryGet(key, out var cachedLevel))
         {
             return cachedLevel;
         }
@@ -111,7 +118,7 @@ public class LodestoneService : IDisposable
             int totalILvl = validItems.Sum(x => x!.ItemLevel);
             int avg = totalILvl / validItems.Count;
 
-            _gearLevelCache[key] = avg;
+            _gearLevelCache.Set(key, avg);
             Logger.Debug($"Fetched Gear Level for {name}@{world}: {avg} (Items: {validItems.Count})");
             return avg;
         }
@@ -135,7 +142,7 @@ public class LodestoneService : IDisposable
         try
         {
             // Check if we have the character ID cached
-            if (_characterCache.TryGetValue(key, out var cachedId))
+            if (_characterCache.TryGet(key, out var cachedId))
             {
                 Logger.Debug($"Using cached character ID for {name}@{world}: {cachedId}");
                 return await _lodestone.GetCharacter(cachedId);
@@ -167,7 +174,7 @@ public class LodestoneService : IDisposable
             Logger.Debug($"Found character {name}@{world}, caching ID: {entry.Id}");
 
             // Cache the character ID for future lookups (in-memory and persistent)
-            _characterCache[key] = entry.Id;
+            _characterCache.Set(key, entry.Id);
             _plugin.Config.Lodestone.CharacterIdCache[key] = entry.Id;
             _plugin.Config.Save();
 
@@ -191,13 +198,24 @@ public class LodestoneService : IDisposable
         var key = $"{name}@{world}";
 
         // Check cache first
-        if (_characterCache.TryGetValue(key, out var cachedId))
+        if (_characterCache.TryGet(key, out var cachedId))
         {
             Logger.Debug($"Using cached Lodestone ID for {name}@{world}: {cachedId}");
             return cachedId;
         }
 
         return null;
+    }
+
+    public async Task<string?> ResolveLodestoneIdAsync(string name, string world)
+    {
+        if (string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(world)) return null;
+
+        var key = $"{name}@{world}";
+        if (_characterCache.TryGet(key, out var cached)) return cached;
+
+        await GetCharacterAsync(name, world);
+        return _characterCache.TryGet(key, out var resolved) ? resolved : null;
     }
 
 
@@ -215,13 +233,13 @@ public class LodestoneService : IDisposable
 
     public void UpdateAvatarCache(string key, string url)
     {
-        _avatarCache[key] = url;
+        _avatarCache.Set(key, url);
         Logger.Info($"Updated avatar cache for {key}: {url}");
     }
 
     public void InvalidateAvatarCache(string key)
     {
-        if (_avatarCache.TryRemove(key, out _))
+        if (_avatarCache.Remove(key))
         {
             Logger.Info($"Invalidated avatar cache for {key}");
         }

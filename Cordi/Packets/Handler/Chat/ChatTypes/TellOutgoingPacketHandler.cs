@@ -4,6 +4,9 @@ using System.Threading.Tasks;
 using Cordi.Packets.Attributes;
 using Cordi.Services.Discord;
 using Cordi.Core;
+using Cordi.Domain;
+using Cordi.Domain.Observations;
+using Cordi.Domain.Tracking;
 using Dalamud.Game.Text;
 using Dalamud.Game.Text.SeStringHandling;
 using Dalamud.Game.Text.SeStringHandling.Payloads;
@@ -43,6 +46,16 @@ public class TellOutgoingPacketHandler : IChatHandler
         var localWorld = CordiPlugin.Plugin.cachedLocalPlayer?.HomeWorld.Value.Name.ExtractText() ?? "Unknown";
 
         TellIncommingPacketHandler.LastTellActivity[correspondent] = System.DateTime.UtcNow;
+
+        if (!string.IsNullOrEmpty(correspondentName) && !string.IsNullOrEmpty(correspondentWorld))
+        {
+            _ = CordiPlugin.Plugin.PlayerObservations.FireAsync(new PlayerObservation(
+                Player.FromNameWorld(correspondentName, correspondentWorld),
+                new ObservationContext(
+                    Source: ObservationSource.Tell,
+                    TerritoryId: (uint)Service.ClientState.TerritoryType,
+                    At: System.DateTime.UtcNow)));
+        }
 
         await discord.SendMessage(null, msg.Message, localName, localWorld, ChatType, correspondent);
 
