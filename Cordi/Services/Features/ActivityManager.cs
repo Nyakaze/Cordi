@@ -39,6 +39,14 @@ namespace Cordi.Services
 
         private const double RefreshIntervalSeconds = 1.0;
 
+        private static readonly Regex UrlLikeDotRegex = new Regex(@"(?<=\w)\.(?=\w)", RegexOptions.Compiled);
+
+        private static string SanitizeUrlLikeDots(string input)
+        {
+            if (string.IsNullOrEmpty(input)) return input;
+            return UrlLikeDotRegex.Replace(input, "·");
+        }
+
         private CordiLogService Log => _plugin.LogService;
         private const string LogSource = "Activity";
 
@@ -402,6 +410,13 @@ namespace Cordi.Services
                 if (config.ArtistLimit > 0 && state.Length > config.ArtistLimit)
                     state = state.Substring(0, config.ArtistLimit);
             }
+
+            name = SanitizeUrlLikeDots(name);
+            details = SanitizeUrlLikeDots(details);
+            state = SanitizeUrlLikeDots(state);
+            album = SanitizeUrlLikeDots(album);
+            largeImage = SanitizeUrlLikeDots(largeImage);
+            smallImage = SanitizeUrlLikeDots(smallImage);
 
             string result = format
                 .Replace("{name}", name)
