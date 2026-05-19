@@ -49,6 +49,7 @@ public class CordiPlugin : IDalamudPlugin
     public static CordiPlugin Plugin { get; private set; }
     private readonly CordiCommandManager<CordiPlugin> commandManager;
     private readonly ConfigWindow configWindow;
+    public ConfigWindow MainConfigWindow => configWindow;
     public readonly DiscordWindow discordWindow;
     public DiscordHandler Discord { get; set; }
     public LodestoneService Lodestone { get; private set; }
@@ -112,6 +113,7 @@ public class CordiPlugin : IDalamudPlugin
     public ChatMessenger _chat = null!;
     public CordiPeepService CordiPeep { get; private set; }
     public CordiPeepWindow CordiPeepWindow { get; private set; }
+    public PlayerDetailWindow PlayerDetailWindow { get; private set; } = null!;
     public EmoteLogService EmoteLog { get; private set; }
     public EmoteLogWindow EmoteLogWindow { get; private set; }
     public CombinedWindow CombinedWindow { get; private set; }
@@ -174,11 +176,13 @@ public class CordiPlugin : IDalamudPlugin
         CordiPeepWindow = new CordiPeepWindow(this);
         this.EmoteLogWindow = new EmoteLogWindow(this);
         CombinedWindow = new CombinedWindow(this);
+        PlayerDetailWindow = new PlayerDetailWindow(this);
 
         windowSystem.AddWindow(discordWindow);
         windowSystem.AddWindow(configWindow);
         windowSystem.AddWindow(CordiPeepWindow);
         windowSystem.AddWindow(this.EmoteLogWindow);
+        windowSystem.AddWindow(PlayerDetailWindow);
         windowSystem.AddWindow(CombinedWindow);
 
         PluginInterface.UiBuilder.Draw += DrawUI;
@@ -292,50 +296,6 @@ public class CordiPlugin : IDalamudPlugin
         configWindow.Toggle();
     }
 
-    [Command("/cordicache")]
-    [HelpMessage("Shows cache statistics for Cordi")]
-    public void CacheStatsCommand(string command, string args)
-    {
-        var stats = CacheRegistry.All;
-        if (stats.Count == 0)
-        {
-            Service.Chat.Print("[Cordi] No caches registered.");
-            return;
-        }
-
-        Service.Chat.Print($"[Cordi] {stats.Count} cache(s):");
-        foreach (var c in stats.OrderBy(c => c.Name))
-        {
-            long total = c.Hits + c.Misses;
-            double hitRate = total == 0 ? 0 : (c.Hits * 100.0 / total);
-            var age = DateTime.UtcNow - c.CreatedAt;
-            Service.Chat.Print($"  {c.Name}: {c.Count}/{c.Capacity} | {hitRate:F1}% hit ({c.Hits}/{total}) | age {FormatCacheAge(age)}");
-        }
-    }
-
-    private static string FormatCacheAge(TimeSpan t)
-    {
-        if (t.TotalMinutes < 1) return $"{(int)t.TotalSeconds}s";
-        if (t.TotalHours < 1) return $"{(int)t.TotalMinutes}m";
-        if (t.TotalDays < 1) return $"{(int)t.TotalHours}h {(int)(t.TotalMinutes % 60)}m";
-        return $"{(int)t.TotalDays}d {(int)(t.TotalHours % 24)}h";
-    }
-
-    [Command("/cordiqueue")]
-    [HelpMessage("Shows Discord/Game send queue statistics")]
-    public void QueueStatsCommand(string command, string args)
-    {
-        var dq = DiscordSendQueue;
-        Service.Chat.Print($"[Cordi] Discord outbound queue (cap {dq.Capacity}):");
-        Service.Chat.Print($"  pending: {dq.Pending} | sent: {dq.Sent} | retried: {dq.Retried} | failed: {dq.Failed} | dropped: {dq.Dropped}");
-
-        var cm = _chat;
-        if (cm != null)
-        {
-            Service.Chat.Print($"[Cordi] Game chat messenger (cap {cm.MaxPending}):");
-            Service.Chat.Print($"  pending: {cm.Pending} | sent: {cm.Sent} | failed: {cm.Failed} | dropped: {cm.Dropped}");
-        }
-    }
 
     public void ToggleConfigUI() => configWindow.Toggle();
 

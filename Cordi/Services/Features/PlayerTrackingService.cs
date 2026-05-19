@@ -121,6 +121,9 @@ public class PlayerTrackingService : IDisposable
         _storage.GetAll(0, limit);
 
     public int Count() => _storage.Count();
+    public int CountConfirmed() => _storage.CountConfirmed();
+    public int CountProvisional() => _storage.CountProvisional();
+    public int CountSeenSince(DateTime threshold) => _storage.CountSeenSince(threshold);
 
     public bool Delete(Guid localId)
     {
@@ -130,6 +133,8 @@ public class PlayerTrackingService : IDisposable
         _byNameWorldKey.Remove(tp.NameWorldKey);
         return _storage.Delete(localId);
     }
+
+    public TrackedPlayer? GetByLocalId(Guid localId) => _storage.GetByLocalId(localId);
 
     public void SaveChanges(TrackedPlayer tracked)
     {

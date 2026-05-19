@@ -121,6 +121,13 @@ public class LitePlayerTrackingStorage : IPlayerTrackingStorage
 
     public int Count() => _coll.Count();
 
+    public int CountConfirmed() => _coll.Count(p => p.IsProvisional == false);
+
+    public int CountProvisional() => _coll.Count(p => p.IsProvisional == true);
+
+    public int CountSeenSince(DateTime threshold) =>
+        _coll.Count(p => p.Stats.LastSeen >= threshold);
+
     public void Dispose()
     {
         if (_disposed) return;

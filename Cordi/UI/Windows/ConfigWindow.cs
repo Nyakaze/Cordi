@@ -85,11 +85,17 @@ public sealed class ConfigWindow : Window, IDisposable
     }
 
 
+    public Vector2 LastPos { get; private set; }
+    public Vector2 LastSize { get; private set; }
+
     public override void PreDraw() => theme.PushWindow();
     public override void PostDraw() => theme.PopWindow();
 
     public async override void Draw()
     {
+        LastPos = ImGui.GetWindowPos();
+        LastSize = ImGui.GetWindowSize();
+
         theme.ApplyFontScale();
 
         bool botStarted = plugin.Config.Discord.BotStarted;

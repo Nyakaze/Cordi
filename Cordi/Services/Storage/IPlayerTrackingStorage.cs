@@ -18,4 +18,7 @@ public interface IPlayerTrackingStorage : IDisposable
     void Upsert(TrackedPlayer player);
     bool Delete(Guid localId);
     int Count();
+    int CountConfirmed();
+    int CountProvisional();
+    int CountSeenSince(DateTime threshold);
 }

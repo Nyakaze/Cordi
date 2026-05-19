@@ -9,34 +9,29 @@ using Dalamud.Bindings.ImGui;
 using Dalamud.Interface;
 using Dalamud.Interface.Utility;
 using Dalamud.Interface.Utility.Raii;
-using Lumina.Excel.Sheets;
 
 namespace Cordi.UI.Tabs;
 
 public class PlayerTrackerTab : ConfigTabBase
 {
+    private enum StatusFilter { All, Confirmed, Provisional }
+
     private string searchText = string.Empty;
-    private Guid? selectedPlayerId;
+    private StatusFilter statusFilter = StatusFilter.All;
     private IReadOnlyList<TrackedPlayer> cachedList = Array.Empty<TrackedPlayer>();
     private DateTime lastListRefresh = DateTime.MinValue;
     private static readonly TimeSpan ListRefreshInterval = TimeSpan.FromSeconds(2);
+
+    private int countTotal;
+    private int countConfirmed;
+    private int countProvisional;
+    private int countRecent;
 
     public override string Label => "Player Tracker";
 
     public PlayerTrackerTab(CordiPlugin plugin, UiTheme theme) : base(plugin, theme) { }
 
     public override void Draw()
-    {
-        DrawListCard();
-
-        if (selectedPlayerId.HasValue)
-        {
-            theme.SpacerY();
-            DrawDetailCard();
-        }
-    }
-
-    private void DrawListCard()
     {
         bool enabled = true;
         theme.DrawPluginCardAuto(
@@ -46,223 +41,178 @@ public class PlayerTrackerTab : ConfigTabBase
             showCheckbox: false,
             drawContent: (avail) =>
             {
-                int total = plugin.PlayerTracker.Count();
-                ImGui.TextColored(theme.MutedText, $"{total} player(s) tracked");
+                EnsureListFresh();
+
+                DrawKpiTiles(avail);
+                theme.SpacerY();
+
+                DrawSearchAndFilters(avail);
                 theme.SpacerY(0.5f);
 
-                ImGui.SetNextItemWidth(avail);
-                if (ImGui.InputTextWithHint("##playerTrackerSearch", "Search by name, world, or notes...", ref searchText, 64))
-                {
-                    lastListRefresh = DateTime.MinValue;
-                }
-
-                theme.SpacerY(0.5f);
-
-                if ((DateTime.UtcNow - lastListRefresh) > ListRefreshInterval)
-                {
-                    cachedList = string.IsNullOrWhiteSpace(searchText)
-                        ? plugin.PlayerTracker.GetRecent(200)
-                        : plugin.PlayerTracker.Search(searchText, 200);
-                    lastListRefresh = DateTime.UtcNow;
-                }
-
-                if (cachedList.Count == 0)
-                {
-                    ImGui.TextDisabled("No players match.");
-                    return;
-                }
-
-                using var table = ImRaii.Table("##playerList", 5,
-                    ImGuiTableFlags.RowBg | ImGuiTableFlags.BordersInnerH
-                    | ImGuiTableFlags.ScrollY | ImGuiTableFlags.SizingStretchProp);
-                if (!table) return;
-
-                float scale = ImGuiHelpers.GlobalScale;
-                ImGui.TableSetupColumn("Name", ImGuiTableColumnFlags.WidthStretch);
-                ImGui.TableSetupColumn("World", ImGuiTableColumnFlags.WidthFixed, 110f * scale);
-                ImGui.TableSetupColumn("Seen", ImGuiTableColumnFlags.WidthFixed, 60f * scale);
-                ImGui.TableSetupColumn("Last Seen", ImGuiTableColumnFlags.WidthFixed, 130f * scale);
-                ImGui.TableSetupColumn("Status", ImGuiTableColumnFlags.WidthFixed, 80f * scale);
-                ImGui.TableSetupScrollFreeze(0, 1);
-                ImGui.TableHeadersRow();
-
-                foreach (var p in cachedList)
-                {
-                    ImGui.TableNextRow();
-                    ImGui.TableNextColumn();
-                    bool isSelected = selectedPlayerId == p.LocalId;
-                    if (ImGui.Selectable($"{p.Info.Name}##row-{p.LocalId}", isSelected, ImGuiSelectableFlags.SpanAllColumns))
-                    {
-                        selectedPlayerId = isSelected ? null : p.LocalId;
-                    }
-
-                    ImGui.TableNextColumn();
-                    ImGui.TextUnformatted(p.Info.World);
-
-                    ImGui.TableNextColumn();
-                    ImGui.TextUnformatted(p.Stats.SeenCount.ToString());
-
-                    ImGui.TableNextColumn();
-                    ImGui.TextUnformatted(FormatRelative(p.Stats.LastSeen));
-
-                    ImGui.TableNextColumn();
-                    if (p.IsProvisional)
-                        ImGui.TextColored(theme.MutedText, "Provisional");
-                    else
-                        ImGui.TextColored(theme.MutedText, "Confirmed");
-                }
+                DrawPlayerTable();
             }
         );
     }
 
-    private void DrawDetailCard()
+    private void EnsureListFresh()
     {
-        var p = plugin.PlayerTracker.GetRecent(500).FirstOrDefault(x => x.LocalId == selectedPlayerId);
-        if (p == null)
+        if ((DateTime.UtcNow - lastListRefresh) <= ListRefreshInterval) return;
+
+        var baseList = string.IsNullOrWhiteSpace(searchText)
+            ? plugin.PlayerTracker.GetRecent(500)
+            : plugin.PlayerTracker.Search(searchText, 500);
+
+        countTotal = plugin.PlayerTracker.Count();
+        countConfirmed = plugin.PlayerTracker.CountConfirmed();
+        countProvisional = plugin.PlayerTracker.CountProvisional();
+        countRecent = plugin.PlayerTracker.CountSeenSince(DateTime.UtcNow.AddDays(-7));
+
+        cachedList = statusFilter switch
         {
-            selectedPlayerId = null;
-            return;
-        }
+            StatusFilter.Confirmed => baseList.Where(x => !x.IsProvisional).ToList(),
+            StatusFilter.Provisional => baseList.Where(x => x.IsProvisional).ToList(),
+            _ => baseList,
+        };
 
-        bool enabled = true;
-        theme.DrawPluginCardAuto(
-            id: "player-tracker-detail",
-            title: $"{p.Info.Name} @ {p.Info.World}",
-            enabled: ref enabled,
-            showCheckbox: false,
-            drawContent: (avail) =>
-            {
-                DrawInfoSection(p);
-                theme.SpacerY(0.5f);
-                ImGui.Separator();
-                theme.SpacerY(0.5f);
-
-                DrawStatsSection(p);
-                theme.SpacerY(0.5f);
-                ImGui.Separator();
-                theme.SpacerY(0.5f);
-
-                DrawHistorySection(p);
-                theme.SpacerY(0.5f);
-                ImGui.Separator();
-                theme.SpacerY(0.5f);
-
-                DrawNotesAndTagsSection(p);
-                theme.SpacerY(0.5f);
-
-                if (theme.DangerIconButton("##delete-tracked", FontAwesomeIcon.Trash, "Delete this entry"))
-                {
-                    plugin.PlayerTracker.Delete(p.LocalId);
-                    selectedPlayerId = null;
-                    lastListRefresh = DateTime.MinValue;
-                }
-                ImGui.SameLine();
-                ImGui.TextColored(theme.MutedText, "Delete this entry (irreversible)");
-            },
-            drawHeaderRight: () =>
-            {
-                if (p.ContentId.HasValue)
-                {
-                    ImGui.TextColored(theme.MutedText, $"ContentId: {p.ContentId.Value:X}");
-                }
-                else if (!string.IsNullOrEmpty(p.LodestoneId))
-                {
-                    ImGui.TextColored(theme.MutedText, $"Lodestone: {p.LodestoneId}");
-                }
-                else
-                {
-                    ImGui.TextColored(theme.MutedText, "No identity yet");
-                }
-            }
-        );
+        lastListRefresh = DateTime.UtcNow;
     }
 
-    private void DrawInfoSection(TrackedPlayer p)
+    private void DrawKpiTiles(float avail)
     {
-        ImGui.Text("Info");
-        theme.SpacerY(0.3f);
+        float colW = avail / 4f;
 
-        DrawKeyValue("Race", ResolveRace(p.Info.RaceId));
-        DrawKeyValue("Tribe", ResolveTribe(p.Info.TribeId));
-        DrawKeyValue("Gender", ResolveGender(p.Info.Gender));
-        DrawKeyValue("Free Company", p.Info.FreeCompanyTag);
+        DrawKpi("TOTAL TRACKED", countTotal.ToString("N0"));
+        ImGui.SameLine(colW);
+        DrawKpi("CONFIRMED", countConfirmed.ToString("N0"), UiTheme.ColorSuccessText);
+        ImGui.SameLine(colW * 2);
+        DrawKpi("PROVISIONAL", countProvisional.ToString("N0"), new Vector4(0.65f, 0.65f, 0.65f, 1f));
+        ImGui.SameLine(colW * 3);
+        DrawKpi("LAST 7 DAYS", countRecent.ToString("N0"));
     }
 
-    private void DrawStatsSection(TrackedPlayer p)
+    private void DrawKpi(string label, string value, Vector4? valueColor = null)
     {
-        ImGui.Text("Stats");
-        theme.SpacerY(0.3f);
-
-        DrawKeyValue("Seen count", p.Stats.SeenCount.ToString());
-        DrawKeyValue("First seen", $"{p.Stats.FirstSeen.ToLocalTime():yyyy-MM-dd HH:mm}");
-        DrawKeyValue("First seen via", p.Stats.FirstSeenVia.ToString());
-        DrawKeyValue("Last seen", $"{p.Stats.LastSeen.ToLocalTime():yyyy-MM-dd HH:mm} ({FormatRelative(p.Stats.LastSeen)})");
-        DrawKeyValue("Last location", p.Stats.LastTerritoryName ?? (p.Stats.LastTerritoryId?.ToString() ?? "—"));
-    }
-
-    private void DrawHistorySection(TrackedPlayer p)
-    {
-        ImGui.Text($"History ({p.History.Count})");
-        theme.SpacerY(0.3f);
-
-        if (p.History.Count == 0)
+        using (ImRaii.Group())
         {
-            ImGui.TextDisabled("(no history)");
-            return;
-        }
-
-        using var child = ImRaii.Child("##history-scroll",
-            new Vector2(-1, 200f * ImGuiHelpers.GlobalScale), true);
-        if (!child) return;
-
-        var grouped = p.History
-            .OrderBy(h => h.When)
-            .GroupBy(h => h.When.ToLocalTime().ToString("yyyy-MM-dd HH:mm"))
-            .ToList();
-
-        foreach (var group in grouped)
-        {
-            ImGui.TextColored(theme.MutedText, group.Key);
-            using var indent = ImRaii.PushIndent();
-            foreach (var change in group)
-            {
-                var oldVal = string.IsNullOrEmpty(change.OldValue) ? "—" : change.OldValue;
-                var newVal = string.IsNullOrEmpty(change.NewValue) ? "—" : change.NewValue;
-                ImGui.TextUnformatted($"  {change.Field}: {oldVal} → {newVal}");
-            }
+            ImGui.TextColored(theme.MutedText, label);
+            theme.ApplyFontScale(1.3f);
+            if (valueColor.HasValue) ImGui.TextColored(valueColor.Value, value);
+            else ImGui.TextUnformatted(value);
+            theme.ApplyFontScale();
         }
     }
 
-    private void DrawNotesAndTagsSection(TrackedPlayer p)
+    private void DrawSearchAndFilters(float avail)
     {
-        ImGui.Text("Notes");
-        theme.SpacerY(0.3f);
+        float pillsW = 280f * ImGuiHelpers.GlobalScale;
+        float searchW = avail - pillsW - theme.Gap(0.5f);
 
-        string notes = p.Notes;
-        ImGui.SetNextItemWidth(-1);
-        if (ImGui.InputTextMultiline("##notes", ref notes, 1024, new Vector2(-1, 60f * ImGuiHelpers.GlobalScale)))
+        ImGui.SetNextItemWidth(searchW);
+        if (ImGui.InputTextWithHint("##playerTrackerSearch", "Search by name, world, or notes...", ref searchText, 64))
         {
-            p.Notes = notes;
-        }
-        if (ImGui.IsItemDeactivatedAfterEdit())
-        {
-            plugin.PlayerTracker.SaveChanges(p);
+            lastListRefresh = DateTime.MinValue;
         }
 
-        theme.SpacerY(0.5f);
-        ImGui.Text($"Tags ({p.Tags.Count})");
-        if (p.Tags.Count > 0)
-        {
-            ImGui.SameLine();
-            ImGui.TextColored(theme.MutedText, string.Join(", ", p.Tags));
-        }
-    }
-
-    private void DrawKeyValue(string key, string? value)
-    {
-        ImGui.TextColored(theme.MutedText, $"  {key}:");
         ImGui.SameLine();
-        ImGui.TextUnformatted(string.IsNullOrEmpty(value) ? "—" : value);
+        DrawStatusFilterPills(pillsW);
+    }
+
+    private void DrawStatusFilterPills(float totalWidth)
+    {
+        var filters = new[] { StatusFilter.All, StatusFilter.Confirmed, StatusFilter.Provisional };
+        var labels = new[] { "All", "Confirmed", "Provisional" };
+        float btnW = totalWidth / filters.Length - theme.Gap(0.3f);
+        float btnH = ImGui.GetFrameHeight();
+
+        using (ImRaii.PushStyle(ImGuiStyleVar.FrameRounding, theme.Radius()))
+        {
+            for (int i = 0; i < filters.Length; i++)
+            {
+                if (i > 0) ImGui.SameLine();
+                bool isActive = statusFilter == filters[i];
+                using (ImRaii.PushColor(ImGuiCol.Button, isActive ? theme.Accent : theme.FrameBg))
+                using (ImRaii.PushColor(ImGuiCol.ButtonHovered, isActive ? theme.Accent : theme.FrameBgHover))
+                using (ImRaii.PushColor(ImGuiCol.ButtonActive, isActive ? theme.Accent : theme.FrameBgActive))
+                {
+                    if (ImGui.Button(labels[i], new Vector2(btnW, btnH)))
+                    {
+                        statusFilter = filters[i];
+                        lastListRefresh = DateTime.MinValue;
+                    }
+                    theme.HoverHandIfItem();
+                }
+            }
+        }
+    }
+
+    private void DrawPlayerTable()
+    {
+        float remainingHeight = ImGui.GetContentRegionAvail().Y;
+        if (remainingHeight < 80f) remainingHeight = 80f;
+
+        if (cachedList.Count == 0)
+        {
+            ImGui.SetCursorPosY(ImGui.GetCursorPosY() + remainingHeight / 3f);
+            using (ImRaii.PushIndent(ImGui.GetContentRegionAvail().X / 3f))
+            {
+                ImGui.TextColored(theme.MutedText, "No players match.");
+            }
+            return;
+        }
+
+        if (!ImGui.BeginTable("##playerList", 5,
+            ImGuiTableFlags.RowBg | ImGuiTableFlags.NoBordersInBody
+            | ImGuiTableFlags.ScrollY | ImGuiTableFlags.SizingStretchProp,
+            new Vector2(0, remainingHeight)))
+            return;
+
+        float scale = ImGuiHelpers.GlobalScale;
+        ImGui.TableSetupColumn("##status", ImGuiTableColumnFlags.WidthFixed, 16f * scale);
+        ImGui.TableSetupColumn("Player", ImGuiTableColumnFlags.WidthStretch);
+        ImGui.TableSetupColumn("Seen", ImGuiTableColumnFlags.WidthFixed, 60f * scale);
+        ImGui.TableSetupColumn("Last Seen", ImGuiTableColumnFlags.WidthFixed, 120f * scale);
+        ImGui.TableSetupColumn("Source", ImGuiTableColumnFlags.WidthFixed, 90f * scale);
+        ImGui.TableSetupScrollFreeze(0, 1);
+        ImGui.TableHeadersRow();
+
+        foreach (var p in cachedList)
+        {
+            ImGui.TableNextRow();
+
+            ImGui.TableNextColumn();
+            var dotColor = p.IsProvisional
+                ? new Vector4(0.55f, 0.55f, 0.55f, 1f)
+                : UiTheme.ColorSuccessText;
+            ImGui.TextColored(dotColor, "●");
+            if (ImGui.IsItemHovered())
+                ImGui.SetTooltip(p.IsProvisional ? "Provisional (no ContentId / Lodestone ID resolved)" : "Confirmed");
+
+            ImGui.TableNextColumn();
+            if (ImGui.Selectable($"##row-{p.LocalId}", false, ImGuiSelectableFlags.SpanAllColumns))
+            {
+                plugin.PlayerDetailWindow.Show(p.LocalId);
+            }
+            theme.HoverHandIfItem();
+            ImGui.SameLine(0, 0);
+            ImGui.TextUnformatted(p.Info.Name);
+            ImGui.SameLine(0, 0);
+            ImGui.TextColored(theme.MutedText, " @ ");
+            ImGui.SameLine(0, 0);
+            ImGui.TextColored(theme.MutedText, p.Info.World);
+
+            ImGui.TableNextColumn();
+            ImGui.TextUnformatted(p.Stats.SeenCount.ToString("N0"));
+
+            ImGui.TableNextColumn();
+            ImGui.TextUnformatted(FormatRelative(p.Stats.LastSeen));
+            if (ImGui.IsItemHovered())
+                ImGui.SetTooltip(p.Stats.LastSeen.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss"));
+
+            ImGui.TableNextColumn();
+            ImGui.TextColored(theme.MutedText, p.Stats.FirstSeenVia.ToString());
+        }
+
+        ImGui.EndTable();
     }
 
     private static string FormatRelative(DateTime when)
@@ -276,44 +226,5 @@ public class PlayerTrackerTab : ConfigTabBase
         if (span.TotalDays < 30) return $"{(int)span.TotalDays}d ago";
         if (span.TotalDays < 365) return $"{(int)(span.TotalDays / 30)}mo ago";
         return $"{(int)(span.TotalDays / 365)}y ago";
-    }
-
-    private static string? ResolveRace(byte? raceId)
-    {
-        if (!raceId.HasValue) return null;
-        try
-        {
-            var sheet = Service.DataManager.GetExcelSheet<Race>();
-            if (sheet == null) return raceId.Value.ToString();
-            var row = sheet.GetRow(raceId.Value);
-            var name = row.Masculine.ExtractText();
-            return string.IsNullOrEmpty(name) ? raceId.Value.ToString() : name;
-        }
-        catch { return raceId.Value.ToString(); }
-    }
-
-    private static string? ResolveTribe(byte? tribeId)
-    {
-        if (!tribeId.HasValue) return null;
-        try
-        {
-            var sheet = Service.DataManager.GetExcelSheet<Tribe>();
-            if (sheet == null) return tribeId.Value.ToString();
-            var row = sheet.GetRow(tribeId.Value);
-            var name = row.Masculine.ExtractText();
-            return string.IsNullOrEmpty(name) ? tribeId.Value.ToString() : name;
-        }
-        catch { return tribeId.Value.ToString(); }
-    }
-
-    private static string? ResolveGender(byte? gender)
-    {
-        if (!gender.HasValue) return null;
-        return gender.Value switch
-        {
-            0 => "Male",
-            1 => "Female",
-            _ => gender.Value.ToString(),
-        };
     }
 }
