@@ -29,7 +29,7 @@ public class DiscordMessageRouter
 
         if (connection.ExtraChatNumber > 0)
         {
-            string contentToSend = message.Content;
+            string contentToSend = DiscordEmojiParser.Parse(message.Content);
 
             try
             {
@@ -62,8 +62,9 @@ public class DiscordMessageRouter
         var mapping = _plugin.Config.Chat.Mappings.FirstOrDefault(m => m.DiscordChannelId == channelId.ToString());
         if (mapping == null) return false;
 
-        _ = _plugin._chat.SendAsync(mapping.GameChatType, message.Content);
-        Logger.Info($"Forwarding message: {message.Content} to {mapping.GameChatType}");
+        var content = DiscordEmojiParser.Parse(message.Content);
+        _ = _plugin._chat.SendAsync(mapping.GameChatType, content);
+        Logger.Info($"Forwarding message: {content} to {mapping.GameChatType}");
         try { await message.DeleteAsync(); } catch { }
         return true;
     }
@@ -73,8 +74,9 @@ public class DiscordMessageRouter
         var tellTarget = _plugin.Config.Chat.TellThreadMappings.FirstOrDefault(x => x.Value == channelId.ToString()).Key;
         if (string.IsNullOrEmpty(tellTarget)) return false;
 
-        _ = _plugin._chat.SendTellAsync(tellTarget, message.Content);
-        Logger.Info($"Forwarding Tell reply: {message.Content} to {tellTarget}");
+        var content = DiscordEmojiParser.Parse(message.Content);
+        _ = _plugin._chat.SendTellAsync(tellTarget, content);
+        Logger.Info($"Forwarding Tell reply: {content} to {tellTarget}");
         try { await message.DeleteAsync(); } catch { }
         return true;
     }
