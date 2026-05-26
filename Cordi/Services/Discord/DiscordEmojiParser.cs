@@ -18,6 +18,12 @@ public static class DiscordEmojiParser
         @"<a?:([A-Za-z0-9_]+):\d+>",
         RegexOptions.Compiled);
 
+    // [name](https://cdn.discordapp.com/emojis/123456789.png?...) -> :name:
+    // Discord sends emotes as markdown links when posted via webhooks / certain clients.
+    private static readonly Regex EmoteLinkRegex = new(
+        @"\[([A-Za-z0-9_]+)\]\(https?://(?:cdn\.discordapp\.com|media\.discordapp\.net)/emojis/\d+\.[A-Za-z0-9]+(?:\?[^)]*)?\)",
+        RegexOptions.Compiled);
+
     // Unicode emojis that Discord auto-creates from text shortcuts.
     // Reversed back to the original text the user most likely typed.
     private static readonly Dictionary<string, string> UnicodeToTextSmiley = new()
@@ -194,12 +200,15 @@ public static class DiscordEmojiParser
         // 1) Custom emojis: <:name:id> / <a:name:id>  ->  :name:
         var result = CustomEmojiRegex.Replace(content, m => $":{m.Groups[1].Value}:");
 
-        // 2) Unicode -> original text smiley (reverses Discord auto-convert)
+        // 2) Emote links: [name](https://cdn.discordapp.com/emojis/id.ext?...) -> :name:
+        result = EmoteLinkRegex.Replace(result, m => $":{m.Groups[1].Value}:");
+
+        // 3) Unicode -> original text smiley (reverses Discord auto-convert)
         foreach (var kv in UnicodeToTextSmiley)
             if (result.Contains(kv.Key))
                 result = result.Replace(kv.Key, kv.Value);
 
-        // 3) Other known Unicode emojis -> :shortcode:
+        // 4) Other known Unicode emojis -> :shortcode:
         foreach (var kv in UnicodeToShortcode)
             if (result.Contains(kv.Key))
                 result = result.Replace(kv.Key, kv.Value);
