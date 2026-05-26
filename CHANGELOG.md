@@ -1,3 +1,15 @@
+## [2.2.0](https://github.com/Nyakaze/Cordi/compare/2.0.5...2.2.0) (26-05-2026)
+
+### Player Track Tab
+ - **Added:** A new Tab called "Player Track"
+ - **Added:** Option to track player changes like Name, World, Free Company, etc.
+
+### Discord Activity
+ - **Fixed:** A bug where Lightless thinks its a Link you want promote.
+
+### Discord Chat
+ - **Added:** Emote Parsing. Emotes will now be shown in Game when sent through Discord.
+
 ## [2.1.2](https://github.com/Nyakaze/Cordi/compare/2.0.4...2.0.5) (29-04-2026)
 
 ### General
