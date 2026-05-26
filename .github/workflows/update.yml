@@ -10,9 +10,9 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version Number (e.g. 1.0.2.0)'
+        description: 'Version Number (e.g. 1.0.2)'
         required: true
-        default: '1.0.0.0'
+        default: '1.0.0'
 
 jobs:
   Build:
@@ -128,7 +128,7 @@ jobs:
           jq --arg ver "${{ env.BUILD_VERSION }}" \
              --arg link "$NEW_LINK" \
              --arg time "$CURRENT_TIME" \
-             --arg changelog "${{ env.CHANGELOG_TEXT }}" \
+             --arg changelog "$CHANGELOG_TEXT" \
              'map(if .InternalName == "Cordi" then . + {
                 "AssemblyVersion": $ver, 
                 "DownloadLinkInstall": $link, 
@@ -150,3 +150,28 @@ jobs:
           else
             echo "No changes detected in uwu.json."
           fi
+      - name: Send Changelog to Discord
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+        run: |
+          if [ -z "$DISCORD_WEBHOOK" ]; then
+            echo "No Discord Webhook configured. Skipping."
+            exit 0
+          fi
+          
+          jq -n \
+            --arg version "$BUILD_VERSION" \
+            --arg desc "$CHANGELOG_TEXT" \
+            '{
+              content: "@everyone",
+              embeds: [{
+                title: "Cordi Release v\($version)",
+                description: $desc,
+                color: 5814783
+              }]
+            }' > discord_payload.json
+            
+          curl -H "Content-Type: application/json" \
+               -X POST \
+               -d @discord_payload.json \
+               $DISCORD_WEBHOOK
