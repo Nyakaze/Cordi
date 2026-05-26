@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
 using Cordi.Core;
@@ -22,6 +23,15 @@ public class PlayerDetailWindow : Window
     private DateTime _lastRefresh = DateTime.MinValue;
     private static readonly TimeSpan RefreshInterval = TimeSpan.FromSeconds(1);
 
+    private Guid? _cacheForPlayer;
+    private int _cachedHistoryCount = -1;
+    private List<HistoryGroup> _groupedHistory = new();
+    private string? _cachedRace;
+    private string? _cachedTribe;
+    private string? _cachedGender;
+
+    private readonly record struct HistoryGroup(string Header, List<IdentityChange> Items);
+
     public PlayerDetailWindow(CordiPlugin plugin)
         : base("Player Details###CordiPlayerDetails", ImGuiWindowFlags.None)
     {
@@ -39,7 +49,41 @@ public class PlayerDetailWindow : Window
         _playerId = playerId;
         _player = _plugin.PlayerTracker.GetByLocalId(playerId);
         _lastRefresh = DateTime.UtcNow;
+        InvalidateCache();
         IsOpen = true;
+    }
+
+    private void InvalidateCache()
+    {
+        _cacheForPlayer = null;
+        _cachedHistoryCount = -1;
+        _groupedHistory.Clear();
+        _cachedRace = null;
+        _cachedTribe = null;
+        _cachedGender = null;
+    }
+
+    private void RebuildCacheIfNeeded(TrackedPlayer p)
+    {
+        bool playerChanged = _cacheForPlayer != p.LocalId;
+        bool historyChanged = _cachedHistoryCount != p.History.Count;
+        if (!playerChanged && !historyChanged) return;
+
+        if (playerChanged)
+        {
+            _cachedRace = ResolveRace(p.Info.RaceId);
+            _cachedTribe = ResolveTribe(p.Info.TribeId);
+            _cachedGender = ResolveGender(p.Info.Gender);
+        }
+
+        _groupedHistory = p.History
+            .OrderByDescending(h => h.When)
+            .GroupBy(h => h.When.ToLocalTime().ToString("yyyy-MM-dd HH:mm"))
+            .Select(g => new HistoryGroup(g.Key, g.ToList()))
+            .ToList();
+
+        _cacheForPlayer = p.LocalId;
+        _cachedHistoryCount = p.History.Count;
     }
 
     public override void PreDraw()
@@ -78,6 +122,8 @@ public class PlayerDetailWindow : Window
             ImGui.TextColored(_theme.MutedText, "No player selected.");
             return;
         }
+
+        RebuildCacheIfNeeded(_player);
 
         DrawHeader(_player);
         _theme.SpacerY(0.5f);
@@ -187,9 +233,9 @@ public class PlayerDetailWindow : Window
 
     private void DrawIdentity(TrackedPlayer p)
     {
-        DrawRow("Race", ResolveRace(p.Info.RaceId));
-        DrawRow("Tribe", ResolveTribe(p.Info.TribeId));
-        DrawRow("Gender", ResolveGender(p.Info.Gender));
+        DrawRow("Race", _cachedRace);
+        DrawRow("Tribe", _cachedTribe);
+        DrawRow("Gender", _cachedGender);
         DrawRow("Free Company", p.Info.FreeCompanyTag);
     }
 
@@ -202,7 +248,7 @@ public class PlayerDetailWindow : Window
 
     private void DrawHistory(TrackedPlayer p)
     {
-        if (p.History.Count == 0)
+        if (_groupedHistory.Count == 0)
         {
             ImGui.TextColored(_theme.MutedText, "(no history)");
             return;
@@ -212,16 +258,11 @@ public class PlayerDetailWindow : Window
             new Vector2(-1, 180f * ImGuiHelpers.GlobalScale), true);
         if (!child) return;
 
-        var grouped = p.History
-            .OrderByDescending(h => h.When)
-            .GroupBy(h => h.When.ToLocalTime().ToString("yyyy-MM-dd HH:mm"))
-            .ToList();
-
-        foreach (var group in grouped)
+        foreach (var group in _groupedHistory)
         {
-            ImGui.TextColored(_theme.MutedText, group.Key);
+            ImGui.TextColored(_theme.MutedText, group.Header);
             using var indent = ImRaii.PushIndent();
-            foreach (var change in group)
+            foreach (var change in group.Items)
             {
                 ImGui.TextUnformatted(FormatHistoryField(change.Field));
                 ImGui.SameLine();

@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
+using System.Threading;
+using System.Threading.Tasks;
 using Cordi.Core;
 using Cordi.Domain.Tracking;
 using Cordi.UI.Themes;
@@ -26,6 +28,20 @@ public class PlayerTrackerTab : ConfigTabBase
     private int countConfirmed;
     private int countProvisional;
     private int countRecent;
+
+    // Background refresh state. Only the UI thread reads/writes these fields,
+    // except for `_pendingResult` which is published via Volatile.Write from the
+    // worker and consumed (then cleared) on the next UI frame.
+    private int _refreshInFlight;
+    private RefreshResult? _pendingResult;
+
+    private sealed record RefreshResult(
+        string Query,
+        IReadOnlyList<TrackedPlayer> List,
+        int Total,
+        int Confirmed,
+        int Provisional,
+        int Recent);
 
     public override string Label => "Player Tracker";
 
@@ -56,25 +72,62 @@ public class PlayerTrackerTab : ConfigTabBase
 
     private void EnsureListFresh()
     {
+        // 1) Consume any result the background task published since the last frame.
+        var ready = Interlocked.Exchange(ref _pendingResult, null);
+        if (ready != null)
+        {
+            cachedList = statusFilter switch
+            {
+                StatusFilter.Confirmed => ready.List.Where(x => !x.IsProvisional).ToList(),
+                StatusFilter.Provisional => ready.List.Where(x => x.IsProvisional).ToList(),
+                _ => ready.List,
+            };
+            countTotal = ready.Total;
+            countConfirmed = ready.Confirmed;
+            countProvisional = ready.Provisional;
+            countRecent = ready.Recent;
+            Interlocked.Exchange(ref _refreshInFlight, 0);
+
+            // If the user changed the query while the worker was running, force a
+            // re-fetch immediately; otherwise honor the throttle.
+            lastListRefresh = ready.Query == (searchText ?? string.Empty)
+                ? DateTime.UtcNow
+                : DateTime.MinValue;
+        }
+
         if ((DateTime.UtcNow - lastListRefresh) <= ListRefreshInterval) return;
 
-        var baseList = string.IsNullOrWhiteSpace(searchText)
-            ? plugin.PlayerTracker.GetRecent(500)
-            : plugin.PlayerTracker.Search(searchText, 500);
+        // 2) Kick off a single background refresh. Subsequent frames keep
+        //    rendering the existing cached list until the worker publishes.
+        if (Interlocked.CompareExchange(ref _refreshInFlight, 1, 0) != 0) return;
 
-        countTotal = plugin.PlayerTracker.Count();
-        countConfirmed = plugin.PlayerTracker.CountConfirmed();
-        countProvisional = plugin.PlayerTracker.CountProvisional();
-        countRecent = plugin.PlayerTracker.CountSeenSince(DateTime.UtcNow.AddDays(-7));
+        var query = searchText ?? string.Empty;
+        var since = DateTime.UtcNow.AddDays(-7);
 
-        cachedList = statusFilter switch
+        Task.Run(() =>
         {
-            StatusFilter.Confirmed => baseList.Where(x => !x.IsProvisional).ToList(),
-            StatusFilter.Provisional => baseList.Where(x => x.IsProvisional).ToList(),
-            _ => baseList,
-        };
+            try
+            {
+                var tracker = plugin.PlayerTracker;
+                var baseList = string.IsNullOrWhiteSpace(query)
+                    ? tracker.GetRecent(500)
+                    : tracker.Search(query, 500);
 
-        lastListRefresh = DateTime.UtcNow;
+                var result = new RefreshResult(
+                    Query: query,
+                    List: baseList,
+                    Total: tracker.Count(),
+                    Confirmed: tracker.CountConfirmed(),
+                    Provisional: tracker.CountProvisional(),
+                    Recent: tracker.CountSeenSince(since));
+
+                Interlocked.Exchange(ref _pendingResult, result);
+            }
+            catch
+            {
+                Interlocked.Exchange(ref _refreshInFlight, 0);
+            }
+        });
     }
 
     private void DrawKpiTiles(float avail)
