@@ -44,6 +44,7 @@ public sealed class ConfigWindow : Window, IDisposable
     private TrackerTab trackerTab;
     private PlayerTrackerTab playerTrackerTab;
     private SlashCommandsTab slashCommandsTab;
+    private LightlessTab lightlessTab;
 
 
     private LogsTab logsTab;
@@ -70,6 +71,7 @@ public sealed class ConfigWindow : Window, IDisposable
         this.trackerTab = new TrackerTab(plugin, theme);
         this.playerTrackerTab = new PlayerTrackerTab(plugin, theme);
         this.slashCommandsTab = new SlashCommandsTab(plugin, theme);
+        this.lightlessTab = new LightlessTab(plugin, theme);
         this.logsTab = new LogsTab(plugin, theme);
 
         // Apply saved font settings
@@ -164,6 +166,7 @@ public sealed class ConfigWindow : Window, IDisposable
                 DrawSidebarButton("Party & Players", 6);
                 DrawSidebarButton("Player Tracker", 14);
                 DrawSidebarButton("Slash Commands", 13);
+                DrawSidebarButton("Lightless", 15);
                 DrawSidebarButton("Settings", 12);
 
 #if DEBUG
@@ -229,6 +232,10 @@ public sealed class ConfigWindow : Window, IDisposable
 
                 case 14:
                     playerTrackerTab.Draw();
+                    break;
+
+                case 15:
+                    lightlessTab.Draw();
                     break;
 
                 case 99:

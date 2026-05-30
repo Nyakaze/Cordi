@@ -424,6 +424,65 @@ public class DiscordHandler : IDisposable
         });
     }
 
+    public Task<ulong> SendEmbedToChannelAsync(ulong channelId, DiscordEmbed embed)
+    {
+        if (_client == null) return Task.FromResult(0UL);
+        return QueuedSendAsync($"bot embed (channel {channelId})", "bot", async () =>
+        {
+            var channel = await _client.GetChannelAsync(channelId);
+            var msg = await channel.SendMessageAsync(embed);
+            return msg.Id;
+        });
+    }
+
+    /// <summary>
+    /// Edits a bot-authored message (not a webhook message). Returns false if the message
+    /// no longer exists (so callers can fall back to creating a fresh one).
+    /// </summary>
+    public async Task<bool> EditEmbedInChannelAsync(ulong channelId, ulong messageId, DiscordEmbed embed)
+    {
+        if (_client == null) return false;
+        try
+        {
+            return await _plugin.DiscordSendQueue.RunAsync(
+                $"bot embed edit (channel {channelId} msg {messageId})", "bot", async () =>
+                {
+                    var channel = await _client.GetChannelAsync(channelId);
+                    var msg = await channel.GetMessageAsync(messageId);
+                    await msg.ModifyAsync(embed);
+                    return true;
+                });
+        }
+        catch (DSharpPlus.Exceptions.NotFoundException)
+        {
+            return false;
+        }
+        catch (Exception ex)
+        {
+            Logger.Warning($"[DiscordHandler] EditEmbedInChannelAsync failed: {ex.Message}");
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Deletes a bot-authored message in the channel. Silent on NotFound.
+    /// </summary>
+    public Task DeleteChannelMessageAsync(ulong channelId, ulong messageId)
+    {
+        if (_client == null) return Task.CompletedTask;
+        return QueuedSendAsync(
+            $"bot delete (channel {channelId} msg {messageId})", "bot", async () =>
+            {
+                try
+                {
+                    var channel = await _client.GetChannelAsync(channelId);
+                    var msg = await channel.GetMessageAsync(messageId);
+                    await msg.DeleteAsync();
+                }
+                catch (DSharpPlus.Exceptions.NotFoundException) { /* already gone */ }
+            });
+    }
+
     public Task RemoveReaction(ulong channelId, ulong messageId, DiscordEmoji emoji)
     {
         if (_client == null) return Task.CompletedTask;

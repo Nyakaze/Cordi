@@ -28,6 +28,7 @@ public class Configuration : IPluginConfiguration
     public FontConfig Font { get; set; } = new();
     public ThroughputStats Stats { get; set; } = new();
     public SlashCommandConfig SlashCommands { get; set; } = new();
+    public LightlessConfig Lightless { get; set; } = new();
     public bool LogsTabVisible { get; set; }
 
 

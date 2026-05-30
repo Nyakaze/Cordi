@@ -59,6 +59,8 @@ public class CordiPlugin : IDalamudPlugin
     public AdvertisementFilterService AdvertisementFilterService { get; private set; }
     public ActivityManager ActivityManager { get; private set; }
     public HonorificBridge HonorificBridge { get; private set; }
+    public LightlessBridge Lightless { get; private set; }
+    public LightlessConnectionMonitor LightlessMonitor { get; private set; }
     public DiscordChannelCache ChannelCache { get; private set; }
     public DiscordSlashCommandService SlashCommandService { get; private set; }
     public ScreenshotService Screenshot { get; private set; }
@@ -158,6 +160,9 @@ public class CordiPlugin : IDalamudPlugin
         EmoteLog = new EmoteLogService(this);
         CordiPeep = new CordiPeepService(this);
         HonorificBridge = new HonorificBridge(PluginInterface);
+        Lightless = new LightlessBridge(PluginInterface);
+        LightlessMonitor = new LightlessConnectionMonitor(this);
+        LightlessMonitor.Start();
         PartyService = new PartyService(this, NotificationManager);
         RememberMe = new RememberMeService(this);
         ActivityManager = new ActivityManager(this, HonorificBridge);
@@ -433,6 +438,8 @@ public class CordiPlugin : IDalamudPlugin
         this.EmoteLog?.Dispose();
         this.ActivityManager?.Dispose();
         this.HonorificBridge?.Dispose();
+        this.LightlessMonitor?.Dispose();
+        this.Lightless?.Dispose();
         this.Lodestone?.Dispose();
         this.Tomestone?.Dispose();
         this.PartyService?.Dispose();
