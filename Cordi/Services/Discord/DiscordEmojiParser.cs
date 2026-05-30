@@ -21,7 +21,15 @@ public static class DiscordEmojiParser
     // [name](https://cdn.discordapp.com/emojis/123456789.png?...) -> :name:
     // Discord sends emotes as markdown links when posted via webhooks / certain clients.
     private static readonly Regex EmoteLinkRegex = new(
-        @"\[([A-Za-z0-9_]+)\]\(https?://(?:cdn\.discordapp\.com|media\.discordapp\.net)/emojis/\d+\.[A-Za-z0-9]+(?:\?[^)]*)?\)",
+        @"\[([^\]]+)\]\(https?://(?:cdn|media)\.discord(?:app)?\.(?:com|net)/emojis/\d+\.[A-Za-z0-9]+(?:\?[^)]*)?\)",
+        RegexOptions.Compiled);
+
+    private static readonly Regex EmoteSuffixRegex = new(
+        @"[^A-Za-z0-9]\d+$",
+        RegexOptions.Compiled);
+
+    private static readonly Regex EmoteWordRegex = new(
+        @"[A-Za-z0-9_]+",
         RegexOptions.Compiled);
 
     // Unicode emojis that Discord auto-creates from text shortcuts.
@@ -201,7 +209,7 @@ public static class DiscordEmojiParser
         var result = CustomEmojiRegex.Replace(content, m => $":{m.Groups[1].Value}:");
 
         // 2) Emote links: [name](https://cdn.discordapp.com/emojis/id.ext?...) -> :name:
-        result = EmoteLinkRegex.Replace(result, m => $":{m.Groups[1].Value}:");
+        result = EmoteLinkRegex.Replace(result, m => $":{CleanEmoteName(m.Groups[1].Value)}:");
 
         // 3) Unicode -> original text smiley (reverses Discord auto-convert)
         foreach (var kv in UnicodeToTextSmiley)
@@ -214,5 +222,29 @@ public static class DiscordEmojiParser
                 result = result.Replace(kv.Key, kv.Value);
 
         return result;
+    }
+
+    private static string CleanEmoteName(string name)
+    {
+        if (string.IsNullOrEmpty(name)) return string.Empty;
+
+        // Decode URL-encoded characters if any (e.g. %7E -> ~)
+        name = System.Net.WebUtility.UrlDecode(name);
+
+        // Strip trailing separator + digits (e.g., pray~1 -> pray)
+        name = EmoteSuffixRegex.Replace(name, "");
+
+        // Find the longest sequence of alphanumeric/underscore characters
+        var matches = EmoteWordRegex.Matches(name);
+        string longest = "";
+        foreach (Match match in matches)
+        {
+            if (match.Value.Length > longest.Length)
+            {
+                longest = match.Value;
+            }
+        }
+
+        return longest;
     }
 }
