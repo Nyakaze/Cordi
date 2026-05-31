@@ -16,4 +16,7 @@ public class LightlessConfig
     // Separate disconnect alert message — created on transition into Disconnected,
     // deleted on transition back to Connected. 0 when no alert is currently posted.
     public ulong DisconnectMessageId { get; set; }
+
+    // Automatically attempt to reconnect to the Lightless server when connection drops.
+    public bool AutoReconnect { get; set; } = false;
 }

@@ -71,6 +71,17 @@ public class LightlessTab : ConfigTabBase
                 DrawStatusLine();
                 theme.SpacerY(0.5f);
 
+                bool autoReconnect = plugin.Config.Lightless.AutoReconnect;
+                if (theme.ConfigCheckbox("Auto Reconnect", ref autoReconnect, () =>
+                {
+                    plugin.Config.Lightless.AutoReconnect = autoReconnect;
+                    plugin.Config.Save();
+                }))
+                {
+                }
+                theme.SpacerY(0.5f);
+
+
                 using (ImRaii.Disabled(!enabled))
                 {
                     plugin.ChannelCache.RefreshIfNeeded();
@@ -120,6 +131,7 @@ public class LightlessTab : ConfigTabBase
         DrawStage("ApiController", r.ApiControllerResolved, r.ApiControllerTypeName);
         DrawStage("Connection-state member", r.ConnectionStateResolved, r.ConnectionStateMemberName);
         DrawStage("Reconnect method", r.ReconnectResolved, r.ReconnectMethodName);
+        DrawStage("PairManager", r.PairManagerResolved, r.PairManagerResolved ? $"Resolved (Pairs count: {r.GetPairCount()?.ToString() ?? "unknown"})" : "Not resolved");
 
         theme.SpacerY(0.5f);
 

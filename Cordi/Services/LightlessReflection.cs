@@ -66,19 +66,19 @@ public class LightlessReflection
     // PairManager type-name candidates.
     private static readonly string[] PairManagerTypeCandidates =
     {
-        "PairManager",
+        "IPairManager", "PairManager", "MarePairManager", "DirectPairManager", "UserPairManager", "ClientPairManager",
     };
 
     // Tried in priority order at read time; the first non-null/empty result wins.
     private static readonly string[] PairListMemberCandidates =
     {
-        "_allClientPairs", "AllUserPairs", "DirectPairs", "Pairs", "DirectPair",
+        "_allClientPairs", "AllUserPairs", "DirectPairs", "Pairs", "DirectPair", "UserPairs", "ClientPairs",
     };
 
     // Method fallbacks on PairManager, tried when no member yielded a count.
     private static readonly string[] PairCountMethodCandidates =
     {
-        "GetPairCount", "GetOnlineUserCount", "GetVisibleUserCount",
+        "GetPairCount", "GetOnlineUserCount", "GetVisibleUserCount", "GetPairsCount",
     };
 
     private readonly IDalamudPluginInterface _pi;
@@ -1048,14 +1048,15 @@ public class LightlessReflection
         EnsureResolved();
         try
         {
-            if (_pairManagerInstance == null || _pairManagerType == null) return null;
+            if (_pairManagerInstance == null) return null;
+            var concreteType = _pairManagerInstance.GetType();
 
             // Try member-based candidates first.
             foreach (var name in PairListMemberCandidates)
             {
-                var member = (MemberInfo?)_pairManagerType.GetProperty(name,
+                var member = (MemberInfo?)concreteType.GetProperty(name,
                                 BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)
-                          ?? _pairManagerType.GetField(name,
+                          ?? concreteType.GetField(name,
                                 BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
                 if (member == null) continue;
 
@@ -1072,7 +1073,7 @@ public class LightlessReflection
             // Method-based fallbacks (Mare exposes GetVisibleUserCount / GetOnlineUserCount).
             foreach (var name in PairCountMethodCandidates)
             {
-                var m = _pairManagerType.GetMethod(name,
+                var m = concreteType.GetMethod(name,
                     BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance,
                     binder: null, types: Type.EmptyTypes, modifiers: null);
                 if (m == null) continue;
@@ -1101,13 +1102,14 @@ public class LightlessReflection
         EnsureResolved();
         try
         {
-            if (_pairManagerType == null || _pairManagerInstance == null)
+            if (_pairManagerInstance == null)
             {
-                Service.Log.Information("[Lightless] PairManager not resolved (type or instance missing).");
+                Service.Log.Information("[Lightless] PairManager not resolved (instance missing).");
                 return;
             }
-            Service.Log.Information($"[Lightless] PairManager type: {_pairManagerType.FullName}");
-            foreach (var f in _pairManagerType.GetFields(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance))
+            var concreteType = _pairManagerInstance.GetType();
+            Service.Log.Information($"[Lightless] PairManager concrete type: {concreteType.FullName}");
+            foreach (var f in concreteType.GetFields(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance))
             {
                 string val = "(unread)";
                 try
@@ -1120,7 +1122,7 @@ public class LightlessReflection
                 catch { val = "(threw)"; }
                 Service.Log.Information($"  field  {f.Name} : {f.FieldType.Name}  = {val}");
             }
-            foreach (var p in _pairManagerType.GetProperties(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance))
+            foreach (var p in concreteType.GetProperties(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance))
             {
                 if (p.GetIndexParameters().Length > 0) continue;
                 string val = "(unread)";
@@ -1134,7 +1136,7 @@ public class LightlessReflection
                 catch { val = "(threw)"; }
                 Service.Log.Information($"  prop   {p.Name} : {p.PropertyType.Name}  = {val}");
             }
-            foreach (var m in _pairManagerType.GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance))
+            foreach (var m in concreteType.GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance))
             {
                 if (m.DeclaringType == typeof(object)) continue;
                 if (m.GetParameters().Length != 0) continue;
@@ -1146,6 +1148,82 @@ public class LightlessReflection
         {
             Service.Log.Warning($"[Lightless] DumpPairManagerMembers failed: {ex.Message}");
         }
+    }
+
+    /// <summary>
+    /// Retrieves all paired player names from the PairManager lists.
+    /// Returns empty list if unavailable.
+    /// </summary>
+    public List<string> GetPairedPlayerNames()
+    {
+        var names = new List<string>();
+        EnsureResolved();
+        if (_pairManagerInstance == null) return names;
+        var concreteType = _pairManagerInstance.GetType();
+
+        try
+        {
+            foreach (var name in PairListMemberCandidates)
+            {
+                var member = (MemberInfo?)concreteType.GetProperty(name,
+                                BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)
+                          ?? concreteType.GetField(name,
+                                BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+                if (member == null) continue;
+
+                var listObj = ReadMember(member, _pairManagerInstance);
+                if (listObj is not IEnumerable enumerable) continue;
+
+                foreach (var item in enumerable)
+                {
+                    if (item == null) continue;
+                    var itemType = item.GetType();
+                    string? playerName = null;
+
+                    // Try direct property/field names for PlayerName
+                    foreach (var propName in new[] { "PlayerName", "CachedPlayerName", "CharacterName", "CachedName", "DisplayName", "Name" })
+                    {
+                        var p = itemType.GetProperty(propName, BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+                        if (p != null) { playerName = p.GetValue(item)?.ToString(); if (!string.IsNullOrEmpty(playerName)) break; }
+                        var f = itemType.GetField(propName, BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+                        if (f != null) { playerName = f.GetValue(item)?.ToString(); if (!string.IsNullOrEmpty(playerName)) break; }
+                    }
+
+                    // Try nested UserData / User alias properties
+                    if (string.IsNullOrEmpty(playerName))
+                    {
+                        foreach (var propName in new[] { "UserData", "User", "UserDto" })
+                        {
+                            var uProp = itemType.GetProperty(propName, BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+                            var uObj = uProp?.GetValue(item) ?? itemType.GetField(propName, BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)?.GetValue(item);
+                            if (uObj != null)
+                            {
+                                var uType = uObj.GetType();
+                                foreach (var subProp in new[] { "AliasOrSecondaryName", "Alias", "SecondaryName", "GID" })
+                                {
+                                    playerName = uType.GetProperty(subProp, BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)?.GetValue(uObj)?.ToString()
+                                              ?? uType.GetField(subProp, BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)?.GetValue(uObj)?.ToString();
+                                    if (!string.IsNullOrEmpty(playerName)) break;
+                                }
+                            }
+                            if (!string.IsNullOrEmpty(playerName)) break;
+                        }
+                    }
+
+                    if (!string.IsNullOrEmpty(playerName))
+                    {
+                        names.Add(playerName);
+                    }
+                }
+
+                if (names.Count > 0) return names;
+            }
+        }
+        catch (Exception ex)
+        {
+            Service.Log.Debug($"[Lightless.Reflection] GetPairedPlayerNames failed: {ex.Message}");
+        }
+        return names;
     }
 
     private static object? ReadMember(MemberInfo m, object target)
