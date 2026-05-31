@@ -52,5 +52,8 @@ public class CordiPeepConfig
     public float TargetingDotSize { get; set; } = 6f;
     public float TargetingDotYOffset { get; set; } = 2.0f;
 
+    public bool SkipRepeatedNotifications { get; set; } = false;
+    public int RepeatedNotificationsCooldown { get; set; } = 60;
+
     public List<CordiPeepBlacklistEntry> Blacklist { get; set; } = new();
 }
