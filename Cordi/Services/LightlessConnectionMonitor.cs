@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Cordi.Core;
@@ -53,8 +54,12 @@ public class LightlessConnectionMonitor : IDisposable
 
     // Cached state used to skip no-op status edits.
     private string _lastRenderedState = string.Empty;
-    private int _lastRenderedPairs = -1;
     private DateTime _lastStatusEditAt = DateTime.MinValue;
+
+    // Auto-reconnect state
+    private DateTime? _autoReconnectScheduledAt;
+    private DateTime _lastAutoReconnectAttempt = DateTime.MinValue;
+    private int _consecutiveReconnectFailures = 0;
 
     // The ID of the disconnect-alert message, mirrored from config — exposed so the
     // reaction handler can match incoming reactions cheaply.
@@ -101,19 +106,24 @@ public class LightlessConnectionMonitor : IDisposable
     private async Task TickAsync()
     {
         var cfg = _plugin.Config.Lightless;
-        if (!cfg.Enabled) return;
-        if (string.IsNullOrEmpty(cfg.DiscordChannelId)) return;
-        if (!ulong.TryParse(cfg.DiscordChannelId, out var channelId)) return;
+        if (!cfg.Enabled && !cfg.AutoReconnect) return;
 
         var raw = _plugin.Lightless.ConnectionStateRaw() ?? "Unknown";
         var cls = Classify(raw);
-        var pairs = _plugin.Lightless.GetPairCount() ?? -1;
 
         await _writeLock.WaitAsync().ConfigureAwait(false);
         try
         {
-            await UpdateStatusEmbedAsync(channelId, raw, cls, pairs).ConfigureAwait(false);
-            await HandleAlertTransitionsAsync(channelId, raw, cls).ConfigureAwait(false);
+            if (cfg.Enabled && !string.IsNullOrEmpty(cfg.DiscordChannelId) && ulong.TryParse(cfg.DiscordChannelId, out var channelId))
+            {
+                await UpdateStatusEmbedAsync(channelId, raw, cls).ConfigureAwait(false);
+                await HandleAlertTransitionsAsync(channelId, raw, cls).ConfigureAwait(false);
+            }
+
+            if (cfg.AutoReconnect)
+            {
+                await HandleAutoReconnectAsync(cls, raw).ConfigureAwait(false);
+            }
         }
         finally
         {
@@ -121,26 +131,85 @@ public class LightlessConnectionMonitor : IDisposable
         }
     }
 
-    private async Task UpdateStatusEmbedAsync(ulong channelId, string raw, StateClass cls, int pairs)
+    private async Task HandleAutoReconnectAsync(StateClass cls, string raw)
     {
-        var stateChanged = !string.Equals(raw, _lastRenderedState, StringComparison.Ordinal)
-                           || pairs != _lastRenderedPairs;
+        // Safeguard 1: Must be logged in to the game to attempt reconnection.
+        if (!Service.ClientState.IsLoggedIn)
+        {
+            _autoReconnectScheduledAt = null;
+            _consecutiveReconnectFailures = 0;
+            return;
+        }
+
+        // Safeguard 2: Only attempt reconnection if currently disconnected.
+        if (cls != StateClass.Disconnected)
+        {
+            if (cls == StateClass.Connected)
+            {
+                if (_consecutiveReconnectFailures > 0)
+                {
+                    Service.Log.Information("[Lightless.Monitor] Auto-reconnect: Connected state restored. Resetting failure counter.");
+                    _consecutiveReconnectFailures = 0;
+                }
+            }
+            _autoReconnectScheduledAt = null;
+            return;
+        }
+
+        // Safeguard 3: Flap protection / Initial delay.
+        // Wait at least 15 seconds after detecting a disconnect to avoid acting on temporary network glitches.
+        _autoReconnectScheduledAt ??= DateTime.UtcNow;
+        var disconnectedDuration = DateTime.UtcNow - _autoReconnectScheduledAt.Value;
+        if (disconnectedDuration < TimeSpan.FromSeconds(15))
+        {
+            return;
+        }
+
+        // Safeguard 4: Rate limiting & Heavy failure throttling.
+        var timeSinceLastAttempt = DateTime.UtcNow - _lastAutoReconnectAttempt;
+        var currentCooldown = _consecutiveReconnectFailures >= 5
+            ? TimeSpan.FromMinutes(5) // Heavy backoff/throttle after 5 consecutive failures
+            : TimeSpan.FromSeconds(30); // Normal cooldown between attempts
+
+        if (timeSinceLastAttempt < currentCooldown)
+        {
+            return;
+        }
+
+        _lastAutoReconnectAttempt = DateTime.UtcNow;
+        Service.Log.Information($"[Lightless.Monitor] Auto-reconnect: Initiating reconnect attempt {_consecutiveReconnectFailures + 1} (state={raw})");
+
+        var success = _plugin.Lightless.TryReconnect();
+        if (success)
+        {
+            _consecutiveReconnectFailures++;
+        }
+        else
+        {
+            Service.Log.Warning("[Lightless.Monitor] Auto-reconnect: TryReconnect returned false (reflection failed to resolve).");
+            _consecutiveReconnectFailures++;
+        }
+    }
+
+    private async Task UpdateStatusEmbedAsync(ulong channelId, string raw, StateClass cls)
+    {
+        var stateChanged = !string.Equals(raw, _lastRenderedState, StringComparison.Ordinal);
         var heartbeatDue = DateTime.UtcNow - _lastStatusEditAt >= StatusHeartbeat;
         var cfg = _plugin.Config.Lightless;
+        var forceUpdate = cfg.AutoReconnect && cls != StateClass.Connected;
 
         // First-ever post must happen regardless of "changed" flags.
-        if (!stateChanged && !heartbeatDue && cfg.StatusMessageId != 0) return;
+        if (!stateChanged && !heartbeatDue && !forceUpdate && cfg.StatusMessageId != 0) return;
 
-        var embed = BuildStatusEmbed(raw, cls, pairs);
+        var embed = BuildStatusEmbed(raw, cls);
 
         if (cfg.StatusMessageId != 0)
         {
             var ok = await _plugin.Discord.EditEmbedInChannelAsync(channelId, cfg.StatusMessageId, embed)
-                                          .ConfigureAwait(false);
+                                           .ConfigureAwait(false);
             if (ok)
             {
                 _lastRenderedState = raw;
-                _lastRenderedPairs = pairs;
                 _lastStatusEditAt = DateTime.UtcNow;
                 return;
             }
@@ -158,7 +227,6 @@ public class LightlessConnectionMonitor : IDisposable
         cfg.StatusMessageId = newId;
         _plugin.Config.Save();
         _lastRenderedState = raw;
-        _lastRenderedPairs = pairs;
         _lastStatusEditAt = DateTime.UtcNow;
         Service.Log.Information($"[Lightless.Monitor] Status embed posted: msg={newId}");
     }
@@ -191,6 +259,20 @@ public class LightlessConnectionMonitor : IDisposable
                 if (!_wasConnectedOnce) return;
                 _disconnectedSince ??= DateTime.UtcNow;
                 if (DateTime.UtcNow - _disconnectedSince.Value < DisconnectStableFor) return;
+
+                if (cfg.AutoReconnect)
+                {
+                    if (cfg.DisconnectMessageId != 0)
+                    {
+                        var msgId = cfg.DisconnectMessageId;
+                        cfg.DisconnectMessageId = 0;
+                        _plugin.Config.Save();
+                        await _plugin.Discord.DeleteChannelMessageAsync(channelId, msgId).ConfigureAwait(false);
+                        Service.Log.Information($"[Lightless.Monitor] Cleared lingering disconnect alert msg={msgId} because AutoReconnect is enabled.");
+                    }
+                    return;
+                }
+
                 if (cfg.DisconnectMessageId != 0) return; // alert already up
 
                 await PostDisconnectAlertAsync(channelId, raw).ConfigureAwait(false);
@@ -200,12 +282,19 @@ public class LightlessConnectionMonitor : IDisposable
 
     private async Task PostDisconnectAlertAsync(ulong channelId, string raw)
     {
+        var autoReconnect = _plugin.Config.Lightless.AutoReconnect;
+        var autoReconnectStatus = autoReconnect
+            ? "\n*Auto-reconnect is active and will attempt to restore connection shortly.*"
+            : $"\nReact with {ReconnectEmoji} to manually attempt a reconnect.";
+
         var embed = new DiscordEmbedBuilder()
-            .WithTitle("Lightless Sync disconnected")
-            .WithDescription($"Connection state: **{raw}**\n" +
-                             $"React with {ReconnectEmoji} to attempt a reconnect.\n" +
-                             $"This message will be removed automatically once the connection is back.")
-            .WithColor(new DiscordColor(0xE74C3C))
+            .WithTitle("Lightless Sync Disconnected")
+            .WithDescription($"### Connection Drop Detected\n" +
+                             $"**State:** `{raw}`\n" +
+                             $"{autoReconnectStatus}\n\n" +
+                             $"*This notification will be automatically deleted once the bridge goes back online.*")
+            .WithColor(new DiscordColor(0xF23F43))
+            .WithFooter("Cordi Alert System")
             .WithTimestamp(DateTimeOffset.UtcNow)
             .Build();
 
@@ -231,25 +320,89 @@ public class LightlessConnectionMonitor : IDisposable
         }
     }
 
-    private DiscordEmbed BuildStatusEmbed(string raw, StateClass cls, int pairs)
+    private DiscordEmbed BuildStatusEmbed(string raw, StateClass cls)
     {
         var (color, dot, headline) = cls switch
         {
-            StateClass.Connected    => (new DiscordColor(0x2ECC71), "🟢", "Online"),
-            StateClass.Transient    => (new DiscordColor(0xF1C40F), "🟡", "Reconnecting"),
-            StateClass.Disconnected => (new DiscordColor(0xE74C3C), "🔴", "Offline"),
-            _                        => (new DiscordColor(0x95A5A6), "⚪", "Unknown"),
+            StateClass.Connected    => (new DiscordColor(0x23A55A), "🟢", "Online"),
+            StateClass.Transient    => (new DiscordColor(0xF0B232), "🟡", "Reconnecting"),
+            StateClass.Disconnected => (new DiscordColor(0xF23F43), "🔴", "Offline"),
+            _                        => (new DiscordColor(0x747F8D), "⚪", "Unknown"),
         };
 
         var builder = new DiscordEmbedBuilder()
-            .WithTitle("Lightless Sync")
-            .WithDescription($"{dot}  **{headline}**")
+            .WithTitle("Lightless Sync Bridge")
             .WithColor(color)
-            .AddField("State", $"`{raw}`", inline: true)
-            .AddField("Pairs", pairs >= 0 ? pairs.ToString() : "—", inline: true)
-            .WithFooter("Last updated")
+            .WithFooter("Cordi Integration • Last updated")
             .WithTimestamp(DateTimeOffset.UtcNow);
 
+        // Construct modern description layout
+        var desc = $"**Status:** {dot} **{headline}**\n" +
+                   $"**Raw State:** `{raw}`\n\n";
+
+        var autoRecEnabled = _plugin.Config.Lightless.AutoReconnect;
+        var autoRec = autoRecEnabled ? "Enabled" : "Disabled";
+        desc += $"**Auto Reconnect:** `{autoRec}`\n";
+
+        if (cls == StateClass.Connected)
+        {
+            // Online status
+        }
+        else
+        {
+            if (autoRecEnabled)
+            {
+                if (!Service.ClientState.IsLoggedIn)
+                {
+                    desc += "\n*Auto-reconnect: Paused (Not logged into the game).*";
+                }
+                else
+                {
+                    var isWaitingForFlap = false;
+                    if (_autoReconnectScheduledAt.HasValue)
+                    {
+                        var disconnectedDuration = DateTime.UtcNow - _autoReconnectScheduledAt.Value;
+                        if (disconnectedDuration < TimeSpan.FromSeconds(15))
+                        {
+                            isWaitingForFlap = true;
+                            var remainingFlap = TimeSpan.FromSeconds(15) - disconnectedDuration;
+                            desc += $"\n*Auto-reconnect: Initializing flap protection (retrying in {(int)remainingFlap.TotalSeconds}s)...*";
+                        }
+                    }
+
+                    if (!isWaitingForFlap)
+                    {
+                        var timeSinceLastAttempt = DateTime.UtcNow - _lastAutoReconnectAttempt;
+                        var currentCooldown = _consecutiveReconnectFailures >= 5
+                            ? TimeSpan.FromMinutes(5)
+                            : TimeSpan.FromSeconds(30);
+
+                        var remaining = currentCooldown - timeSinceLastAttempt;
+                        if (remaining > TimeSpan.Zero)
+                        {
+                            if (_consecutiveReconnectFailures >= 5)
+                            {
+                                desc += $"\n⚠️ *Auto-reconnect: Throttled (5+ failed attempts). Next attempt in {(int)remaining.TotalMinutes}m {(int)remaining.Seconds}s.*";
+                            }
+                            else
+                            {
+                                desc += $"\n*Auto-reconnect: Cooldown active. Next attempt in {(int)remaining.TotalSeconds}s.*";
+                            }
+                        }
+                        else
+                        {
+                            desc += $"\n*Auto-reconnect: Attempt #{_consecutiveReconnectFailures + 1} pending shortly...*";
+                        }
+                    }
+                }
+            }
+            else
+            {
+                desc += "\n*Bridge is offline. Check the game/plugin status.*";
+            }
+        }
+
+        builder.WithDescription(desc);
         return builder.Build();
     }
 
@@ -287,12 +440,14 @@ public class LightlessConnectionMonitor : IDisposable
             : "Reconnect failed — deep integration could not invoke Lightless reconnect.";
 
         var embed = new DiscordEmbedBuilder()
-            .WithTitle("Lightless Sync disconnected")
-            .WithDescription($"Connection state: **{stateRaw}**\n" +
-                             $"React with {ReconnectEmoji} to attempt a reconnect.\n" +
-                             $"This message will be removed automatically once the connection is back.")
-            .AddField("Last action", $"{note}\n<t:{DateTimeOffset.UtcNow.ToUnixTimeSeconds()}:R>")
-            .WithColor(new DiscordColor(ok ? 0xF1C40F : 0xE74C3C))
+            .WithTitle("Lightless Sync Disconnected")
+            .WithDescription($"### Connection Drop Detected\n" +
+                             $"**State:** `{stateRaw}`\n\n" +
+                             $"**Last Action:**\n" +
+                             $"{note} (<t:{DateTimeOffset.UtcNow.ToUnixTimeSeconds()}:R>)\n\n" +
+                             $"*This notification will be automatically deleted once the bridge goes back online.*")
+            .WithColor(new DiscordColor(ok ? 0xF0B232 : 0xF23F43))
+            .WithFooter("Cordi Alert System")
             .WithTimestamp(DateTimeOffset.UtcNow)
             .Build();
 
