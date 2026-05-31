@@ -314,6 +314,31 @@ public class CordiPeepTab : ConfigTabBase
                     });
                     theme.HoverHandIfItem();
                 }
+
+                theme.SpacerY(0.5f);
+                ImGui.Separator();
+                theme.SpacerY(0.5f);
+
+                bool skipRepeated = plugin.Config.CordiPeep.SkipRepeatedNotifications;
+                if (theme.ConfigCheckbox("Skip repeated notifications for same peeper", ref skipRepeated, () =>
+                {
+                    plugin.Config.CordiPeep.SkipRepeatedNotifications = skipRepeated;
+                    plugin.Config.Save();
+                })) { }
+                theme.HoverHandIfItem();
+
+                if (skipRepeated)
+                {
+                    theme.SpacerY(0.5f);
+                    int cooldown = plugin.Config.CordiPeep.RepeatedNotificationsCooldown;
+                    ImGui.SetNextItemWidth(150f * ImGuiHelpers.GlobalScale);
+                    if (ImGui.DragInt("Repeated Notifications Cooldown (seconds)##peepCooldown", ref cooldown, 1f, 5, 3600))
+                    {
+                        plugin.Config.CordiPeep.RepeatedNotificationsCooldown = cooldown;
+                        plugin.Config.Save();
+                    }
+                    theme.HoverHandIfItem();
+                }
             }
         );
 

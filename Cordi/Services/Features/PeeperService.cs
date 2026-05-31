@@ -77,6 +77,7 @@ public class CordiPeepService : IDisposable
         public string? CurrentTargetName;
         public ulong CurrentTargetId;
         public bool IsPresent;
+        public bool TargetedBack;
     }
 
     private CordiLogService Log => plugin.LogService;
@@ -226,6 +227,7 @@ public class CordiPeepService : IDisposable
                 state.IsLooking = true;
                 state.StartTime = now;
                 state.EndTime = null;
+                state.TargetedBack = false;
                 _ = SendAlert(state, GetLocalPlayerTargetName());
             }
         }
@@ -256,14 +258,31 @@ public class CordiPeepService : IDisposable
                 state.IsLooking = true;
                 state.StartTime = now;
                 state.EndTime = null;
+                state.TargetedBack = false;
                 _ = SendAlert(state, GetLocalPlayerTargetName());
             }
         }
         else
         {
+            PeeperState? existingHistoryEntry = null;
             lock (History)
             {
-                History.RemoveAll(x => x.GameObjectId == id || (x.Name == name && x.World == world));
+                existingHistoryEntry = History.FirstOrDefault(x => x.GameObjectId == id || (x.Name == name && x.World == world));
+                if (existingHistoryEntry != null)
+                {
+                    History.Remove(existingHistoryEntry);
+                }
+            }
+
+            var skipNotifications = false;
+            if (existingHistoryEntry != null && plugin.Config.CordiPeep.SkipRepeatedNotifications)
+            {
+                var timeSinceLost = DateTime.Now - (existingHistoryEntry.EndTime ?? DateTime.MinValue);
+                if (timeSinceLost.TotalSeconds < plugin.Config.CordiPeep.RepeatedNotificationsCooldown)
+                {
+                    skipNotifications = true;
+                    Log.Info(LogSource, $"Skipping notifications for {name}@{world} (cooldown: {timeSinceLost.TotalSeconds:F1}s < {plugin.Config.CordiPeep.RepeatedNotificationsCooldown}s)");
+                }
             }
 
             var newState = new PeeperState
@@ -273,11 +292,20 @@ public class CordiPeepService : IDisposable
                 World = world,
                 StartTime = now,
                 LastSeen = now,
-                IsLooking = true
+                IsLooking = true,
+                TargetedBack = false
             };
+            if (existingHistoryEntry != null)
+            {
+                newState.AvatarUrl = existingHistoryEntry.AvatarUrl;
+                if (skipNotifications)
+                {
+                    newState.DiscordMessageId = existingHistoryEntry.DiscordMessageId;
+                }
+            }
             ActivePeepers[id] = newState;
             Log.Info(LogSource, $"Peeper detected: {name}@{world}");
-            _ = SendAlert(newState, GetLocalPlayerTargetName());
+            _ = SendAlert(newState, GetLocalPlayerTargetName(), skipNotifications);
 
             plugin.Config.Stats.IncrementPeepsTracked();
             plugin.Config.Stats.RecordPeep(name, world);
@@ -304,16 +332,94 @@ public class CordiPeepService : IDisposable
         ActivePeepers.TryRemove(state.GameObjectId, out _);
     }
 
-    private async Task SendAlert(PeeperState state, string myTargetName)
+    private DiscordEmbed BuildPeeperEmbed(PeeperState state, string myTargetName, string? lodestoneId)
+    {
+        var nameLink = !string.IsNullOrEmpty(lodestoneId)
+            ? $"[{state.Name}@{state.World}](https://na.finalfantasyxiv.com/lodestone/character/{lodestoneId}/)"
+            : $"{state.Name}@{state.World}";
+
+        var color = state.IsLooking ? new DiscordColor(0xE74C3C) : new DiscordColor(0x2ECC71);
+        var title = state.IsLooking ? "Peeper Detected!" : "Peeper Left!";
+        var description = state.IsLooking
+            ? $"**{nameLink}** is looking at you!"
+            : $"**{nameLink}** was looking at you.";
+
+        var footerText = state.IsLooking
+            ? $"Started looking at {state.StartTime:HH:mm:ss}"
+            : $"Looked away at {DateTime.Now:HH:mm:ss} (Duration: {((state.EndTime ?? DateTime.Now) - state.StartTime).TotalSeconds:F1}s)";
+
+        var embedBuilder = plugin.EmbedFactory.CreateEmbedBuilder(
+            title,
+            description,
+            color,
+            state.AvatarUrl,
+            footerText
+        );
+
+        if (state.IsLooking)
+        {
+            embedBuilder.AddField("Distance", $"{state.Distance:F1}m", true);
+        }
+        else
+        {
+            var duration = (state.EndTime ?? DateTime.Now) - state.StartTime;
+            embedBuilder.AddField("Duration", $"{duration.TotalSeconds:F1}s", true);
+        }
+        embedBuilder.AddField("Your Target", myTargetName, true);
+
+        if (state.TargetedBack)
+        {
+            embedBuilder.AddField("Status", "You targeted them back!", false);
+        }
+
+        return embedBuilder.Build();
+    }
+
+    private async Task UpdateEmbedTargetedBack(PeeperState state)
+    {
+        if (state.DiscordMessageId == 0) return;
+        state.TargetedBack = true;
+        var channelIdStr = plugin.Config.CordiPeep.DiscordChannelId;
+        if (ulong.TryParse(channelIdStr, out var channelId))
+        {
+            string finalTargetName = "None";
+            await Service.Framework.RunOnFrameworkThread(() =>
+            {
+                finalTargetName = GetLocalPlayerTargetName();
+            });
+
+            var lodestoneId = await plugin.Lodestone.ResolveLodestoneIdAsync(state.Name, state.World);
+            var embed = BuildPeeperEmbed(state, finalTargetName, lodestoneId);
+
+            await plugin.Discord.EditWebhookMessage(channelId, state.DiscordMessageId, embed);
+        }
+    }
+
+    private async Task SendAlert(PeeperState state, string myTargetName, bool skipNotifications = false)
     {
         var blacklistEntry = plugin.Config.CordiPeep.Blacklist.FirstOrDefault(x => x.Name == state.Name && x.World == state.World);
 
-        if (plugin.Config.CordiPeep.SoundEnabled && (blacklistEntry == null || !blacklistEntry.DisableSound))
+        if (plugin.Config.CordiPeep.SoundEnabled && !skipNotifications && (blacklistEntry == null || !blacklistEntry.DisableSound))
         {
             PlaySound();
         }
 
         if (!plugin.Config.CordiPeep.DiscordEnabled) return;
+
+        var channelIdStr = plugin.Config.CordiPeep.DiscordChannelId;
+        if (!ulong.TryParse(channelIdStr, out var channelId)) return;
+
+        if (skipNotifications)
+        {
+            if (state.DiscordMessageId != 0 && (blacklistEntry == null || !blacklistEntry.DisableDiscord))
+            {
+                _messageIdCache.Set(state.DiscordMessageId, state);
+                var skipLodestoneId = await plugin.Lodestone.ResolveLodestoneIdAsync(state.Name, state.World);
+                var skipEmbed = BuildPeeperEmbed(state, myTargetName, skipLodestoneId);
+                await plugin.Discord.EditWebhookMessage(channelId, state.DiscordMessageId, skipEmbed);
+            }
+            return;
+        }
 
         if (plugin.Config.CordiPeep.DisableDiscordInCombat &&
             Service.ObjectTable.LocalPlayer != null &&
@@ -323,50 +429,39 @@ public class CordiPeepService : IDisposable
             return;
         if (blacklistEntry?.DisableDiscord == true) return;
 
-        var channelIdStr = plugin.Config.CordiPeep.DiscordChannelId;
-        if (ulong.TryParse(channelIdStr, out var channelId))
+        var avatarUrl = await plugin.Lodestone.GetAvatarUrlAsync(state.Name, state.World);
+        state.AvatarUrl = avatarUrl;
+
+        var lodestoneId = await plugin.Lodestone.ResolveLodestoneIdAsync(state.Name, state.World);
+        var embed = BuildPeeperEmbed(state, myTargetName, lodestoneId);
+
+        if (state.DiscordMessageId == 0)
         {
-            var avatarUrl = await plugin.Lodestone.GetAvatarUrlAsync(state.Name, state.World);
-            state.AvatarUrl = avatarUrl;
-
-            var embedBuilder = plugin.EmbedFactory.CreateEmbedBuilder(
-                "Peeper Detected!",
-                $"**{state.Name}@{state.World}** is looking at you!",
-                DiscordColor.Red,
-                avatarUrl,
-                $"Started looking at {state.StartTime:HH:mm:ss}"
-            );
-            embedBuilder.AddField("Your Target", myTargetName, true);
-            var embed = embedBuilder.Build();
-
-            if (state.DiscordMessageId == 0)
-            {
-                state.DiscordMessageId = await plugin.Discord.SendWebhookMessage(channelId, embed, state.Name, state.World);
-                if (state.DiscordMessageId != 0)
-                {
-                    _messageIdCache.Set(state.DiscordMessageId, state);
-                    configChanged = true;
-                }
-            }
-            else
-            {
-                _messageIdCache.Set(state.DiscordMessageId, state);
-            }
-
+            state.DiscordMessageId = await plugin.Discord.SendWebhookMessage(channelId, embed, state.Name, state.World);
             if (state.DiscordMessageId != 0)
             {
-                await plugin.Discord.AddReaction(channelId, state.DiscordMessageId, DiscordEmoji.FromUnicode("👀"));
+                _messageIdCache.Set(state.DiscordMessageId, state);
+                configChanged = true;
+            }
+        }
+        else
+        {
+            _messageIdCache.Set(state.DiscordMessageId, state);
+        }
 
-                if (!state.IsLooking)
+        if (state.DiscordMessageId != 0)
+        {
+            await plugin.Discord.AddReaction(channelId, state.DiscordMessageId, DiscordEmoji.FromUnicode("👀"));
+
+            if (!state.IsLooking)
+            {
+                string finalTargetName = "None";
+                await Service.Framework.RunOnFrameworkThread(() =>
                 {
-                    string finalTargetName = "None";
-                    await Service.Framework.RunOnFrameworkThread(() =>
-                    {
-                        finalTargetName = GetLocalPlayerTargetName();
-                    });
+                    finalTargetName = GetLocalPlayerTargetName();
+                });
 
-                    await UpdateAlertStopped(state, finalTargetName);
-                }
+                await UpdateAlertStopped(state, finalTargetName);
             }
         }
     }
@@ -377,16 +472,8 @@ public class CordiPeepService : IDisposable
         var channelIdStr = plugin.Config.CordiPeep.DiscordChannelId;
         if (ulong.TryParse(channelIdStr, out var channelId))
         {
-            var duration = (state.EndTime ?? DateTime.Now) - state.StartTime;
-            var embedBuilder = plugin.EmbedFactory.CreateEmbedBuilder(
-                "Peeper Left!",
-                $"**{state.Name}@{state.World}** was looking at you.",
-                DiscordColor.Green,
-                state.AvatarUrl,
-                $"Looked away at {DateTime.Now:HH:mm:ss} (Duration: {duration.TotalSeconds:F1}s)"
-            );
-            embedBuilder.AddField("Your Target", myTargetName, true);
-            var embed = embedBuilder.Build();
+            var lodestoneId = await plugin.Lodestone.ResolveLodestoneIdAsync(state.Name, state.World);
+            var embed = BuildPeeperEmbed(state, myTargetName, lodestoneId);
 
             await plugin.Discord.EditWebhookMessage(channelId, state.DiscordMessageId, embed);
         }
@@ -504,6 +591,7 @@ public class CordiPeepService : IDisposable
                     Service.TargetManager.Target = target;
                     Service.Log.Info($"[CordiPeep] \u2705 TARGETED: {target.Name} (ID: {target.GameObjectId:X})");
                     Log.Info(LogSource, $"Targeted via reaction: {target.Name}");
+                    _ = UpdateEmbedTargetedBack(peeper);
                 }
                 else
                 {

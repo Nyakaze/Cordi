@@ -85,26 +85,16 @@ public class EmoteDiscordNotifier
         try
         {
             var avatarUrl = await _plugin.Lodestone.GetAvatarUrlAsync(name, world);
-
-            string description = $"**{name}@{world}** used **{emoteName}** on you!";
-            if (state.Count > 1) description += $" (x{state.Count})";
-            if (state.EmotedBack) description += "\n\n✅ *You emoted back!*";
-
-            var embedBuilder = _plugin.EmbedFactory.CreateEmbedBuilder(
-                "Emote Detected",
-                description,
-                DiscordColor.Blurple,
-                avatarUrl,
-                state.EmotedBack ? "Interaction Complete" : "React with 🔙 to emote back"
-            );
+            var lodestoneId = await _plugin.Lodestone.ResolveLodestoneIdAsync(name, world);
+            var embed = BuildEmoteEmbed(state, lodestoneId, avatarUrl);
 
             if (updateExisting && state.MessageId != 0)
             {
-                await _plugin.Discord.EditWebhookMessage(channelId, state.MessageId, embedBuilder.Build());
+                await _plugin.Discord.EditWebhookMessage(channelId, state.MessageId, embed);
             }
             else
             {
-                state.MessageId = await _plugin.Discord.SendWebhookMessage(channelId, embedBuilder.Build(), name, world);
+                state.MessageId = await _plugin.Discord.SendWebhookMessage(channelId, embed, name, world);
 
                 if (state.MessageId != 0)
                 {
@@ -119,6 +109,39 @@ public class EmoteDiscordNotifier
         }
     }
 
+    private DiscordEmbed BuildEmoteEmbed(EmoteLogService.DiscordEmoteState state, string? lodestoneId, string avatarUrl)
+    {
+        var nameLink = !string.IsNullOrEmpty(lodestoneId)
+            ? $"[{state.User}@{state.World}](https://na.finalfantasyxiv.com/lodestone/character/{lodestoneId}/)"
+            : $"{state.User}@{state.World}";
+
+        var color = state.EmotedBack ? new DiscordColor(0x2ECC71) : new DiscordColor(0x5865F2);
+        var title = "Emote Detected";
+        var description = $"**{nameLink}** used **{state.EmoteName}** on you!";
+        var footerText = state.EmotedBack ? "Interaction Complete" : "React with 🔙 to emote back";
+
+        var embedBuilder = _plugin.EmbedFactory.CreateEmbedBuilder(
+            title,
+            description,
+            color,
+            avatarUrl,
+            footerText
+        );
+
+        embedBuilder.AddField("Emote", state.EmoteName, true);
+        if (state.Count > 1)
+        {
+            embedBuilder.AddField("Count", $"{state.Count} times", true);
+        }
+
+        if (state.EmotedBack)
+        {
+            embedBuilder.AddField("Status", "You emoted back!", false);
+        }
+
+        return embedBuilder.Build();
+    }
+
     public async Task OnDiscordReactionAdded(MessageReactionAddEventArgs e)
     {
         if (e.User.IsBot) return;
@@ -130,7 +153,6 @@ public class EmoteDiscordNotifier
         }
 
         if (state == null) return;
-
         if (state.EmotedBack) return;
 
         state.EmotedBack = true;
@@ -145,19 +167,10 @@ public class EmoteDiscordNotifier
             try
             {
                 var avatarUrl = await _plugin.Lodestone.GetAvatarUrlAsync(state.User, state.World);
-                string description = $"**{state.User}@{state.World}** used **{state.EmoteName}** on you!";
-                if (state.Count > 1) description += $" (x{state.Count})";
-                description += "\n\n✅ *You emoted back!*";
+                var lodestoneId = await _plugin.Lodestone.ResolveLodestoneIdAsync(state.User, state.World);
+                var embed = BuildEmoteEmbed(state, lodestoneId, avatarUrl);
 
-                var embedBuilder = _plugin.EmbedFactory.CreateEmbedBuilder(
-                    "Emote Detected",
-                    description,
-                    DiscordColor.Green,
-                    avatarUrl,
-                    "Interaction Complete"
-                );
-
-                await _plugin.Discord.EditWebhookMessage(channelId, state.MessageId, embedBuilder.Build());
+                await _plugin.Discord.EditWebhookMessage(channelId, state.MessageId, embed);
                 await _plugin.Discord.RemoveReaction(channelId, state.MessageId, DiscordEmoji.FromUnicode("🔙"));
             }
             catch (Exception ex) { _logger.Error(ex, "Failed to update embed after reaction."); }
