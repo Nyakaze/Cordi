@@ -5,6 +5,7 @@ using System.Linq;
 using System.Reflection;
 using System.Text;
 using Dalamud.Plugin.Services;
+using Dalamud.Plugin.Ipc;
 using Dalamud.Game.ClientState.Objects.SubKinds;
 using Cordi.Core;
 
@@ -19,6 +20,7 @@ public static class VisibilityBridge
     {
         public string Name = string.Empty;
         public string World = string.Empty;
+        public uint HomeworldId;
         public ulong ObjectId;
         public ulong ContentId;
         public DateTime? LastTargetedTime;
@@ -26,6 +28,44 @@ public static class VisibilityBridge
     }
 
     private static readonly ConcurrentDictionary<ulong, TempUnhideState> TempUnhiddenPlayers = new();
+
+    private const string WhitelistReason = "Cordi Peeper";
+
+    // Visibility's official IPC. AddToWhitelist internally adds the entry AND calls
+    // RemoveChecked + ShowPlayer, which is the only reliable way to make Visibility itself
+    // keep a player shown. Reflecting into its internals raced Visibility's per-frame re-hide.
+    private static ICallGateSubscriber<string, uint, string, object>? _ipcAddToWhitelist;
+    private static ICallGateSubscriber<string, uint, object>? _ipcRemoveFromWhitelist;
+
+    private static bool IpcAddToWhitelist(string name, uint worldId, string reason)
+    {
+        try
+        {
+            _ipcAddToWhitelist ??= Service.PluginInterface.GetIpcSubscriber<string, uint, string, object>("Visibility.AddToWhitelist");
+            _ipcAddToWhitelist.InvokeAction(name, worldId, reason);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            Log.Debug($"[VisibilityBridge] IPC AddToWhitelist failed: {ex.Message}");
+            return false;
+        }
+    }
+
+    private static bool IpcRemoveFromWhitelist(string name, uint worldId)
+    {
+        try
+        {
+            _ipcRemoveFromWhitelist ??= Service.PluginInterface.GetIpcSubscriber<string, uint, object>("Visibility.RemoveFromWhitelist");
+            _ipcRemoveFromWhitelist.InvokeAction(name, worldId);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            Log.Debug($"[VisibilityBridge] IPC RemoveFromWhitelist failed: {ex.Message}");
+            return false;
+        }
+    }
 
     private static Assembly? _visibilityAssembly;
     private static Type? _pluginType;
@@ -311,7 +351,7 @@ public static class VisibilityBridge
                 // target object"). Always trust the instance's own type.
                 _pluginType = instance.GetType();
                 _visibilityAssembly = _pluginType.Assembly;
-                _voidItemType = null; // force re-resolve from the correct assembly
+                ResetReflectionCaches(); // force re-resolve from the correct assembly
             }
             else
             {
@@ -326,6 +366,8 @@ public static class VisibilityBridge
         }
     }
 
+    private static MemberInfo? _configMember;
+
     private static object? GetVisibilityConfig()
     {
         var pluginInstance = GetVisibilityPluginInstance();
@@ -333,14 +375,15 @@ public static class VisibilityBridge
 
         try
         {
-            var configProp = (MemberInfo?)_pluginType!.GetProperty("Configuration", BindingFlags.Public | BindingFlags.Instance)
+            // Resolve the member once; this runs every framework tick.
+            _configMember ??= (MemberInfo?)_pluginType!.GetProperty("Configuration", BindingFlags.Public | BindingFlags.Instance)
                           ?? (MemberInfo?)_pluginType.GetProperty("Config", BindingFlags.Public | BindingFlags.Instance)
                           ?? (MemberInfo?)_pluginType.GetField("configuration", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)
                           ?? (MemberInfo?)_pluginType.GetField("configuration", BindingFlags.Public | BindingFlags.Instance)
                           ?? (MemberInfo?)_pluginType.GetField("configuration", BindingFlags.NonPublic | BindingFlags.Instance)
                           ?? (MemberInfo?)_pluginType.GetField("Config", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
 
-            return GetMemberValue(pluginInstance, configProp);
+            return GetMemberValue(pluginInstance, _configMember);
         }
         catch (Exception ex)
         {
@@ -350,14 +393,88 @@ public static class VisibilityBridge
                 _lastConfigErrorLogTime = DateTime.Now;
                 Log.Debug($"[VisibilityBridge] Failed to get config instance: {ex.Message}");
             }
-            // The cached instance is likely stale (e.g. Visibility was reloaded); drop it so
-            // the next lookup re-discovers the live instance and rebinds reflection metadata.
+            // The cached instance is likely stale (e.g. Visibility was reloaded); drop it and
+            // its reflection caches so the next lookup re-discovers the live instance.
             _visibilityPluginInstance = null;
+            ResetReflectionCaches();
             return null;
         }
     }
 
     private static DateTime _lastConfigErrorLogTime = DateTime.MinValue;
+
+    private static MemberInfo? _enabledMember;
+    private static MemberInfo? _currentConfigMember;
+    private static MemberInfo? _hidePlayerMember;
+    private static bool _disabledMembersResolved;
+
+    // Reset every cached MemberInfo/Type so they are re-resolved against the live plugin.
+    // Called when the instance is (re)discovered or dropped, since a Visibility reload swaps
+    // the AssemblyLoadContext and invalidates all previously cached reflection metadata.
+    private static void ResetReflectionCaches()
+    {
+        _configMember = null;
+        _voidItemType = null;
+        _enabledMember = null;
+        _currentConfigMember = null;
+        _hidePlayerMember = null;
+        _disabledMembersResolved = false;
+    }
+
+    // True when Visibility is enabled AND configured to hide players in the current territory.
+    // Caches the member lookups because this is evaluated on every framework tick.
+    private static bool IsVisibilityHidingPlayers(object config)
+    {
+        try
+        {
+            if (!_disabledMembersResolved)
+            {
+                _enabledMember = GetFieldOrProperty(config.GetType(), "Enabled");
+                _currentConfigMember = GetFieldOrProperty(config.GetType(), "CurrentConfig");
+                _disabledMembersResolved = true;
+            }
+
+            if (_enabledMember != null && GetMemberValue(config, _enabledMember) is bool enabled && !enabled)
+            {
+                LogHidingDecision("Enabled=false", config);
+                return false;
+            }
+
+            if (_currentConfigMember != null)
+            {
+                var currentConfig = GetMemberValue(config, _currentConfigMember);
+                if (currentConfig != null)
+                {
+                    _hidePlayerMember ??= GetFieldOrProperty(currentConfig.GetType(), "HidePlayer");
+                    if (_hidePlayerMember != null && GetMemberValue(currentConfig, _hidePlayerMember) is bool hidePlayer && !hidePlayer)
+                    {
+                        LogHidingDecision("HidePlayer=false", config);
+                        return false;
+                    }
+                }
+            }
+
+            return true;
+        }
+        catch (Exception ex)
+        {
+            Log.Debug($"[VisibilityBridge] Error checking visibility configuration state: {ex.Message}");
+            // On error, assume Visibility is hiding players so we still attempt to unhide.
+            return true;
+        }
+    }
+
+    private static DateTime _lastHidingDecisionLogTime = DateTime.MinValue;
+
+    // Throttled diagnostic: when we conclude Visibility is NOT hiding players (which triggers the
+    // tracked-player release), record why and against which type, so a schema/reflection mismatch
+    // is easy to spot instead of silently un-hiding everyone.
+    private static void LogHidingDecision(string reason, object config)
+    {
+        if ((DateTime.Now - _lastHidingDecisionLogTime).TotalSeconds <= 10.0) return;
+        _lastHidingDecisionLogTime = DateTime.Now;
+        Log.Debug($"[VisibilityBridge] Treating Visibility as not hiding players ({reason}); config type = {config.GetType().FullName}");
+    }
 
     public static bool IsVisibilityLoaded()
     {
@@ -438,50 +555,6 @@ public static class VisibilityBridge
         }
     }
 
-    private static void MarkPlayerAsVisible(ulong objectId)
-    {
-        try
-        {
-            var pluginInstance = GetVisibilityPluginInstance();
-            if (pluginInstance == null) return;
-
-            var frameworkHandlerField = _pluginType!.GetField("frameworkHandler", BindingFlags.NonPublic | BindingFlags.Instance)
-                                     ?? _pluginType.GetField("frameworkHandler", BindingFlags.Public | BindingFlags.Instance);
-            if (frameworkHandlerField == null) return;
-
-            var frameworkHandler = frameworkHandlerField.GetValue(pluginInstance);
-            if (frameworkHandler == null) return;
-
-            var visibilityManagerField = frameworkHandler.GetType().GetField("visibilityManager", BindingFlags.NonPublic | BindingFlags.Instance)
-                                      ?? frameworkHandler.GetType().GetField("visibilityManager", BindingFlags.Public | BindingFlags.Instance);
-            if (visibilityManagerField == null) return;
-
-            var visibilityManager = visibilityManagerField.GetValue(frameworkHandler);
-            if (visibilityManager == null) return;
-
-            var markObjectToShowMethod = visibilityManager.GetType().GetMethod("MarkObjectToShow", BindingFlags.Public | BindingFlags.Instance);
-            if (markObjectToShowMethod != null)
-            {
-                var parameters = markObjectToShowMethod.GetParameters();
-                if (parameters.Length == 2)
-                {
-                    var enumType = parameters[1].ParameterType;
-                    var characterEnumVal = Enum.ToObject(enumType, 0);
-                    markObjectToShowMethod.Invoke(visibilityManager, new object[] { (uint)objectId, characterEnumVal });
-                }
-                else
-                {
-                    markObjectToShowMethod.Invoke(visibilityManager, new object[] { (uint)objectId });
-                }
-                Log.Debug($"[VisibilityBridge] Marked player to show in Visibility Manager: {objectId:X}");
-            }
-        }
-        catch (Exception ex)
-        {
-            Log.Error($"[VisibilityBridge] Failed to mark player as visible: {ex}");
-        }
-    }
-
     public static unsafe void UnhidePlayer(IPlayerCharacter player, bool allowVoided, bool isEmote)
     {
         if (player == null) return;
@@ -500,37 +573,7 @@ public static class VisibilityBridge
             return;
         }
 
-        bool isVisibilityDisabled = false;
-        try
-        {
-            var enabledMember = GetFieldOrProperty(config.GetType(), "Enabled");
-            if (enabledMember != null)
-            {
-                var enabled = (bool)GetMemberValue(config, enabledMember)!;
-                if (!enabled) isVisibilityDisabled = true;
-            }
-
-            var currentConfigMember = GetFieldOrProperty(config.GetType(), "CurrentConfig");
-            if (currentConfigMember != null)
-            {
-                var currentConfig = GetMemberValue(config, currentConfigMember);
-                if (currentConfig != null)
-                {
-                    var hidePlayerMember = GetFieldOrProperty(currentConfig.GetType(), "HidePlayer");
-                    if (hidePlayerMember != null)
-                    {
-                        var hidePlayer = (bool)GetMemberValue(currentConfig, hidePlayerMember)!;
-                        if (!hidePlayer) isVisibilityDisabled = true;
-                    }
-                }
-            }
-        }
-        catch (Exception ex)
-        {
-            Log.Debug($"[VisibilityBridge] Error checking visibility configuration state: {ex.Message}");
-        }
-
-        if (isVisibilityDisabled)
+        if (!IsVisibilityHidingPlayers(config))
         {
             if (charStruct != null && (charStruct->GameObject.RenderFlags & invisibleFlags) != 0)
             {
@@ -548,12 +591,6 @@ public static class VisibilityBridge
 
         try
         {
-            if (_voidItemType == null)
-            {
-                _voidItemType = _visibilityAssembly!.GetType("Visibility.Void.VoidItem");
-                if (_voidItemType == null) return;
-            }
-
             // Check if they are already in our temporary state tracking
             if (TempUnhiddenPlayers.TryGetValue(objectId, out var state))
             {
@@ -566,31 +603,26 @@ public static class VisibilityBridge
                     state.LastTargetedTime = DateTime.Now;
                 }
 
-                // Re-assert visibility every frame. If Visibility re-hid them since the last
-                // frame they are back in hiddenObjectIds, so MarkObjectToShow is required to
-                // drive the proper show pipeline; clearing the render flags alone would leave
-                // them tracked as hidden internally.
-                MarkPlayerAsVisible(objectId);
-                ManipulateVisibilityCaches(objectId, unhide: true);
-
-                // Directly clear invisible flags on GameObject to bypass the game client rejecting immediate targeting/focus
-                if (charStruct != null)
+                // Steady state: the IPC whitelist entry is sticky, so Visibility keeps the player
+                // shown with no per-frame work from us. Only re-assert (cheaply) if Visibility has
+                // actually re-hidden them - e.g. its runtime whitelist cache was cleared on a zone
+                // change. Detected by a direct render-flag read; no reflection, no per-frame logging.
+                if (charStruct != null && (charStruct->GameObject.RenderFlags & invisibleFlags) != 0)
                 {
+                    IpcAddToWhitelist(name, (uint)homeworldId, WhitelistReason);
                     charStruct->GameObject.RenderFlags &= ~invisibleFlags;
                 }
                 return;
             }
 
-            // Look up in Visibility plugin's VoidList (stored in config)
+            // Look up in Visibility plugin's VoidList (stored in config) to honor the
+            // "don't unhide voided players" option before whitelisting them.
             var voidListProp = config.GetType().GetProperty("VoidList");
-            var whitelistProp = config.GetType().GetProperty("Whitelist");
-
-            if (voidListProp == null || whitelistProp == null) return;
+            if (voidListProp == null) return;
 
             var voidList = voidListProp.GetValue(config) as System.Collections.IList;
-            var whitelist = whitelistProp.GetValue(config) as System.Collections.IList;
 
-            if (voidList == null || whitelist == null) return;
+            if (voidList == null) return;
 
             // Check if player is voided/blocked
             object? matchingVoidItem = null;
@@ -636,103 +668,32 @@ public static class VisibilityBridge
             // hidden flag being set on *this* frame was racy: if Cordi processed the player
             // before Visibility hid them, it returned without tracking and they stayed hidden.
 
-            // We will temporarily unhide this player
-            var newState = new TempUnhideState
+            // Whitelist via Visibility's official IPC. This is the only path that reliably keeps
+            // the player shown: AddToWhitelist adds the entry AND internally calls RemoveChecked +
+            // ShowPlayer, so Visibility's own per-frame check stops re-hiding them. The previous
+            // reflection re-implementation raced Visibility and lost (the player just flickered).
+            if (!IpcAddToWhitelist(name, (uint)homeworldId, WhitelistReason))
+            {
+                // Visibility/IPC unavailable - nothing we can do reliably; don't track a player
+                // we can't actually keep visible.
+                return;
+            }
+
+            TempUnhiddenPlayers[objectId] = new TempUnhideState
             {
                 Name = name,
                 World = world,
+                HomeworldId = (uint)homeworldId,
                 ObjectId = objectId,
                 ContentId = contentId,
                 LastTargetedTime = isEmote ? null : DateTime.Now,
                 EmoteExpireTime = isEmote ? DateTime.Now.AddSeconds(15) : null
             };
 
+            Log.Info($"[VisibilityBridge] Temporarily whitelisting {name}@{world} (ObjectId: {objectId:X}) via Visibility IPC");
 
-
-            // 2. Add them to the Whitelist and WhitelistDictionary
-            // Create a new VoidItem instance
-            var newVoidItem = Activator.CreateInstance(_voidItemType);
-            if (newVoidItem != null)
-            {
-                // Populate name
-                var nameProp = _voidItemType.GetProperty("Name");
-                if (nameProp != null)
-                {
-                    nameProp.SetValue(newVoidItem, name);
-                }
-                else
-                {
-                    // Fallback to Firstname/Lastname if Name init is missing
-                    var parts = name.Split(' ');
-                    if (parts.Length >= 2)
-                    {
-                        var fnProp = (MemberInfo?)_voidItemType.GetProperty("Firstname") ?? _voidItemType.GetField("Firstname");
-                        var lnProp = (MemberInfo?)_voidItemType.GetProperty("Lastname") ?? _voidItemType.GetField("Lastname");
-                        if (fnProp != null) SetMemberValue(newVoidItem, fnProp, parts[0]);
-                        if (lnProp != null) SetMemberValue(newVoidItem, lnProp, parts[1]);
-                    }
-                }
-
-                // Populate ID
-                var idProp = (MemberInfo?)_voidItemType.GetProperty("Id") ?? _voidItemType.GetField("Id");
-                if (idProp != null)
-                {
-                    SetMemberValue(newVoidItem, idProp, contentId != 0 ? contentId : objectId);
-                }
-
-                // Populate HomeworldId and HomeworldName
-                var hwIdProp = (MemberInfo?)_voidItemType.GetProperty("HomeworldId") ?? _voidItemType.GetField("HomeworldId");
-                if (hwIdProp != null)
-                {
-                    SetMemberValue(newVoidItem, hwIdProp, (uint)homeworldId);
-                }
-
-                var hwNameProp = (MemberInfo?)_voidItemType.GetProperty("HomeworldName") ?? _voidItemType.GetField("HomeworldName");
-                if (hwNameProp != null)
-                {
-                    SetMemberValue(newVoidItem, hwNameProp, world);
-                }
-
-                // Populate NameBytes to ensure compliant matching
-                byte[] nameBytes = System.Text.Encoding.UTF8.GetBytes(name + '\0');
-                var nameBytesProp = (MemberInfo?)_voidItemType.GetProperty("NameBytes") ?? _voidItemType.GetField("NameBytes");
-                if (nameBytesProp != null)
-                {
-                    SetMemberValue(newVoidItem, nameBytesProp, nameBytes.Length < 64 ? nameBytes : nameBytes.Take(64).ToArray());
-                }
-
-                // Add to whitelist
-                whitelist.Add(newVoidItem);
-
-                // Also add to WhitelistDictionary in-memory
-                var whitelistDictField = config.GetType().GetField("WhitelistDictionary");
-                if (whitelistDictField != null)
-                {
-                    var whitelistDict = whitelistDictField.GetValue(config) as System.Collections.IDictionary;
-                    if (whitelistDict != null)
-                    {
-                        if (contentId != 0)
-                        {
-                            whitelistDict[contentId] = newVoidItem;
-                        }
-                        else
-                        {
-                            whitelistDict[objectId] = newVoidItem;
-                        }
-                    }
-                }
-
-                Log.Info($"[VisibilityBridge] Temporarily whitelisting {name}@{world} (ContentId: {contentId:X}, ObjectId: {objectId:X}) for rendering and tracking");
-            }
-
-            TempUnhiddenPlayers[objectId] = newState;
-
-            // Force immediate re-evaluation in framework handler
-            ClearVisibilityCache(objectId);
-            MarkPlayerAsVisible(objectId);
-            ManipulateVisibilityCaches(objectId, unhide: true);
-
-            // Directly clear invisible flags on GameObject to bypass the game client rejecting immediate targeting/focus
+            // Clear the invisible flags this frame too, so targeting/focus works immediately,
+            // before Visibility's own update runs.
             if (charStruct != null)
             {
                 charStruct->GameObject.RenderFlags &= ~invisibleFlags;
@@ -772,63 +733,31 @@ public static class VisibilityBridge
         }
 
         var config = GetVisibilityConfig();
-        bool isVisibilityDisabled = false;
-        var invisibleFlags = FFXIVClientStructs.FFXIV.Client.Game.Object.VisibilityFlags.Model | 
+        var invisibleFlags = FFXIVClientStructs.FFXIV.Client.Game.Object.VisibilityFlags.Model |
                              FFXIVClientStructs.FFXIV.Client.Game.Object.VisibilityFlags.Nameplate;
+        bool isVisibilityDisabled = config != null && !IsVisibilityHidingPlayers(config);
 
-        if (config != null)
-        {
-            try
-            {
-                var enabledMember = GetFieldOrProperty(config.GetType(), "Enabled");
-                if (enabledMember != null)
-                {
-                    var enabled = (bool)GetMemberValue(config, enabledMember)!;
-                    if (!enabled) isVisibilityDisabled = true;
-                }
-
-                var currentConfigMember = GetFieldOrProperty(config.GetType(), "CurrentConfig");
-                if (currentConfigMember != null)
-                {
-                    var currentConfig = GetMemberValue(config, currentConfigMember);
-                    if (currentConfig != null)
-                    {
-                        var hidePlayerMember = GetFieldOrProperty(currentConfig.GetType(), "HidePlayer");
-                        if (hidePlayerMember != null)
-                        {
-                            var hidePlayer = (bool)GetMemberValue(currentConfig, hidePlayerMember)!;
-                            if (!hidePlayer) isVisibilityDisabled = true;
-                        }
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                Log.Debug($"[VisibilityBridge] Error checking visibility configuration state in OnFrameworkUpdate: {ex.Message}");
-            }
-        }
-
-        // Only run disabled/unloaded cleanup if we successfully fetched config and verified Visibility is disabled/unchecked.
-        if (config != null && isVisibilityDisabled)
+        // When Visibility is disabled/unchecked, release ONLY the players Cordi itself temporarily
+        // unhid. We must never touch the whole ObjectTable here: doing so pushes every player into
+        // Visibility's whitelist caches and forces everyone visible regardless of the user's config.
+        if (config != null && isVisibilityDisabled && !TempUnhiddenPlayers.IsEmpty)
         {
             try
             {
                 foreach (var obj in Service.ObjectTable)
                 {
-                    if (obj is IPlayerCharacter pc)
+                    if (obj is IPlayerCharacter pc && TempUnhiddenPlayers.ContainsKey(pc.GameObjectId))
                     {
                         var charStruct = (FFXIVClientStructs.FFXIV.Client.Game.Character.Character*)pc.Address;
-                        if (charStruct != null)
+                        if (charStruct != null && (charStruct->GameObject.RenderFlags & invisibleFlags) != 0)
                         {
-                            if ((charStruct->GameObject.RenderFlags & invisibleFlags) != 0)
-                            {
-                                charStruct->GameObject.RenderFlags &= ~invisibleFlags;
-                                Log.Debug($"[VisibilityBridge] Cleared ghost invisible flags for {pc.Name}@{pc.HomeWorld.Value.Name} (Visibility disabled/unloaded)");
-                            }
+                            charStruct->GameObject.RenderFlags &= ~invisibleFlags;
                         }
-                        ManipulateVisibilityCaches(pc.GameObjectId, unhide: true);
                     }
                 }
+
+                // Stop tracking everyone; Visibility is no longer hiding, so there is nothing to restore.
+                TempUnhiddenPlayers.Clear();
             }
             catch (Exception ex)
             {
@@ -897,62 +826,18 @@ public static class VisibilityBridge
 
     public static void RestorePlayerHiddenState(ulong id)
     {
-        var config = GetVisibilityConfig();
-        if (config == null) return;
+        if (!TempUnhiddenPlayers.TryRemove(id, out var state)) return;
 
         try
         {
-            var whitelistProp = config.GetType().GetProperty("Whitelist");
-            if (whitelistProp == null) return;
+            Log.Info($"[VisibilityBridge] Restoring hidden state for {state.Name}@{state.World}");
 
-            var whitelist = whitelistProp.GetValue(config) as System.Collections.IList;
-            if (whitelist == null) return;
-
-            var whitelistDictField = config.GetType().GetField("WhitelistDictionary");
-            var whitelistDict = whitelistDictField?.GetValue(config) as System.Collections.IDictionary;
-
-            if (TempUnhiddenPlayers.TryRemove(id, out var state))
-            {
-                Log.Info($"[VisibilityBridge] Restoring hidden state for {state.Name}@{state.World}");
-
-                // 1. Remove from Whitelist and WhitelistDictionary
-                object? toRemoveFromList = null;
-                foreach (var item in whitelist)
-                {
-                    if (item == null) continue;
-                    var idProp = (MemberInfo?)item.GetType().GetProperty("Id") ?? item.GetType().GetField("Id");
-                    if (idProp != null)
-                    {
-                        var itemId = (ulong)GetMemberValue(item, idProp)!;
-                        if (itemId == state.ContentId || itemId == id)
-                        {
-                            toRemoveFromList = item;
-                            break;
-                        }
-                    }
-                }
-
-                if (toRemoveFromList != null)
-                {
-                    whitelist.Remove(toRemoveFromList);
-                }
-
-                if (whitelistDict != null)
-                {
-                    if (state.ContentId != 0 && whitelistDict.Contains(state.ContentId))
-                    {
-                        whitelistDict.Remove(state.ContentId);
-                    }
-                    if (whitelistDict.Contains(id))
-                    {
-                        whitelistDict.Remove(id);
-                    }
-                }
-
-                // 2. Clear caches and restore hidden state check
-                ClearVisibilityCache(id);
-                ManipulateVisibilityCaches(id, unhide: false);
-            }
+            // Remove our temporary whitelist entry via the official IPC. RemoveFromWhitelist only
+            // drops the config entry though - it does NOT re-hide. We additionally invalidate
+            // Visibility's runtime "checked" cache so its next frame re-evaluates this player and
+            // hides them again (since they're a normally-hidden player no longer whitelisted).
+            IpcRemoveFromWhitelist(state.Name, state.HomeworldId);
+            ClearVisibilityCache(id);
         }
         catch (Exception ex)
         {
