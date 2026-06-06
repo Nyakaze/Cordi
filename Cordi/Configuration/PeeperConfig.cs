@@ -55,5 +55,8 @@ public class CordiPeepConfig
     public bool SkipRepeatedNotifications { get; set; } = false;
     public int RepeatedNotificationsCooldown { get; set; } = 60;
 
+    public bool UnhideFromVisibility { get; set; } = false;
+    public bool UnhideVoidedPlayers { get; set; } = false;
+
     public List<CordiPeepBlacklistEntry> Blacklist { get; set; } = new();
 }
