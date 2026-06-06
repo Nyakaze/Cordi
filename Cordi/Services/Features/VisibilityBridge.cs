@@ -301,6 +301,17 @@ public static class VisibilityBridge
             if (instance != null)
             {
                 _visibilityPluginInstance = instance;
+
+                // Rebind all reflection metadata to the instance's ACTUAL type/assembly.
+                // Dalamud loads each plugin in its own AssemblyLoadContext, so the "Visibility"
+                // assembly we discovered by scanning the AppDomain can be a different load
+                // context than the live plugin instance. Both produce a Type named
+                // "Visibility.VisibilityPlugin", but a FieldInfo obtained from one cannot read
+                // an instance of the other ("Field 'configuration' ... is not a field on the
+                // target object"). Always trust the instance's own type.
+                _pluginType = instance.GetType();
+                _visibilityAssembly = _pluginType.Assembly;
+                _voidItemType = null; // force re-resolve from the correct assembly
             }
             else
             {
@@ -333,10 +344,20 @@ public static class VisibilityBridge
         }
         catch (Exception ex)
         {
-            Log.Debug($"[VisibilityBridge] Failed to get config instance: {ex.Message}");
+            // Throttle: this runs every framework tick, so an unthrottled log floods the console.
+            if ((DateTime.Now - _lastConfigErrorLogTime).TotalSeconds > 10.0)
+            {
+                _lastConfigErrorLogTime = DateTime.Now;
+                Log.Debug($"[VisibilityBridge] Failed to get config instance: {ex.Message}");
+            }
+            // The cached instance is likely stale (e.g. Visibility was reloaded); drop it so
+            // the next lookup re-discovers the live instance and rebinds reflection metadata.
+            _visibilityPluginInstance = null;
             return null;
         }
     }
+
+    private static DateTime _lastConfigErrorLogTime = DateTime.MinValue;
 
     public static bool IsVisibilityLoaded()
     {
@@ -545,12 +566,18 @@ public static class VisibilityBridge
                     state.LastTargetedTime = DateTime.Now;
                 }
 
+                // Re-assert visibility every frame. If Visibility re-hid them since the last
+                // frame they are back in hiddenObjectIds, so MarkObjectToShow is required to
+                // drive the proper show pipeline; clearing the render flags alone would leave
+                // them tracked as hidden internally.
+                MarkPlayerAsVisible(objectId);
+                ManipulateVisibilityCaches(objectId, unhide: true);
+
                 // Directly clear invisible flags on GameObject to bypass the game client rejecting immediate targeting/focus
                 if (charStruct != null)
                 {
                     charStruct->GameObject.RenderFlags &= ~invisibleFlags;
                 }
-                ManipulateVisibilityCaches(objectId, unhide: true);
                 return;
             }
 
@@ -595,21 +622,19 @@ public static class VisibilityBridge
             }
 
             bool wasVoided = matchingVoidItem != null;
-            bool hasInvisibleFlags = charStruct != null && (charStruct->GameObject.RenderFlags & invisibleFlags) != 0;
-            bool isCurrentlyHidden = IsPlayerHidden(objectId) || hasInvisibleFlags;
-
-            if (!wasVoided && !isCurrentlyHidden)
-            {
-                // Player is neither voided nor hidden by Visibility plugin.
-                // No need to unhide them.
-                return;
-            }
 
             if (wasVoided && !allowVoided)
             {
                 // Player is on VoidList, but we are NOT allowed to unhide voided players.
                 return;
             }
+
+            // We only reach here when Visibility is enabled and actively hiding players
+            // (the disabled / HidePlayer-off cases already returned above). A detected looker
+            // or target must therefore be whitelisted and tracked unconditionally so that
+            // Visibility's per-frame whitelist check keeps them shown. Gating this on the
+            // hidden flag being set on *this* frame was racy: if Cordi processed the player
+            // before Visibility hid them, it returned without tracking and they stayed hidden.
 
             // We will temporarily unhide this player
             var newState = new TempUnhideState
