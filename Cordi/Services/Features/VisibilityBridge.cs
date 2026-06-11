@@ -23,6 +23,7 @@ public static class VisibilityBridge
         public uint HomeworldId;
         public ulong ObjectId;
         public ulong ContentId;
+        public bool WasVoided;
         public DateTime? LastTargetedTime;
         public DateTime? EmoteExpireTime;
     }
@@ -605,11 +606,17 @@ public static class VisibilityBridge
 
                 // Steady state: the IPC whitelist entry is sticky, so Visibility keeps the player
                 // shown with no per-frame work from us. Only re-assert (cheaply) if Visibility has
-                // actually re-hidden them - e.g. its runtime whitelist cache was cleared on a zone
-                // change. Detected by a direct render-flag read; no reflection, no per-frame logging.
+                // actually re-hidden them - e.g. its runtime caches were cleared on a zone change.
+                // Detected by a direct render-flag read; no reflection, no per-frame logging.
                 if (charStruct != null && (charStruct->GameObject.RenderFlags & invisibleFlags) != 0)
                 {
                     IpcAddToWhitelist(name, (uint)homeworldId, WhitelistReason);
+                    // Re-override the void cache for voided players (see new-player path); must run
+                    // after AddToWhitelist's internal RemoveChecked, same ordering reason.
+                    if (state.WasVoided)
+                    {
+                        ManipulateVisibilityCaches(objectId, unhide: true);
+                    }
                     charStruct->GameObject.RenderFlags &= ~invisibleFlags;
                 }
                 return;
@@ -661,13 +668,6 @@ public static class VisibilityBridge
                 return;
             }
 
-            // We only reach here when Visibility is enabled and actively hiding players
-            // (the disabled / HidePlayer-off cases already returned above). A detected looker
-            // or target must therefore be whitelisted and tracked unconditionally so that
-            // Visibility's per-frame whitelist check keeps them shown. Gating this on the
-            // hidden flag being set on *this* frame was racy: if Cordi processed the player
-            // before Visibility hid them, it returned without tracking and they stayed hidden.
-
             // Whitelist via Visibility's official IPC. This is the only path that reliably keeps
             // the player shown: AddToWhitelist adds the entry AND internally calls RemoveChecked +
             // ShowPlayer, so Visibility's own per-frame check stops re-hiding them. The previous
@@ -679,6 +679,19 @@ public static class VisibilityBridge
                 return;
             }
 
+            // Voided players need extra handling: Visibility checks the void list BEFORE the
+            // whitelist and hides+returns immediately, so an IPC whitelist alone can never show a
+            // voided looker (it just flickers). Override Visibility's in-memory void cache for this
+            // object so its void check short-circuits to "not voided", letting the whitelist show
+            // them. This leaves the user's persistent void list config untouched - the player is
+            // automatically re-voided once we stop (RestorePlayerHiddenState's RemoveChecked forces
+            // Visibility to re-derive the void status from config). Must run AFTER AddToWhitelist,
+            // whose internal RemoveChecked would otherwise wipe this override the same frame.
+            if (wasVoided)
+            {
+                ManipulateVisibilityCaches(objectId, unhide: true);
+            }
+
             TempUnhiddenPlayers[objectId] = new TempUnhideState
             {
                 Name = name,
@@ -686,11 +699,12 @@ public static class VisibilityBridge
                 HomeworldId = (uint)homeworldId,
                 ObjectId = objectId,
                 ContentId = contentId,
+                WasVoided = wasVoided,
                 LastTargetedTime = isEmote ? null : DateTime.Now,
                 EmoteExpireTime = isEmote ? DateTime.Now.AddSeconds(15) : null
             };
 
-            Log.Info($"[VisibilityBridge] Temporarily whitelisting {name}@{world} (ObjectId: {objectId:X}) via Visibility IPC");
+            Log.Info($"[VisibilityBridge] Temporarily {(wasVoided ? "un-voiding + whitelisting" : "whitelisting")} {name}@{world} (ObjectId: {objectId:X}) via Visibility IPC");
 
             // Clear the invisible flags this frame too, so targeting/focus works immediately,
             // before Visibility's own update runs.
@@ -720,16 +734,20 @@ public static class VisibilityBridge
             return;
         }
 
+        // Targeting/focusing a player must respect the same "Allow unhiding voided players" toggle
+        // as lookers - otherwise a voided player could be revealed simply by targeting them.
+        bool allowVoided = CordiPlugin.Plugin.Config.CordiPeep.UnhideVoidedPlayers;
+
         var myTarget = Service.TargetManager.Target as IPlayerCharacter;
         if (myTarget != null)
         {
-            UnhidePlayer(myTarget, allowVoided: true, isEmote: false);
+            UnhidePlayer(myTarget, allowVoided, isEmote: false);
         }
 
         var myFocus = Service.TargetManager.FocusTarget as IPlayerCharacter;
         if (myFocus != null)
         {
-            UnhidePlayer(myFocus, allowVoided: true, isEmote: false);
+            UnhidePlayer(myFocus, allowVoided, isEmote: false);
         }
 
         var config = GetVisibilityConfig();
