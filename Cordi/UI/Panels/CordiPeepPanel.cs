@@ -4,6 +4,8 @@ using Cordi.Services;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Interface.Utility.Raii;
 using FFXIVClientStructs.FFXIV.Client.UI.Agent;
+using Dalamud.Game.ClientState.Objects.SubKinds;
+using Cordi.Services.Features;
 
 using Cordi.Configuration;
 using Cordi.Core;
@@ -14,10 +16,16 @@ namespace Cordi.UI.Panels;
 public class CordiPeepPanel
 {
     private readonly CordiPlugin _plugin;
-    private ulong? _lastHoveredPeeper;
-    private ulong? _hoveredPeeperThisFrame;
-    private ulong? _lastHoveredTarget;
-    private ulong? _hoveredTargetThisFrame;
+
+    private ulong? _hoveredPeeperId;
+    private string? _hoveredPeeperName;
+    private string? _hoveredPeeperWorld;
+
+    private ulong? _hoveredTargetId;
+    private string? _hoveredTargetName;
+
+    private ulong? _lastHoveredPeeperId;
+    private ulong? _lastHoveredTargetId;
 
     private static readonly uint ShadowColor = ImGui.GetColorU32(new Vector4(0f, 0f, 0f, 0.8f));
     private static readonly Vector2 ShadowOffset = new(1f, 1f);
@@ -29,8 +37,11 @@ public class CordiPeepPanel
 
     public void Draw(bool textShadow = false)
     {
-        _hoveredPeeperThisFrame = null;
-        _hoveredTargetThisFrame = null;
+        _hoveredPeeperId = null;
+        _hoveredPeeperName = null;
+        _hoveredPeeperWorld = null;
+        _hoveredTargetId = null;
+        _hoveredTargetName = null;
 
         var cordiPeep = _plugin.CordiPeep;
         if (cordiPeep == null) return;
@@ -64,9 +75,12 @@ public class CordiPeepPanel
 
         if (_plugin.Config.CordiPeep.FocusOnHover)
         {
-            // Determine which ID to focus: prefer hoveredTarget (peeper's target), fallback to peeper itself
-            var focusId = _hoveredTargetThisFrame ?? _hoveredPeeperThisFrame;
-            var lastFocusId = _lastHoveredTarget ?? _lastHoveredPeeper;
+            // Determine which ID and name to focus: prefer hoveredTarget, fallback to peeper itself
+            var focusId = _hoveredTargetId ?? _hoveredPeeperId;
+            var focusName = _hoveredTargetId.HasValue ? _hoveredTargetName : _hoveredPeeperName;
+            var focusWorld = _hoveredTargetId.HasValue ? null : _hoveredPeeperWorld;
+
+            var lastFocusId = _lastHoveredTargetId ?? _lastHoveredPeeperId;
 
             if (focusId != lastFocusId)
             {
@@ -74,9 +88,13 @@ public class CordiPeepPanel
 
                 if (focusId.HasValue)
                 {
-                    var obj = Service.ObjectTable.SearchById(focusId.Value);
+                    var obj = FindGameObject(focusId.Value, focusName, focusWorld);
                     if (obj != null)
                     {
+                        if (obj is IPlayerCharacter pc)
+                        {
+                            VisibilityBridge.UnhidePlayer(pc, allowVoided: true, isEmote: false);
+                        }
                         Service.TargetManager.FocusTarget = obj;
                         focusSet = true;
                     }
@@ -92,8 +110,8 @@ public class CordiPeepPanel
                 }
             }
 
-            _lastHoveredPeeper = _hoveredPeeperThisFrame;
-            _lastHoveredTarget = _hoveredTargetThisFrame;
+            _lastHoveredPeeperId = _hoveredPeeperId;
+            _lastHoveredTargetId = _hoveredTargetId;
         }
     }
 
@@ -144,21 +162,37 @@ public class CordiPeepPanel
                 if (MenuItem("Target"))
                 {
                     var obj = FindPeeper(peeper);
+                    if (obj is IPlayerCharacter pc)
+                    {
+                        VisibilityBridge.UnhidePlayer(pc, allowVoided: true, isEmote: false);
+                    }
                     if (obj != null) Service.TargetManager.Target = obj;
                 }
                 if (MenuItem("Focus Target"))
                 {
                     var obj = FindPeeper(peeper);
+                    if (obj is IPlayerCharacter pc)
+                    {
+                        VisibilityBridge.UnhidePlayer(pc, allowVoided: true, isEmote: false);
+                    }
                     if (obj != null) Service.TargetManager.FocusTarget = obj;
                 }
                 if (MenuItem("Examine"))
                 {
                     var obj = FindPeeper(peeper);
+                    if (obj is IPlayerCharacter pc)
+                    {
+                        VisibilityBridge.UnhidePlayer(pc, allowVoided: true, isEmote: false);
+                    }
                     if (obj != null) Examine(obj.GameObjectId);
                 }
                 if (MenuItem("Adventure Plate"))
                 {
                     var obj = FindPeeper(peeper);
+                    if (obj is IPlayerCharacter pc)
+                    {
+                        VisibilityBridge.UnhidePlayer(pc, allowVoided: true, isEmote: false);
+                    }
                     if (obj != null) OpenAdventurePlate(obj.GameObjectId);
                 }
 
@@ -209,21 +243,37 @@ public class CordiPeepPanel
                     if (MenuItem($"Target: {targetName}"))
                     {
                         var tObj = Service.ObjectTable.SearchById(peeper.CurrentTargetId);
+                        if (tObj is IPlayerCharacter pc)
+                        {
+                            VisibilityBridge.UnhidePlayer(pc, allowVoided: true, isEmote: false);
+                        }
                         if (tObj != null) Service.TargetManager.Target = tObj;
                     }
                     if (MenuItem($"Focus: {targetName}"))
                     {
                         var tObj = Service.ObjectTable.SearchById(peeper.CurrentTargetId);
+                        if (tObj is IPlayerCharacter pc)
+                        {
+                            VisibilityBridge.UnhidePlayer(pc, allowVoided: true, isEmote: false);
+                        }
                         if (tObj != null) Service.TargetManager.FocusTarget = tObj;
                     }
                     if (MenuItem($"Examine: {targetName}"))
                     {
                         var tObj = Service.ObjectTable.SearchById(peeper.CurrentTargetId);
+                        if (tObj is IPlayerCharacter pc)
+                        {
+                            VisibilityBridge.UnhidePlayer(pc, allowVoided: true, isEmote: false);
+                        }
                         if (tObj != null) Examine(tObj.GameObjectId);
                     }
                     if (MenuItem($"Plate: {targetName}"))
                     {
                         var tObj = Service.ObjectTable.SearchById(peeper.CurrentTargetId);
+                        if (tObj is IPlayerCharacter pc)
+                        {
+                            VisibilityBridge.UnhidePlayer(pc, allowVoided: true, isEmote: false);
+                        }
                         if (tObj != null) OpenAdventurePlate(tObj.GameObjectId);
                     }
                 }
@@ -234,11 +284,14 @@ public class CordiPeepPanel
         {
             if (peeperHovered)
             {
-                _hoveredPeeperThisFrame = peeper.GameObjectId;
+                _hoveredPeeperId = peeper.GameObjectId;
+                _hoveredPeeperName = peeper.Name;
+                _hoveredPeeperWorld = peeper.World;
             }
             if (targetHovered && peeper.CurrentTargetId != 0)
             {
-                _hoveredTargetThisFrame = peeper.CurrentTargetId;
+                _hoveredTargetId = peeper.CurrentTargetId;
+                _hoveredTargetName = peeper.CurrentTargetName;
             }
         }
 
@@ -308,6 +361,16 @@ public class CordiPeepPanel
     {
         var obj = Service.ObjectTable.SearchById(peeper.GameObjectId);
         obj ??= Service.ObjectTable.FindPlayerByName(peeper.Name, peeper.World);
+        return obj;
+    }
+
+    private Dalamud.Game.ClientState.Objects.Types.IGameObject? FindGameObject(ulong id, string? name, string? world)
+    {
+        var obj = Service.ObjectTable.SearchById(id);
+        if (obj == null && !string.IsNullOrEmpty(name))
+        {
+            obj = Service.ObjectTable.FindPlayerByName(name, world);
+        }
         return obj;
     }
 

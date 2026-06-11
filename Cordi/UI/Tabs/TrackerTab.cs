@@ -321,6 +321,25 @@ public class TrackerTab : ConfigTabBase
                 })) { }
                 theme.HoverHandIfItem();
 
+                bool unhideVis = plugin.Config.CordiPeep.UnhideFromVisibility;
+                if (theme.ConfigCheckbox("Unhide lookers from Visibility plugin##cpUnhideVis", ref unhideVis, () =>
+                {
+                    plugin.Config.CordiPeep.UnhideFromVisibility = unhideVis;
+                    plugin.Config.Save();
+                })) { }
+                theme.HoverHandIfItem();
+
+                if (unhideVis)
+                {
+                    bool unhideVoid = plugin.Config.CordiPeep.UnhideVoidedPlayers;
+                    if (theme.ConfigCheckbox("Allow unhiding voided players (looks)##cpUnhideVoid", ref unhideVoid, () =>
+                    {
+                        plugin.Config.CordiPeep.UnhideVoidedPlayers = unhideVoid;
+                        plugin.Config.Save();
+                    })) { }
+                    theme.HoverHandIfItem();
+                }
+
                 theme.SpacerY(0.5f);
 
 
@@ -840,7 +859,6 @@ public class TrackerTab : ConfigTabBase
                     plugin.Config.Save();
                 });
                 theme.HoverHandIfItem();
-
                 theme.SpacerY(0.5f);
 
 

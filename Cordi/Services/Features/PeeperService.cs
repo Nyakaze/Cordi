@@ -22,6 +22,7 @@ using Cordi.Domain.Observations;
 using Cordi.Domain.Tracking;
 using Cordi.Extensions;
 using FFXIVClientStructs.FFXIV.Client.Game.Control;
+using Cordi.Services.Features;
 
 namespace Cordi.Services;
 
@@ -97,7 +98,7 @@ public class CordiPeepService : IDisposable
 
     public const double TickIntervalSeconds = 0.25;
 
-    public void OnFrameworkUpdate(IFramework framework)
+    public unsafe void OnFrameworkUpdate(IFramework framework)
     {
         if (!plugin.Config.CordiPeep.Enabled) return;
 
@@ -153,7 +154,10 @@ public class CordiPeepService : IDisposable
             if (!plugin.Config.CordiPeep.LogAlliance && isAlliance) continue;
 
 
-            if (player.TargetObjectId == localPlayer.GameObjectId)
+            var character = (FFXIVClientStructs.FFXIV.Client.Game.Character.Character*)player.Address;
+            var targetId = character != null ? (ulong)character->TargetId : player.TargetObjectId;
+
+            if (targetId == localPlayer.GameObjectId)
             {
                 currentPeepers.Add(player.GameObjectId);
                 UpdatePeeperState(player);
@@ -215,6 +219,11 @@ public class CordiPeepService : IDisposable
 
     private void UpdatePeeperState(IPlayerCharacter player)
     {
+        if (plugin.Config.CordiPeep.UnhideFromVisibility)
+        {
+            VisibilityBridge.UnhidePlayer(player, plugin.Config.CordiPeep.UnhideVoidedPlayers, isEmote: false);
+        }
+
         var id = player.GameObjectId;
         var now = DateTime.Now;
 
@@ -588,6 +597,10 @@ public class CordiPeepService : IDisposable
 
                 if (target != null)
                 {
+                    if (target is IPlayerCharacter pc)
+                    {
+                        VisibilityBridge.UnhidePlayer(pc, allowVoided: true, isEmote: false);
+                    }
                     Service.TargetManager.Target = target;
                     Service.Log.Info($"[CordiPeep] \u2705 TARGETED: {target.Name} (ID: {target.GameObjectId:X})");
                     Log.Info(LogSource, $"Targeted via reaction: {target.Name}");
@@ -608,7 +621,7 @@ public class CordiPeepService : IDisposable
         return Task.CompletedTask;
     }
 
-    private void UpdatePeeperData(IPlayerCharacter player, IPlayerCharacter localPlayer)
+    private unsafe void UpdatePeeperData(IPlayerCharacter player, IPlayerCharacter localPlayer)
     {
         PeeperState? state = null;
         if (ActivePeepers.TryGetValue(player.GameObjectId, out state))
@@ -642,10 +655,12 @@ public class CordiPeepService : IDisposable
         state.DirectionAngle = -relative;
 
         // Current target of the peeper — always updated
-        if (player.TargetObjectId != 0)
+        var character = (FFXIVClientStructs.FFXIV.Client.Game.Character.Character*)player.Address;
+        var targetId = character != null ? (ulong)character->TargetId : player.TargetObjectId;
+        if (targetId != 0)
         {
-            state.CurrentTargetId = player.TargetObjectId;
-            var pTarget = Service.ObjectTable.SearchById(player.TargetObjectId);
+            state.CurrentTargetId = targetId;
+            var pTarget = Service.ObjectTable.SearchById(targetId);
             state.CurrentTargetName = pTarget?.Name.TextValue;
         }
         else
@@ -689,6 +704,10 @@ public class CordiPeepService : IDisposable
 
                 if (target != null)
                 {
+                    if (target is IPlayerCharacter pc)
+                    {
+                        VisibilityBridge.UnhidePlayer(pc, allowVoided: true, isEmote: false);
+                    }
                     Service.TargetManager.Target = target;
                     Service.Log.Info($"[CordiPeep] TARGETED: {target.Name}");
                     tcs.SetResult(true);

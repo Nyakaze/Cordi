@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using Dalamud.Game.Command;
 using Dalamud.IoC;
 using Dalamud.Plugin;
@@ -301,6 +301,23 @@ public class CordiPlugin : IDalamudPlugin
         configWindow.Toggle();
     }
 
+    [Command("/cordidebug")]
+    [HelpMessage("Dumps all player characters in ObjectTable for debugging")]
+    public unsafe void DebugCommand(string command, string args)
+    {
+        Service.Log.Info("--- Player Characters in ObjectTable ---");
+        foreach (var obj in Service.ObjectTable)
+        {
+            if (obj is not IPlayerCharacter player) continue;
+            var character = (FFXIVClientStructs.FFXIV.Client.Game.Character.Character*)player.Address;
+            var renderFlags = character != null ? character->GameObject.RenderFlags : 0;
+            var rawTargetId = character != null ? (ulong)character->TargetId : 0UL;
+            Service.Log.Info($"Player: {player.Name}@{player.HomeWorld.Value.Name}, GameObjectId: {player.GameObjectId:X}, TargetObjectId: {player.TargetObjectId:X}, RawTargetId: {rawTargetId:X}, ContentId: {(character != null ? character->ContentId : 0):X}, RenderFlags: {renderFlags}, IsHidden: {VisibilityBridge.IsPlayerHidden(player.GameObjectId)}");
+        }
+        Service.Log.Info("---------------------------------------");
+        VisibilityBridge.DumpDebugInfo();
+    }
+
 
     public void ToggleConfigUI() => configWindow.Toggle();
 
@@ -362,6 +379,7 @@ public class CordiPlugin : IDalamudPlugin
     public void OnFrameworkUpdate(IFramework framework)
     {
         cachedLocalPlayer = Service.ObjectTable.LocalPlayer;
+        VisibilityBridge.OnFrameworkUpdate();
 
         // Ctrl+Shift+L toggles hidden Logs tab (edge-triggered, only when config window is open)
         bool ctrl = Service.KeyState[0x11];   // VK_CONTROL

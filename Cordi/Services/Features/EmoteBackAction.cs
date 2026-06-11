@@ -41,6 +41,10 @@ public class EmoteBackAction
 
             if (target != null)
             {
+                if (target is IPlayerCharacter pc)
+                {
+                    VisibilityBridge.UnhidePlayer(pc, allowVoided: true, isEmote: true);
+                }
                 Service.TargetManager.Target = target;
                 _plugin._chat.SendMessage(command);
                 targetFound = true;
@@ -65,6 +69,21 @@ public class EmoteBackAction
                     {
                         Service.TargetManager.Target = null;
                     }
+                }
+
+                ulong finalTargetId = targetId;
+                if (finalTargetId == 0)
+                {
+                    var targetPlayer = Service.ObjectTable.FindPlayerByName(targetName, targetWorld);
+                    if (targetPlayer != null)
+                    {
+                        finalTargetId = targetPlayer.GameObjectId;
+                    }
+                }
+
+                if (finalTargetId != 0)
+                {
+                    VisibilityBridge.RestorePlayerHiddenState(finalTargetId);
                 }
             }
 
