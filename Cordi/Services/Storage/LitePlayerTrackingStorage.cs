@@ -48,6 +48,12 @@ public class LitePlayerTrackingStorage : IPlayerTrackingStorage
         lock (_mapperLock)
         {
             if (_mappersRegistered) return;
+
+            // Computed, read-only members must not be persisted (they have no setter to round-trip).
+            BsonMapper.Global.Entity<Encounter>()
+                .Ignore(e => e.Duration)
+                .Ignore(e => e.EndOrLastSeen);
+
             BsonMapper.Global.RegisterType(
                 serialize: v => new BsonDocument
                 {

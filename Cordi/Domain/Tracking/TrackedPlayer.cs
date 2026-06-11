@@ -16,6 +16,7 @@ public class TrackedPlayer
     public PlayerInfo Info { get; set; } = new();
     public PlayerStats Stats { get; set; } = new();
     public List<IdentityChange> History { get; set; } = new();
+    public List<Encounter> Encounters { get; set; } = new();
 
     public string Notes { get; set; } = string.Empty;
     public List<string> Tags { get; set; } = new();

@@ -25,12 +25,16 @@ public class PlayerDetailWindow : Window
 
     private Guid? _cacheForPlayer;
     private int _cachedHistoryCount = -1;
+    private int _cachedEncounterCount = -1;
     private List<HistoryGroup> _groupedHistory = new();
+    private List<EncounterRow> _encounterRows = new();
     private string? _cachedRace;
     private string? _cachedTribe;
     private string? _cachedGender;
 
     private readonly record struct HistoryGroup(string Header, List<IdentityChange> Items);
+    private readonly record struct EncounterRow(
+        string WhenRelative, string WhenAbsolute, string Location, string Duration, string LevelClass);
 
     public PlayerDetailWindow(CordiPlugin plugin)
         : base("Player Details###CordiPlayerDetails", ImGuiWindowFlags.None)
@@ -57,7 +61,9 @@ public class PlayerDetailWindow : Window
     {
         _cacheForPlayer = null;
         _cachedHistoryCount = -1;
+        _cachedEncounterCount = -1;
         _groupedHistory.Clear();
+        _encounterRows.Clear();
         _cachedRace = null;
         _cachedTribe = null;
         _cachedGender = null;
@@ -67,7 +73,8 @@ public class PlayerDetailWindow : Window
     {
         bool playerChanged = _cacheForPlayer != p.LocalId;
         bool historyChanged = _cachedHistoryCount != p.History.Count;
-        if (!playerChanged && !historyChanged) return;
+        bool encountersChanged = _cachedEncounterCount != p.Encounters.Count;
+        if (!playerChanged && !historyChanged && !encountersChanged) return;
 
         if (playerChanged)
         {
@@ -76,14 +83,31 @@ public class PlayerDetailWindow : Window
             _cachedGender = ResolveGender(p.Info.Gender);
         }
 
-        _groupedHistory = p.History
-            .OrderByDescending(h => h.When)
-            .GroupBy(h => h.When.ToLocalTime().ToString("yyyy-MM-dd HH:mm"))
-            .Select(g => new HistoryGroup(g.Key, g.ToList()))
-            .ToList();
+        if (playerChanged || historyChanged)
+        {
+            _groupedHistory = p.History
+                .OrderByDescending(h => h.When)
+                .GroupBy(h => h.When.ToLocalTime().ToString("yyyy-MM-dd HH:mm"))
+                .Select(g => new HistoryGroup(g.Key, g.ToList()))
+                .ToList();
+            _cachedHistoryCount = p.History.Count;
+        }
+
+        if (playerChanged || encountersChanged)
+        {
+            _encounterRows = p.Encounters
+                .OrderByDescending(e => e.StartedAt)
+                .Select(e => new EncounterRow(
+                    WhenRelative: FormatRelative(e.StartedAt),
+                    WhenAbsolute: e.StartedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm"),
+                    Location: e.TerritoryName ?? (e.TerritoryId?.ToString() ?? "—"),
+                    Duration: FormatDuration(e.Duration),
+                    LevelClass: FormatLevelClass(e.Level, e.ClassJobId)))
+                .ToList();
+            _cachedEncounterCount = p.Encounters.Count;
+        }
 
         _cacheForPlayer = p.LocalId;
-        _cachedHistoryCount = p.History.Count;
     }
 
     public override void PreDraw()
@@ -134,6 +158,9 @@ public class PlayerDetailWindow : Window
         _theme.SpacerY(0.5f);
 
         DrawSection("Activity", () => DrawActivity(_player));
+        _theme.SpacerY(0.5f);
+
+        DrawSection($"Encounters ({_player.Encounters.Count})", () => DrawEncounters(_player));
         _theme.SpacerY(0.5f);
 
         DrawSection($"History ({_player.History.Count})", () => DrawHistory(_player));
@@ -289,6 +316,48 @@ public class PlayerDetailWindow : Window
         }
     }
 
+    private void DrawEncounters(TrackedPlayer p)
+    {
+        if (_encounterRows.Count == 0)
+        {
+            ImGui.TextColored(_theme.MutedText, "(no encounters yet)");
+            return;
+        }
+
+        using var child = ImRaii.Child("##player-encounters",
+            new Vector2(-1, 180f * ImGuiHelpers.GlobalScale), true);
+        if (!child) return;
+
+        float scale = ImGuiHelpers.GlobalScale;
+        using var table = ImRaii.Table("##encounters-table", 4,
+            ImGuiTableFlags.RowBg | ImGuiTableFlags.NoBordersInBody | ImGuiTableFlags.SizingStretchProp);
+        if (!table) return;
+
+        ImGui.TableSetupColumn("When", ImGuiTableColumnFlags.WidthFixed, 70f * scale);
+        ImGui.TableSetupColumn("Where", ImGuiTableColumnFlags.WidthStretch);
+        ImGui.TableSetupColumn("For", ImGuiTableColumnFlags.WidthFixed, 64f * scale);
+        ImGui.TableSetupColumn("As", ImGuiTableColumnFlags.WidthFixed, 90f * scale);
+
+        foreach (var row in _encounterRows)
+        {
+            ImGui.TableNextRow();
+
+            ImGui.TableNextColumn();
+            ImGui.TextUnformatted(row.WhenRelative);
+            if (ImGui.IsItemHovered())
+                ImGui.SetTooltip(row.WhenAbsolute);
+
+            ImGui.TableNextColumn();
+            ImGui.TextUnformatted(row.Location);
+
+            ImGui.TableNextColumn();
+            ImGui.TextColored(_theme.MutedText, row.Duration);
+
+            ImGui.TableNextColumn();
+            ImGui.TextColored(_theme.MutedText, row.LevelClass);
+        }
+    }
+
     private void DrawNotes(TrackedPlayer p)
     {
         ImGui.TextColored(_theme.MutedText, "Notes");
@@ -375,6 +444,38 @@ public class PlayerDetailWindow : Window
             "Gender" => ResolveGender(b) ?? value,
             _ => value,
         };
+    }
+
+    private static string FormatDuration(TimeSpan span)
+    {
+        if (span < TimeSpan.Zero) span = TimeSpan.Zero;
+        if (span.TotalSeconds < 60) return $"{(int)span.TotalSeconds}s";
+        if (span.TotalMinutes < 60) return $"{(int)span.TotalMinutes}m {span.Seconds}s";
+        if (span.TotalHours < 24) return $"{(int)span.TotalHours}h {span.Minutes}m";
+        return $"{(int)span.TotalDays}d {span.Hours}h";
+    }
+
+    private static string FormatLevelClass(byte? level, uint? classJobId)
+    {
+        var job = ResolveClassJob(classJobId);
+        bool hasLevel = level.HasValue && level.Value > 0;
+
+        if (hasLevel && job != null) return $"Lv{level} {job}";
+        if (hasLevel) return $"Lv{level}";
+        return job ?? "—";
+    }
+
+    private static string? ResolveClassJob(uint? classJobId)
+    {
+        if (!classJobId.HasValue || classJobId.Value == 0) return null;
+        try
+        {
+            var sheet = Service.DataManager.GetExcelSheet<ClassJob>();
+            if (sheet == null) return classJobId.Value.ToString();
+            var abbr = sheet.GetRow(classJobId.Value).Abbreviation.ExtractText();
+            return string.IsNullOrEmpty(abbr) ? classJobId.Value.ToString() : abbr.ToUpperInvariant();
+        }
+        catch { return classJobId.Value.ToString(); }
     }
 
     private static string FormatRelative(DateTime when)

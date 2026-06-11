@@ -142,6 +142,31 @@ public class PlayerTrackingService : IDisposable
         InvalidateCaches(tracked);
     }
 
+    private const int MaxEncountersPerPlayer = 250;
+
+    /// <summary>
+    /// Appends a completed encounter session to an already-tracked player and persists it.
+    /// The player must already exist (the corresponding observation creates it on first sight).
+    /// </summary>
+    public void RecordEncounter(string name, string world, Encounter encounter)
+    {
+        if (encounter == null) return;
+        if (string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(world)) return;
+
+        var tracked = GetByNameWorld(name, world);
+        if (tracked == null)
+        {
+            Log.Warning(LogSource, $"Dropping encounter for untracked player {name}@{world}");
+            return;
+        }
+
+        tracked.Encounters.Add(encounter);
+        if (tracked.Encounters.Count > MaxEncountersPerPlayer)
+            tracked.Encounters.RemoveRange(0, tracked.Encounters.Count - MaxEncountersPerPlayer);
+
+        SaveChanges(tracked);
+    }
+
     private TrackedPlayer? Resolve(ulong? contentId, string? lodestoneId, string nameWorldKey)
     {
         if (contentId.HasValue && contentId.Value != 0)
@@ -302,6 +327,11 @@ public class PlayerTrackingService : IDisposable
 
         into.History.AddRange(from.History);
         into.History.Sort((a, b) => a.When.CompareTo(b.When));
+
+        into.Encounters.AddRange(from.Encounters);
+        into.Encounters.Sort((a, b) => a.StartedAt.CompareTo(b.StartedAt));
+        if (into.Encounters.Count > MaxEncountersPerPlayer)
+            into.Encounters.RemoveRange(0, into.Encounters.Count - MaxEncountersPerPlayer);
 
         foreach (var tag in from.Tags)
             if (!into.Tags.Contains(tag, StringComparer.OrdinalIgnoreCase))
