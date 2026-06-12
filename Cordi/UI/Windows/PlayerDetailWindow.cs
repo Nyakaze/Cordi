@@ -23,16 +23,25 @@ public class PlayerDetailWindow : Window
     private DateTime _lastRefresh = DateTime.MinValue;
     private static readonly TimeSpan RefreshInterval = TimeSpan.FromSeconds(1);
 
+    // Derived/display cache, rebuilt only when the underlying record actually changes.
     private Guid? _cacheForPlayer;
     private int _cachedHistoryCount = -1;
     private int _cachedEncounterCount = -1;
+    private int _historyShownCount;
     private List<HistoryGroup> _groupedHistory = new();
     private List<EncounterRow> _encounterRows = new();
+    private string _encounterSummary = string.Empty;
+    private string _timeTogether = "—";
     private string? _cachedRace;
     private string? _cachedTribe;
     private string? _cachedGender;
+    private string _glance = string.Empty;
 
-    private readonly record struct HistoryGroup(string Header, List<IdentityChange> Items);
+    // Transient UI state.
+    private bool _confirmDelete;
+    private string _tagInput = string.Empty;
+
+    private readonly record struct HistoryGroup(DateTime When, List<IdentityChange> Items);
     private readonly record struct EncounterRow(
         string WhenRelative, string WhenAbsolute, string Location, string Duration, string LevelClass);
 
@@ -42,7 +51,7 @@ public class PlayerDetailWindow : Window
         _plugin = plugin;
         SizeConstraints = new WindowSizeConstraints
         {
-            MinimumSize = new Vector2(420, 520),
+            MinimumSize = new Vector2(440, 540),
             MaximumSize = new Vector2(float.MaxValue, float.MaxValue),
         };
         RespectCloseHotkey = true;
@@ -53,6 +62,8 @@ public class PlayerDetailWindow : Window
         _playerId = playerId;
         _player = _plugin.PlayerTracker.GetByLocalId(playerId);
         _lastRefresh = DateTime.UtcNow;
+        _confirmDelete = false;
+        _tagInput = string.Empty;
         InvalidateCache();
         IsOpen = true;
     }
@@ -64,9 +75,12 @@ public class PlayerDetailWindow : Window
         _cachedEncounterCount = -1;
         _groupedHistory.Clear();
         _encounterRows.Clear();
+        _encounterSummary = string.Empty;
+        _timeTogether = "—";
         _cachedRace = null;
         _cachedTribe = null;
         _cachedGender = null;
+        _glance = string.Empty;
     }
 
     private void RebuildCacheIfNeeded(TrackedPlayer p)
@@ -81,15 +95,20 @@ public class PlayerDetailWindow : Window
             _cachedRace = ResolveRace(p.Info.RaceId);
             _cachedTribe = ResolveTribe(p.Info.TribeId);
             _cachedGender = ResolveGender(p.Info.Gender);
+            _glance = BuildGlance(p);
         }
 
         if (playerChanged || historyChanged)
         {
+            // Drop creation-time noise (entries that were unknown both before and after,
+            // i.e. "(initial) → —"); keep first-known values and real before→after changes.
             _groupedHistory = p.History
+                .Where(h => !(string.IsNullOrEmpty(h.OldValue) && string.IsNullOrEmpty(h.NewValue)))
                 .OrderByDescending(h => h.When)
                 .GroupBy(h => h.When.ToLocalTime().ToString("yyyy-MM-dd HH:mm"))
-                .Select(g => new HistoryGroup(g.Key, g.ToList()))
+                .Select(g => new HistoryGroup(g.First().When, g.ToList()))
                 .ToList();
+            _historyShownCount = _groupedHistory.Sum(g => g.Items.Count);
             _cachedHistoryCount = p.History.Count;
         }
 
@@ -104,10 +123,25 @@ public class PlayerDetailWindow : Window
                     Duration: FormatDuration(e.Duration),
                     LevelClass: FormatLevelClass(e.Level, e.ClassJobId)))
                 .ToList();
+
+            var total = p.Encounters.Aggregate(TimeSpan.Zero, (acc, e) => acc + e.Duration);
+            _timeTogether = p.Encounters.Count == 0 ? "—" : FormatDuration(total);
+            _encounterSummary = p.Encounters.Count == 0
+                ? "No encounters recorded yet."
+                : $"{p.Encounters.Count} encounter{(p.Encounters.Count == 1 ? "" : "s")} · {FormatDuration(total)} together";
             _cachedEncounterCount = p.Encounters.Count;
         }
 
         _cacheForPlayer = p.LocalId;
+    }
+
+    private string BuildGlance(TrackedPlayer p)
+    {
+        var parts = new List<string>();
+        if (!string.IsNullOrEmpty(_cachedRace)) parts.Add(_cachedRace!);
+        if (!string.IsNullOrEmpty(_cachedGender)) parts.Add(_cachedGender!);
+        if (!string.IsNullOrEmpty(p.Info.FreeCompanyTag)) parts.Add($"«{p.Info.FreeCompanyTag}»");
+        return parts.Count == 0 ? "Character details not yet known" : string.Join("  ·  ", parts);
     }
 
     public override void PreDraw()
@@ -115,11 +149,12 @@ public class PlayerDetailWindow : Window
         base.PreDraw();
         _theme.PushWindow();
 
+        // Dock as a drawer to the right of the main config window when it is open.
         var main = _plugin.MainConfigWindow;
         if (main != null && main.LastSize.X > 0 && main.LastSize.Y > 0)
         {
             var pos = main.LastPos + new Vector2(main.LastSize.X, 0);
-            var size = new Vector2(440f * ImGuiHelpers.GlobalScale, main.LastSize.Y);
+            var size = new Vector2(470f * ImGuiHelpers.GlobalScale, main.LastSize.Y);
             ImGui.SetNextWindowPos(pos, ImGuiCond.Always);
             ImGui.SetNextWindowSize(size, ImGuiCond.Always);
         }
@@ -143,200 +178,312 @@ public class PlayerDetailWindow : Window
 
         if (_player == null)
         {
-            ImGui.TextColored(_theme.MutedText, "No player selected.");
+            DrawEmptyState();
             return;
         }
 
-        RebuildCacheIfNeeded(_player);
+        var p = _player;
+        RebuildCacheIfNeeded(p);
 
-        DrawHeader(_player);
-        _theme.SpacerY(0.5f);
-        DrawKpiTiles(_player);
-        _theme.SpacerY(1f);
-
-        DrawSection("Identity", () => DrawIdentity(_player));
+        DrawHeader(p);
+        _theme.SpacerY(0.4f);
+        DrawStatStrip(p);
         _theme.SpacerY(0.5f);
 
-        DrawSection("Activity", () => DrawActivity(_player));
-        _theme.SpacerY(0.5f);
+        using var tabs = ImRaii.TabBar("##player-tabs", ImGuiTabBarFlags.None);
+        if (!tabs) return;
 
-        DrawSection($"Encounters ({_player.Encounters.Count})", () => DrawEncounters(_player));
-        _theme.SpacerY(0.5f);
+        using (var t = ImRaii.TabItem("Overview"))
+            if (t) DrawTabBody("##tab-overview", () => DrawOverview(p));
 
-        DrawSection($"History ({_player.History.Count})", () => DrawHistory(_player));
-        _theme.SpacerY(0.5f);
+        using (var t = ImRaii.TabItem($"Encounters ({p.Encounters.Count})###tab-enc"))
+            if (t) DrawTabBody("##tab-enc-body", () => DrawEncounters(p));
 
-        DrawSection("Notes & Tags", () => DrawNotes(_player));
-        _theme.SpacerY(1f);
-
-        DrawFooter(_player);
+        using (var t = ImRaii.TabItem($"History ({_historyShownCount})###tab-hist"))
+            if (t) DrawTabBody("##tab-hist-body", () => DrawHistory(p));
     }
+
+    private void DrawEmptyState()
+    {
+        var avail = ImGui.GetContentRegionAvail();
+        ImGui.SetCursorPosY(ImGui.GetCursorPosY() + avail.Y * 0.4f);
+        const string msg = "Select a player to view their details.";
+        var w = ImGui.CalcTextSize(msg).X;
+        ImGui.SetCursorPosX(MathF.Max(0, (avail.X - w) * 0.5f));
+        ImGui.TextColored(_theme.MutedText, msg);
+    }
+
+    // ---- Header ---------------------------------------------------------------
 
     private void DrawHeader(TrackedPlayer p)
     {
-        var avail = ImGui.GetContentRegionAvail().X;
+        // Name (prominent).
+        _theme.ApplyFontScale(1.6f);
+        ImGui.TextUnformatted(p.Info.Name);
+        _theme.ApplyFontScale();
+
+        // World + status pill. Grouped so the Badge's cursor side effects don't
+        // bleed into the next line — the glance below returns to the left margin.
         using (ImRaii.Group())
         {
-            _theme.ApplyFontScale(1.5f);
-            ImGui.TextUnformatted(p.Info.Name);
-            _theme.ApplyFontScale();
-
             ImGui.TextColored(_theme.MutedText, p.Info.World);
+            ImGui.SameLine(0, _theme.Gap(0.6f));
+            if (p.IsProvisional)
+                _theme.Badge("Provisional", _theme.FrameBg, _theme.MutedText);
+            else
+                _theme.Badge("Confirmed", _theme.Accent, _theme.AccentText);
         }
 
-        ImGui.SameLine();
-        var rightX = avail;
-
-        using (ImRaii.Group())
-        {
-            float dotSize = 8f * ImGuiHelpers.GlobalScale;
-            Vector4 statusColor = p.IsProvisional
-                ? new Vector4(0.7f, 0.7f, 0.7f, 1f)
-                : UiTheme.ColorSuccessText;
-            string statusLabel = p.IsProvisional ? "Provisional" : "Confirmed";
-
-            float groupWidth = ImGui.CalcTextSize(statusLabel).X + dotSize + ImGui.GetStyle().ItemSpacing.X + 8;
-            ImGui.SetCursorPosX(ImGui.GetCursorPosX() + Math.Max(0, rightX - groupWidth - ImGui.GetCursorPosX()));
-
-            ImGui.TextColored(statusColor, FontAwesomeIcon.Circle.ToIconString().Length > 0 ? "●" : "*");
-            ImGui.SameLine(0, 4f);
-            ImGui.TextColored(statusColor, statusLabel);
-        }
+        // Glance line.
+        ImGui.TextColored(_theme.MutedText, _glance);
 
         _theme.SpacerY(0.3f);
-        using (ImRaii.Group())
-        {
-            if (p.ContentId.HasValue)
-            {
-                ImGui.TextColored(_theme.MutedText, $"ContentId: {p.ContentId.Value:X}");
-            }
-            if (!string.IsNullOrEmpty(p.LodestoneId))
-            {
-                if (p.ContentId.HasValue) ImGui.SameLine();
-                ImGui.TextColored(_theme.MutedText, $"Lodestone: {p.LodestoneId}");
-            }
-            if (!p.ContentId.HasValue && string.IsNullOrEmpty(p.LodestoneId))
-            {
-                ImGui.TextColored(_theme.MutedText, "No identity resolved");
-            }
-        }
-    }
-
-    private void DrawKpiTiles(TrackedPlayer p)
-    {
-        float avail = ImGui.GetContentRegionAvail().X;
-        float colW = avail / 3f;
-
-        DrawKpi("SEEN COUNT", p.Stats.SeenCount.ToString("N0"), "total visits");
-        ImGui.SameLine(colW);
-        DrawKpi("LAST SEEN", FormatRelative(p.Stats.LastSeen), $"{p.Stats.LastSeen.ToLocalTime():yyyy-MM-dd HH:mm}");
-        ImGui.SameLine(colW * 2);
-        DrawKpi("LOCATION",
-            p.Stats.LastTerritoryName ?? (p.Stats.LastTerritoryId?.ToString() ?? "—"),
-            "last seen at");
-    }
-
-    private void DrawKpi(string label, string value, string subtitle)
-    {
-        using (ImRaii.Group())
-        {
-            ImGui.TextColored(_theme.MutedText, label);
-            _theme.ApplyFontScale(1.2f);
-            ImGui.TextUnformatted(value);
-            _theme.ApplyFontScale();
-            ImGui.TextColored(_theme.MutedText, subtitle);
-        }
-    }
-
-    private void DrawSection(string title, System.Action drawContent)
-    {
-        ImGui.TextUnformatted(title);
-        _theme.SpacerY(0.2f);
+        DrawToolbar(p);
+        _theme.SpacerY(0.3f);
         ImGui.Separator();
-        _theme.SpacerY(0.4f);
-        using var indent = ImRaii.PushIndent();
-        drawContent();
     }
 
-    private void DrawIdentity(TrackedPlayer p)
+    private void DrawToolbar(TrackedPlayer p)
     {
-        DrawRow("Race", _cachedRace);
-        DrawRow("Tribe", _cachedTribe);
-        DrawRow("Gender", _cachedGender);
-        DrawRow("Free Company", p.Info.FreeCompanyTag);
-    }
-
-    private void DrawActivity(TrackedPlayer p)
-    {
-        DrawRow("First seen", $"{p.Stats.FirstSeen.ToLocalTime():yyyy-MM-dd HH:mm}  ({FormatRelative(p.Stats.FirstSeen)})");
-        DrawRow("First source", p.Stats.FirstSeenVia.ToString());
-        DrawRow("Total sightings", p.Stats.SeenCount.ToString("N0"));
-    }
-
-    private void DrawHistory(TrackedPlayer p)
-    {
-        if (_groupedHistory.Count == 0)
+        if (_confirmDelete)
         {
-            ImGui.TextColored(_theme.MutedText, "(no history)");
+            ImGui.AlignTextToFramePadding();
+            ImGui.TextColored(UiTheme.ColorDangerText, "Delete this entry permanently?");
+            ImGui.SameLine();
+
+            float w = ImGui.CalcTextSize("Delete").X + ImGui.CalcTextSize("Cancel").X
+                + ImGui.GetStyle().FramePadding.X * 4f + ImGui.GetStyle().ItemSpacing.X;
+            RightAlignCursor(w);
+
+            using (ImRaii.PushColor(ImGuiCol.Button, UiTheme.ColorDanger)
+                .Push(ImGuiCol.ButtonHovered, UiTheme.ColorDanger)
+                .Push(ImGuiCol.ButtonActive, UiTheme.ColorDanger))
+            {
+                if (_theme.Button("Delete##confirm"))
+                {
+                    _plugin.PlayerTracker.Delete(p.LocalId);
+                    _player = null;
+                    _playerId = null;
+                    _confirmDelete = false;
+                    IsOpen = false;
+                    return;
+                }
+            }
+            ImGui.SameLine();
+            if (_theme.SecondaryButton("Cancel")) _confirmDelete = false;
             return;
         }
 
-        using var child = ImRaii.Child("##player-history",
-            new Vector2(-1, 180f * ImGuiHelpers.GlobalScale), true);
-        if (!child) return;
+        // Right-aligned icon actions. Widths are measured from the actual icon
+        // glyphs so the group sits flush inside the window instead of overflowing.
+        float sp = ImGui.GetStyle().ItemSpacing.X;
+        float groupW = IconButtonWidth(FontAwesomeIcon.Copy)
+            + IconButtonWidth(FontAwesomeIcon.ExternalLinkAlt)
+            + IconButtonWidth(FontAwesomeIcon.Trash)
+            + sp * 2f;
+        RightAlignCursor(groupW);
 
-        foreach (var group in _groupedHistory)
+        if (_theme.SecondaryIconButton("##copy", FontAwesomeIcon.Copy, "Copy \"Name@World\""))
+            ImGui.SetClipboardText($"{p.Info.Name}@{p.Info.World}");
+
+        ImGui.SameLine();
+        bool hasLodestone = !string.IsNullOrEmpty(p.LodestoneId);
+        if (_theme.SecondaryIconButton("##lodestone", FontAwesomeIcon.ExternalLinkAlt,
+            hasLodestone ? "Open Lodestone profile" : "Search Lodestone for this name + world"))
+            OpenLodestone(p, hasLodestone);
+
+        ImGui.SameLine();
+        if (_theme.DangerIconButton("##delete", FontAwesomeIcon.Trash, "Delete this player entry"))
+            _confirmDelete = true;
+    }
+
+    /// <summary>Positions the cursor so a row of width <paramref name="groupW"/> ends flush at the
+    /// inner right edge, with a small margin, never running past the window.</summary>
+    private void RightAlignCursor(float groupW)
+    {
+        float startX = ImGui.GetContentRegionMax().X - groupW - _theme.Gap(0.5f);
+        if (startX > ImGui.GetCursorPosX())
+            ImGui.SetCursorPosX(startX);
+    }
+
+    private static float IconButtonWidth(FontAwesomeIcon icon)
+    {
+        using (ImRaii.PushFont(UiBuilder.IconFont))
+            return ImGui.CalcTextSize(icon.ToIconString()).X + ImGui.GetStyle().FramePadding.X * 2f;
+    }
+
+    // ---- Stat strip -----------------------------------------------------------
+
+    private void DrawStatStrip(TrackedPlayer p)
+    {
+        using var border = ImRaii.PushColor(ImGuiCol.TableBorderLight, _theme.WindowBorder);
+        using var table = ImRaii.Table("##stat-strip", 4,
+            ImGuiTableFlags.SizingStretchSame | ImGuiTableFlags.BordersInnerV);
+        if (!table) return;
+
+        ImGui.TableNextColumn();
+        DrawStat("SEEN", p.Stats.SeenCount.ToString("N0"), "visits");
+
+        ImGui.TableNextColumn();
+        DrawStat("FIRST SEEN", FormatRelative(p.Stats.FirstSeen),
+            $"{p.Stats.FirstSeen.ToLocalTime():yyyy-MM-dd HH:mm}", tooltipFromSub: true);
+
+        ImGui.TableNextColumn();
+        DrawStat("LAST SEEN", FormatRelative(p.Stats.LastSeen),
+            $"{p.Stats.LastSeen.ToLocalTime():yyyy-MM-dd HH:mm}", tooltipFromSub: true);
+
+        ImGui.TableNextColumn();
+        DrawStat("TOGETHER", _timeTogether,
+            $"{p.Encounters.Count} encounter{(p.Encounters.Count == 1 ? "" : "s")}");
+    }
+
+    private void DrawStat(string label, string value, string subtitle, bool tooltipFromSub = false)
+    {
+        ImGui.TextColored(_theme.MutedText, label);
+
+        _theme.ApplyFontScale(1.25f);
+        ImGui.TextUnformatted(value);
+        _theme.ApplyFontScale();
+        if (tooltipFromSub && ImGui.IsItemHovered()) ImGui.SetTooltip(subtitle);
+
+        ImGui.TextColored(_theme.MutedText, subtitle);
+    }
+
+    // ---- Overview tab ---------------------------------------------------------
+
+    private void DrawOverview(TrackedPlayer p)
+    {
+        SubHeading("Identity");
+        DrawRow("Race", _cachedRace);
+        DrawRow("Clan", _cachedTribe);
+        DrawRow("Gender", _cachedGender);
+        DrawRow("Free Company", p.Info.FreeCompanyTag);
+
+        _theme.SpacerY(0.7f);
+        SubHeading("Activity");
+        DrawRow("First seen", $"{p.Stats.FirstSeen.ToLocalTime():yyyy-MM-dd HH:mm}  ({FormatRelative(p.Stats.FirstSeen)})");
+        DrawRow("First source", p.Stats.FirstSeenVia.ToString());
+        DrawRow("Last location", p.Stats.LastTerritoryName ?? (p.Stats.LastTerritoryId?.ToString()));
+
+        _theme.SpacerY(0.7f);
+        SubHeading("Identifiers");
+        DrawRow("ContentId", p.ContentId.HasValue ? $"{p.ContentId.Value:X}" : null);
+        DrawRow("Lodestone", p.LodestoneId);
+
+        _theme.SpacerY(0.7f);
+        SubHeading("Notes");
+        string notes = p.Notes;
+        ImGui.SetNextItemWidth(-1);
+        if (ImGui.InputTextMultiline("##player-notes", ref notes, 2048,
+            new Vector2(-1, 80f * ImGuiHelpers.GlobalScale)))
         {
-            ImGui.TextColored(_theme.MutedText, group.Header);
-            using var indent = ImRaii.PushIndent();
-            foreach (var change in group.Items)
+            p.Notes = notes;
+        }
+        if (ImGui.IsItemDeactivatedAfterEdit())
+            _plugin.PlayerTracker.SaveChanges(p);
+
+        _theme.SpacerY(0.7f);
+        SubHeading($"Tags ({p.Tags.Count})");
+        DrawTagEditor(p);
+    }
+
+    private void DrawTagEditor(TrackedPlayer p)
+    {
+        float avail = ImGui.GetContentRegionAvail().X;
+        var style = ImGui.GetStyle();
+        string? toRemove = null;
+
+        if (p.Tags.Count == 0)
+        {
+            ImGui.TextColored(_theme.MutedText, "(no tags)");
+        }
+        else
+        {
+            using (ImRaii.PushStyle(ImGuiStyleVar.FrameRounding, _theme.Radius(1.2f)))
+            using (ImRaii.PushColor(ImGuiCol.Button, _theme.Accent)
+                .Push(ImGuiCol.ButtonHovered, UiTheme.ColorDanger)
+                .Push(ImGuiCol.ButtonActive, UiTheme.ColorDanger)
+                .Push(ImGuiCol.Text, _theme.AccentText))
             {
-                ImGui.TextUnformatted(FormatHistoryField(change.Field));
-                ImGui.SameLine();
-                ImGui.TextColored(_theme.MutedText, "·");
-                ImGui.SameLine();
-                if (string.IsNullOrEmpty(change.OldValue))
+                float lineW = 0f;
+                for (int i = 0; i < p.Tags.Count; i++)
                 {
-                    ImGui.TextColored(_theme.MutedText, "(initial)");
-                    ImGui.SameLine();
-                    ImGui.TextColored(_theme.MutedText, "→");
-                    ImGui.SameLine();
-                    ImGui.TextUnformatted(FormatHistoryValue(change.Field, change.NewValue));
-                }
-                else
-                {
-                    ImGui.TextColored(_theme.MutedText, FormatHistoryValue(change.Field, change.OldValue));
-                    ImGui.SameLine();
-                    ImGui.TextColored(_theme.MutedText, "→");
-                    ImGui.SameLine();
-                    ImGui.TextUnformatted(FormatHistoryValue(change.Field, change.NewValue));
+                    string label = $"{p.Tags[i]}  ×";
+                    float w = ImGui.CalcTextSize(label).X + style.FramePadding.X * 2f;
+
+                    if (i > 0 && lineW + style.ItemSpacing.X + w <= avail)
+                    {
+                        ImGui.SameLine();
+                        lineW += style.ItemSpacing.X + w;
+                    }
+                    else
+                    {
+                        lineW = w;
+                    }
+
+                    if (ImGui.Button($"{label}##tag{i}")) toRemove = p.Tags[i];
+                    _theme.HoverHandIfItem();
+                    if (ImGui.IsItemHovered()) ImGui.SetTooltip("Click to remove this tag");
                 }
             }
-            _theme.SpacerY(0.2f);
         }
+
+        if (toRemove != null)
+        {
+            p.Tags.Remove(toRemove);
+            _plugin.PlayerTracker.SaveChanges(p);
+        }
+
+        _theme.SpacerY(0.3f);
+
+        float addBtnW = ImGui.CalcTextSize("Add").X + style.FramePadding.X * 2f + _theme.Gap(2f);
+        ImGui.SetNextItemWidth(avail - addBtnW - style.ItemSpacing.X);
+        bool submitted = ImGui.InputTextWithHint("##tag-add", "Add a tag…", ref _tagInput, 48,
+            ImGuiInputTextFlags.EnterReturnsTrue);
+        ImGui.SameLine();
+        bool clicked = _theme.SecondaryButton("Add", new Vector2(addBtnW, 0));
+        if (submitted || clicked) AddTag(p);
     }
+
+    private void AddTag(TrackedPlayer p)
+    {
+        var tag = _tagInput.Trim();
+        _tagInput = string.Empty;
+        if (tag.Length == 0) return;
+        if (p.Tags.Contains(tag, StringComparer.OrdinalIgnoreCase)) return;
+
+        p.Tags.Add(tag);
+        _plugin.PlayerTracker.SaveChanges(p);
+    }
+
+    // ---- Encounters tab -------------------------------------------------------
 
     private void DrawEncounters(TrackedPlayer p)
     {
         if (_encounterRows.Count == 0)
         {
-            ImGui.TextColored(_theme.MutedText, "(no encounters yet)");
+            _theme.SpacerY();
+            ImGui.TextColored(_theme.MutedText,
+                "No encounters recorded yet.\nThey appear here once you cross paths in the world.");
             return;
         }
 
-        using var child = ImRaii.Child("##player-encounters",
-            new Vector2(-1, 180f * ImGuiHelpers.GlobalScale), true);
-        if (!child) return;
+        ImGui.TextColored(_theme.MutedText, _encounterSummary);
+        _theme.SpacerY(0.3f);
 
         float scale = ImGuiHelpers.GlobalScale;
         using var table = ImRaii.Table("##encounters-table", 4,
-            ImGuiTableFlags.RowBg | ImGuiTableFlags.NoBordersInBody | ImGuiTableFlags.SizingStretchProp);
+            ImGuiTableFlags.RowBg | ImGuiTableFlags.NoBordersInBody
+            | ImGuiTableFlags.SizingStretchProp | ImGuiTableFlags.ScrollY,
+            new Vector2(0, 0));
         if (!table) return;
 
         ImGui.TableSetupColumn("When", ImGuiTableColumnFlags.WidthFixed, 70f * scale);
         ImGui.TableSetupColumn("Where", ImGuiTableColumnFlags.WidthStretch);
         ImGui.TableSetupColumn("For", ImGuiTableColumnFlags.WidthFixed, 64f * scale);
-        ImGui.TableSetupColumn("As", ImGuiTableColumnFlags.WidthFixed, 90f * scale);
+        ImGui.TableSetupColumn("As", ImGuiTableColumnFlags.WidthFixed, 92f * scale);
+        ImGui.TableSetupScrollFreeze(0, 1);
+        ImGui.TableHeadersRow();
 
         foreach (var row in _encounterRows)
         {
@@ -344,11 +491,11 @@ public class PlayerDetailWindow : Window
 
             ImGui.TableNextColumn();
             ImGui.TextUnformatted(row.WhenRelative);
-            if (ImGui.IsItemHovered())
-                ImGui.SetTooltip(row.WhenAbsolute);
+            if (ImGui.IsItemHovered()) ImGui.SetTooltip(row.WhenAbsolute);
 
             ImGui.TableNextColumn();
             ImGui.TextUnformatted(row.Location);
+            if (ImGui.IsItemHovered()) ImGui.SetTooltip(row.Location);
 
             ImGui.TableNextColumn();
             ImGui.TextColored(_theme.MutedText, row.Duration);
@@ -358,76 +505,133 @@ public class PlayerDetailWindow : Window
         }
     }
 
-    private void DrawNotes(TrackedPlayer p)
+    // ---- History tab ----------------------------------------------------------
+
+    private void DrawHistory(TrackedPlayer p)
     {
-        ImGui.TextColored(_theme.MutedText, "Notes");
-        _theme.SpacerY(0.2f);
-        string notes = p.Notes;
-        ImGui.SetNextItemWidth(-1);
-        if (ImGui.InputTextMultiline("##player-notes", ref notes, 2048,
-            new Vector2(-1, 80f * ImGuiHelpers.GlobalScale)))
+        if (_groupedHistory.Count == 0)
         {
-            p.Notes = notes;
-        }
-        if (ImGui.IsItemDeactivatedAfterEdit())
-        {
-            _plugin.PlayerTracker.SaveChanges(p);
+            _theme.SpacerY();
+            ImGui.TextColored(_theme.MutedText, "No identity changes recorded yet.");
+            return;
         }
 
-        _theme.SpacerY(0.5f);
-        ImGui.TextColored(_theme.MutedText, $"Tags ({p.Tags.Count})");
-        ImGui.SameLine();
-        if (p.Tags.Count > 0)
-            ImGui.TextUnformatted(string.Join(", ", p.Tags));
-        else
-            ImGui.TextColored(_theme.MutedText, "(none)");
+        float scale = ImGuiHelpers.GlobalScale;
+        float gutter = 24f * scale;
+        var origin = ImGui.GetCursorScreenPos();
+        float railX = origin.X + 7f * scale;
+        var nodeYs = new List<float>(_groupedHistory.Count);
+
+        _theme.SpacerY(0.2f);
+        using (ImRaii.PushIndent(gutter))
+        {
+            for (int gi = 0; gi < _groupedHistory.Count; gi++)
+            {
+                var group = _groupedHistory[gi];
+                nodeYs.Add(ImGui.GetCursorScreenPos().Y + ImGui.GetTextLineHeight() * 0.5f);
+
+                var local = group.When.ToLocalTime();
+                ImGui.TextUnformatted(local.ToString("d MMM yyyy"));
+                ImGui.SameLine(0, _theme.Gap(0.4f));
+                ImGui.TextColored(_theme.MutedText, local.ToString("HH:mm"));
+                ImGui.SameLine(0, _theme.Gap(0.6f));
+                ImGui.TextColored(_theme.MutedText, $"· {FormatRelative(group.When)}");
+
+                _theme.SpacerY(0.15f);
+                DrawChangeTable(group, gi);
+                _theme.SpacerY(0.6f);
+            }
+        }
+
+        // Timeline rail + nodes, drawn in the reserved left gutter.
+        var dl = ImGui.GetWindowDrawList();
+        if (nodeYs.Count > 1)
+            dl.AddLine(new Vector2(railX, nodeYs[0]), new Vector2(railX, nodeYs[^1]),
+                ImGui.GetColorU32(_theme.WindowBorder), 2f * scale);
+        foreach (var y in nodeYs)
+            dl.AddCircleFilled(new Vector2(railX, y), 4f * scale, ImGui.GetColorU32(_theme.Accent));
     }
 
-    private void DrawFooter(TrackedPlayer p)
+    private void DrawChangeTable(HistoryGroup group, int idx)
     {
+        float scale = ImGuiHelpers.GlobalScale;
+        using var table = ImRaii.Table($"##hist-{idx}", 2, ImGuiTableFlags.SizingStretchProp);
+        if (!table) return;
+
+        ImGui.TableSetupColumn("##field", ImGuiTableColumnFlags.WidthFixed, 110f * scale);
+        ImGui.TableSetupColumn("##value", ImGuiTableColumnFlags.WidthStretch);
+
+        foreach (var change in group.Items)
+        {
+            ImGui.TableNextRow();
+
+            ImGui.TableNextColumn();
+            ImGui.TextColored(_theme.MutedText, FormatHistoryField(change.Field));
+
+            ImGui.TableNextColumn();
+            DrawChangeValue(change);
+        }
+    }
+
+    private void DrawChangeValue(IdentityChange change)
+    {
+        string newD = FormatHistoryValue(change.Field, change.NewValue);
+
+        // First time this field became known: just show the value.
+        if (string.IsNullOrEmpty(change.OldValue))
+        {
+            ImGui.TextUnformatted(newD);
+            return;
+        }
+
+        // A real change: old → new.
+        ImGui.TextColored(_theme.MutedText, FormatHistoryValue(change.Field, change.OldValue));
+        ImGui.SameLine(0, _theme.Gap(0.4f));
+        ImGui.TextColored(_theme.MutedText, "→");
+        ImGui.SameLine(0, _theme.Gap(0.4f));
+        ImGui.TextUnformatted(newD);
+    }
+
+    // ---- Shared layout helpers ------------------------------------------------
+
+    private void DrawTabBody(string id, System.Action draw)
+    {
+        _theme.SpacerY(0.3f);
+        using var child = ImRaii.Child(id, new Vector2(0, 0), false);
+        if (!child) return;
+        draw();
+    }
+
+    private void SubHeading(string text)
+    {
+        ImGui.TextColored(_theme.MutedText, text.ToUpperInvariant());
+        _theme.SpacerY(0.1f);
         ImGui.Separator();
-        _theme.SpacerY(0.4f);
-
-        bool hasLodestone = !string.IsNullOrEmpty(p.LodestoneId);
-        string buttonLabel = hasLodestone ? "Open on Lodestone" : "Search on Lodestone";
-        if (ImGui.Button(buttonLabel))
-        {
-            string url = hasLodestone
-                ? $"https://eu.finalfantasyxiv.com/lodestone/character/{p.LodestoneId}/"
-                : $"https://eu.finalfantasyxiv.com/lodestone/character/?q={Uri.EscapeDataString(p.Info.Name)}&worldname={Uri.EscapeDataString(p.Info.World)}";
-            try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(url) { UseShellExecute = true }); } catch { }
-        }
-        if (ImGui.IsItemHovered())
-            ImGui.SetTooltip(hasLodestone ? "Opens this player's Lodestone profile" : "Opens a Lodestone search for this name+world");
-
-        ImGui.SameLine();
-        float btnW = ImGui.CalcTextSize("Delete").X + ImGui.GetStyle().FramePadding.X * 2 + 30;
-        ImGui.SetCursorPosX(ImGui.GetContentRegionAvail().X + ImGui.GetCursorPosX() - btnW);
-
-        if (_theme.DangerIconButton("##player-delete", FontAwesomeIcon.Trash, "Delete this player entry"))
-        {
-            _plugin.PlayerTracker.Delete(p.LocalId);
-            _player = null;
-            _playerId = null;
-            IsOpen = false;
-        }
+        _theme.SpacerY(0.3f);
     }
 
     private void DrawRow(string label, string? value)
     {
-        float labelW = 130f * ImGuiHelpers.GlobalScale;
-        using (ImRaii.Group())
-        {
-            ImGui.TextColored(_theme.MutedText, label);
-        }
+        float labelW = 120f * ImGuiHelpers.GlobalScale;
+        ImGui.TextColored(_theme.MutedText, label);
         ImGui.SameLine(labelW);
         ImGui.TextUnformatted(string.IsNullOrEmpty(value) ? "—" : value);
     }
 
+    private static void OpenLodestone(TrackedPlayer p, bool hasLodestone)
+    {
+        string url = hasLodestone
+            ? $"https://eu.finalfantasyxiv.com/lodestone/character/{p.LodestoneId}/"
+            : $"https://eu.finalfantasyxiv.com/lodestone/character/?q={Uri.EscapeDataString(p.Info.Name)}&worldname={Uri.EscapeDataString(p.Info.World)}";
+        try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(url) { UseShellExecute = true }); } catch { }
+    }
+
+    // ---- Formatting / resolution ---------------------------------------------
+
     private static string FormatHistoryField(string field) => field switch
     {
         "RaceId" => "Race",
-        "TribeId" => "Tribe",
+        "TribeId" => "Clan",
         "Gender" => "Gender",
         "FreeCompanyTag" => "Free Company",
         _ => field,
