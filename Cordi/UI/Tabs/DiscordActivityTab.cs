@@ -169,16 +169,40 @@ public class DiscordActivityTab : ConfigTabBase
                 ImGui.TextColored(theme.MutedText, "Save multiple custom statuses and switch between them.");
                 theme.SpacerY(0.5f);
 
+                int safeActive = Math.Clamp(config.ActiveCustomPreset, 0, config.CustomPresets.Count - 1);
+                var activeConf = config.CustomPresets[safeActive].Config;
+
+                bool customEnabled = activeConf.Enabled;
+                theme.ConfigCheckbox("Enable Custom Status", ref customEnabled, () => { activeConf.Enabled = customEnabled; changed = true; });
+
+                ImGui.SameLine();
+                theme.SpacerX(1f);
+                ImGui.SameLine();
+
+                ImGui.Text("Priority");
+                ImGui.SameLine();
+                int globalPrio = activeConf.Priority;
+                ImGui.SetNextItemWidth(80f * ImGuiHelpers.GlobalScale);
+                if (ImGui.InputInt("##CustomGlobalPriority", ref globalPrio)) { activeConf.Priority = globalPrio; changed = true; }
+
+                theme.SpacerY(0.5f);
+                ImGui.Separator();
+                theme.SpacerY(0.5f);
+
                 string[] names = config.CustomPresets.Select(p => p.Name).ToArray();
-                int active = Math.Clamp(config.ActiveCustomPreset, 0, config.CustomPresets.Count - 1);
+                int active = safeActive;
 
                 ImGui.Text("Active Preset");
                 ImGui.SameLine();
                 ImGui.SetNextItemWidth(200f * ImGuiHelpers.GlobalScale);
                 if (ImGui.Combo("##CustomPresetSelect", ref active, names, names.Length))
                 {
+                    var prev = config.CustomPresets[config.ActiveCustomPreset].Config;
+                    var next = config.CustomPresets[active].Config;
+                    next.Enabled = prev.Enabled;
+                    next.Priority = prev.Priority;
                     config.ActiveCustomPreset = active;
-                    config.TypeConfigs[ActivityType.Custom] = config.CustomPresets[active].Config;
+                    config.TypeConfigs[ActivityType.Custom] = next;
                     changed = true;
                 }
                 theme.HoverHandIfItem();
@@ -186,10 +210,11 @@ public class DiscordActivityTab : ConfigTabBase
                 ImGui.SameLine();
                 if (theme.SecondaryButton("+ New##CustomPreset"))
                 {
+                    var current = config.CustomPresets[config.ActiveCustomPreset].Config;
                     var preset = new ActivityPreset
                     {
                         Name = UniquePresetName(config, "Preset"),
-                        Config = new ActivityTypeConfig { Enabled = true, Priority = 0, Format = "{state}" }
+                        Config = new ActivityTypeConfig { Enabled = current.Enabled, Priority = current.Priority, Format = "{state}" }
                     };
                     config.CustomPresets.Add(preset);
                     config.ActiveCustomPreset = config.CustomPresets.Count - 1;
@@ -211,7 +236,6 @@ public class DiscordActivityTab : ConfigTabBase
 
                 theme.SpacerY(0.5f);
 
-                int safeActive = Math.Clamp(config.ActiveCustomPreset, 0, config.CustomPresets.Count - 1);
                 ImGui.Text("Name");
                 ImGui.SameLine();
                 string nm = config.CustomPresets[safeActive].Name;
@@ -226,7 +250,14 @@ public class DiscordActivityTab : ConfigTabBase
 
         theme.SpacerY();
 
-        DrawTypeCard(ActivityType.Custom, "Activity: Custom Status", config, ref changed);
+        DrawTypeCard(ActivityType.Custom, "Activity: Custom Status", config, ref changed, showCheckbox: false, showPriority: false);
+
+        var syncConf = config.CustomPresets[Math.Clamp(config.ActiveCustomPreset, 0, config.CustomPresets.Count - 1)].Config;
+        foreach (var p in config.CustomPresets)
+        {
+            p.Config.Enabled = syncConf.Enabled;
+            p.Config.Priority = syncConf.Priority;
+        }
 
         if (changed)
             plugin.Config.Save();
@@ -418,7 +449,7 @@ public class DiscordActivityTab : ConfigTabBase
             plugin.Config.Save();
     }
 
-    private void DrawTypeCard(ActivityType type, string label, DiscordActivityConfig config, ref bool changed, Action<float>? extraContent = null)
+    private void DrawTypeCard(ActivityType type, string label, DiscordActivityConfig config, ref bool changed, Action<float>? extraContent = null, bool showCheckbox = true, bool showPriority = true)
     {
         if (!config.TypeConfigs.TryGetValue(type, out var conf))
         {
@@ -433,12 +464,12 @@ public class DiscordActivityTab : ConfigTabBase
         theme.DrawPluginCardAuto(
             id: $"act-card-{type}",
             enabled: ref enabled,
-            showCheckbox: true,
+            showCheckbox: showCheckbox,
             title: label,
             drawContent: (avail) =>
             {
                 if (enabled != conf.Enabled) { conf.Enabled = enabled; cardChanged = true; }
-                DrawTypeCardInner(conf, label, type, ref cardChanged, showLimits: true);
+                DrawTypeCardInner(conf, label, type, ref cardChanged, showLimits: true, showPriority: showPriority);
 
                 if (extraContent != null)
                 {
@@ -466,20 +497,23 @@ public class DiscordActivityTab : ConfigTabBase
         if (cardChanged) changed = true;
     }
 
-    private void DrawTypeCardInner(ActivityTypeConfig conf, string label, ActivityType activityType, ref bool changed, bool showLimits)
+    private void DrawTypeCardInner(ActivityTypeConfig conf, string label, ActivityType activityType, ref bool changed, bool showLimits, bool showPriority = true)
     {
         bool localChanged = false;
 
         float scale = ImGuiHelpers.GlobalScale;
 
-        ImGui.SameLine();
-        ImGui.TextColored(theme.MutedText, "Priority: ");
-        ImGui.SameLine();
-        int prio = conf.Priority;
-        ImGui.SetNextItemWidth(80f * ImGuiHelpers.GlobalScale);
-        if (ImGui.InputInt($"##Prio_{label.GetHashCode()}", ref prio)) { conf.Priority = prio; localChanged = true; }
+        if (showPriority)
+        {
+            ImGui.SameLine();
+            ImGui.TextColored(theme.MutedText, "Priority: ");
+            ImGui.SameLine();
+            int prio = conf.Priority;
+            ImGui.SetNextItemWidth(80f * ImGuiHelpers.GlobalScale);
+            if (ImGui.InputInt($"##Prio_{label.GetHashCode()}", ref prio)) { conf.Priority = prio; localChanged = true; }
 
-        theme.SpacerY(0.5f);
+            theme.SpacerY(0.5f);
+        }
 
         ImGui.Text("Format");
         string fmt = conf.Format;
