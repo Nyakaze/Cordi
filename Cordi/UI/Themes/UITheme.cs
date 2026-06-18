@@ -574,7 +574,6 @@ public sealed class UiTheme
         var size = new Vector2(availW, height * scale);
 
         ImGui.InvisibleButton(id, size);
-        bool hoveredCard = ImGui.IsItemHovered();
         bool clickedCard = ImGui.IsItemClicked(ImGuiMouseButton.Left);
         bool rightClicked = ImGui.IsItemClicked(ImGuiMouseButton.Right);
 
@@ -582,9 +581,6 @@ public sealed class UiTheme
         var border = WindowBorderOr();
         draw.AddRectFilled(start, start + size, ImGui.GetColorU32(cardBg), radius);
         draw.AddRect(start, start + size, ImGui.GetColorU32(border), radius);
-
-        if (hoveredCard)
-            draw.AddRectFilled(start, start + size, ImGui.GetColorU32(new Vector4(1, 1, 1, 0.05f)), radius);
 
         float fh = ImGui.GetFrameHeight();
         float cbSize = MathF.Max(fh * 0.95f, 18f * scale);
@@ -709,12 +705,8 @@ public sealed class UiTheme
 
         ImGui.InvisibleButton(id, size);
         ImGui.SetItemAllowOverlap();
-        bool hovered = ImGui.IsItemHovered();
         bool clicked = ImGui.IsItemClicked(ImGuiMouseButton.Left);
         bool rightClicked = ImGui.IsItemClicked(ImGuiMouseButton.Right);
-
-        if (hovered)
-            draw.AddRectFilled(cardRect.Min, cardRect.Max, ImGui.GetColorU32(new Vector4(1, 1, 1, 0.05f)), radius);
 
         float fh = ImGui.GetFrameHeight();
         float cbSize = MathF.Max(fh * 0.95f, 18f * scale);
@@ -979,11 +971,6 @@ public sealed class UiTheme
         draw.AddRectFilled(startPos, endPos, ImGui.GetColorU32(CardBg), radius);
         draw.AddRect(startPos, endPos, ImGui.GetColorU32(WindowBorder), radius);
 
-
-        if (ImGui.IsMouseHoveringRect(startPos, endPos))
-        {
-            draw.AddRectFilled(startPos, endPos, ImGui.GetColorU32(new Vector4(1, 1, 1, 0.05f)), radius);
-        }
 
         draw.ChannelsMerge();
 

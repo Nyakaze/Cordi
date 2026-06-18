@@ -23,10 +23,10 @@ public class DiscordActivityTab : ConfigTabBase
 
     private static readonly Dictionary<ActivityType, string[]> PlaceholdersByType = new()
     {
-        { ActivityType.Playing, new[] { "{name}", "{details}", "{state}", "{elapsed}", "{duration}", "{time_start}", "{time_end}" } },
-        { ActivityType.ListeningTo, new[] { "{name}", "{details}", "{track}", "{state}", "{artist}", "{album}", "{elapsed}", "{duration}", "{time_start}", "{time_end}" } },
-        { ActivityType.Watching, new[] { "{name}", "{details}", "{state}", "{elapsed}", "{duration}", "{time_start}", "{time_end}" } },
-        { ActivityType.Custom, new[] { "{name}", "{state}" } },
+        { ActivityType.Playing, new[] { "{name}", "{details}", "{state}", "{large_image}", "{small_image}", "{elapsed}", "{duration}", "{time_start}", "{time_end}" } },
+        { ActivityType.ListeningTo, new[] { "{name}", "{details}", "{track}", "{state}", "{artist}", "{album}", "{large_image}", "{small_image}", "{elapsed}", "{duration}", "{time_start}", "{time_end}" } },
+        { ActivityType.Watching, new[] { "{name}", "{details}", "{state}", "{large_image}", "{small_image}", "{elapsed}", "{duration}", "{time_start}", "{time_end}" } },
+        { ActivityType.Custom, new[] { "{name}", "{state}", "{large_image}", "{small_image}" } },
     };
 
     private static readonly string[] DefaultPlaceholders = { "{name}", "{details}", "{state}" };
@@ -326,7 +326,7 @@ public class DiscordActivityTab : ConfigTabBase
             drawContent: (avail) =>
             {
                 if (enabled != conf.Enabled) { conf.Enabled = enabled; cardChanged = true; }
-                DrawTypeCardInner(conf, label, type, ref cardChanged, showLimits: type == ActivityType.ListeningTo);
+                DrawTypeCardInner(conf, label, type, ref cardChanged, showLimits: true);
 
                 if (extraContent != null)
                 {
@@ -437,28 +437,80 @@ public class DiscordActivityTab : ConfigTabBase
 
         if (showLimits)
         {
+            if (conf.CharLimits == null) conf.CharLimits = new();
+
+            if (conf.CharLimits.Count == 0 && (conf.TrackLimit > 0 || conf.ArtistLimit > 0))
+            {
+                if (conf.TrackLimit > 0) conf.CharLimits.Add(new CharLimitRule { TargetPlaceholder = "{track}", Limit = conf.TrackLimit });
+                if (conf.ArtistLimit > 0) conf.CharLimits.Add(new CharLimitRule { TargetPlaceholder = "{artist}", Limit = conf.ArtistLimit });
+                conf.TrackLimit = 0;
+                conf.ArtistLimit = 0;
+                localChanged = true;
+            }
+
             theme.SpacerY(0.5f);
             ImGui.Separator();
             theme.SpacerY(0.5f);
 
-            ImGui.Text("Lists / Limits");
-            using (var group1 = ImRaii.Group())
+            string[] limitPlaceholders = PlaceholdersByType.TryGetValue(activityType, out var lph) ? lph : DefaultPlaceholders;
+
+            ImGui.Text("Character Limits");
+            theme.MutedLabel($"Truncate a placeholder's value to fewer characters (0 = untouched). The full title is always capped at {DiscordActivityConfig.MaxTitleLength}.");
+            theme.SpacerY(0.5f);
+
+            int? limitRemoveIdx = null;
+
+            theme.DrawTable(
+                id: $"act-charlimits-{label.GetHashCode()}",
+                collection: conf.CharLimits,
+                drawRow: (rule, i) =>
+                {
+                    int phIdx = Array.IndexOf(limitPlaceholders, rule.TargetPlaceholder);
+                    if (phIdx < 0) phIdx = 0;
+                    ImGui.SetNextItemWidth(-1);
+                    if (ImGui.Combo($"##LimPh_{label.GetHashCode()}_{i}", ref phIdx, limitPlaceholders, limitPlaceholders.Length))
+                    {
+                        rule.TargetPlaceholder = limitPlaceholders[phIdx];
+                        localChanged = true;
+                    }
+                    theme.HoverHandIfItem();
+
+                    ImGui.TableNextColumn();
+                    int lim = rule.Limit;
+                    ImGui.SetNextItemWidth(-1);
+                    if (ImGui.InputInt($"##LimVal_{label.GetHashCode()}_{i}", ref lim))
+                    {
+                        rule.Limit = Math.Clamp(lim, 0, DiscordActivityConfig.MaxTitleLength);
+                        localChanged = true;
+                    }
+
+                    ImGui.TableNextColumn();
+                    if (theme.DangerIconButton($"##LimDel_{label.GetHashCode()}_{i}", FontAwesomeIcon.Trash, "Remove")) limitRemoveIdx = i;
+                },
+                headers: new[] { "Field", "Limit", "##Del" },
+                setupColumns: () =>
+                {
+                    float limDelW = ImGui.GetFrameHeight() + ImGui.GetStyle().FramePadding.X * 2f;
+                    ImGui.TableSetupColumn("Field", ImGuiTableColumnFlags.WidthStretch);
+                    ImGui.TableSetupColumn("Limit", ImGuiTableColumnFlags.WidthFixed, 100f * ImGuiHelpers.GlobalScale);
+                    ImGui.TableSetupColumn("##Del", ImGuiTableColumnFlags.WidthFixed, limDelW);
+                },
+                showHeaders: true
+            );
+
+            if (limitRemoveIdx.HasValue)
             {
-                ImGui.Text("Track Limit");
-                ImGui.SameLine();
-                int tLim = conf.TrackLimit;
-                ImGui.SetNextItemWidth(80f * ImGuiHelpers.GlobalScale);
-                if (ImGui.InputInt($"##TLim_{label.GetHashCode()}", ref tLim)) { conf.TrackLimit = Math.Max(0, tLim); localChanged = true; }
+                conf.CharLimits.RemoveAt(limitRemoveIdx.Value);
+                localChanged = true;
+            }
 
-                ImGui.SameLine();
-                theme.SpacerX(1f);
-                ImGui.SameLine();
-
-                ImGui.Text("Artist Limit");
-                ImGui.SameLine();
-                int aLim = conf.ArtistLimit;
-                ImGui.SetNextItemWidth(80f * ImGuiHelpers.GlobalScale);
-                if (ImGui.InputInt($"##ALim_{label.GetHashCode()}", ref aLim)) { conf.ArtistLimit = Math.Max(0, aLim); localChanged = true; }
+            theme.SpacerY(0.5f);
+            float limBtnWidth = ImGui.GetContentRegionAvail().X * 0.95f;
+            ImGui.SetCursorPosX(ImGui.GetCursorPosX() + (ImGui.GetContentRegionAvail().X - limBtnWidth) * 0.5f);
+            if (theme.SecondaryButton($"+ Add Char Limit##{label.GetHashCode()}", new Vector2(limBtnWidth, 0)))
+            {
+                conf.CharLimits.Add(new CharLimitRule { TargetPlaceholder = limitPlaceholders[0] });
+                localChanged = true;
             }
 
             theme.SpacerY(0.5f);

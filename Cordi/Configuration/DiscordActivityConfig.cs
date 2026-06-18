@@ -7,6 +7,8 @@ namespace Cordi.Configuration;
 [Serializable]
 public class DiscordActivityConfig
 {
+    public const int MaxTitleLength = 32;
+
     public ulong TargetUserId { get; set; } = 0;
     public bool PrefixTitle { get; set; } = false;
     public Dictionary<string, string> Replacements { get; set; } = new();
@@ -41,6 +43,8 @@ public class ActivityTypeConfig
     public int TrackLimit { get; set; } = 0;
     public int ArtistLimit { get; set; } = 0;
 
+    public List<CharLimitRule> CharLimits { get; set; } = new();
+
 
     public System.Numerics.Vector3? Color { get; set; } = null;
     public System.Numerics.Vector3? Glow { get; set; } = null;
@@ -49,6 +53,14 @@ public class ActivityTypeConfig
     public int? GradientAnimationStyle { get; set; } = null;
 
     public List<FilterRule> Filters { get; set; } = new();
+}
+
+[Serializable]
+public class CharLimitRule
+{
+    public string TargetPlaceholder { get; set; } = "{name}";
+
+    public int Limit { get; set; } = 0;
 }
 
 [Serializable]

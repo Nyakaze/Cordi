@@ -262,10 +262,10 @@ namespace Cordi.Services
 
             string title = RenderTitle(best.Activity, best.Config, config.Replacements, isUpdateLoop);
 
-            if (title.Length > 32)
+            if (title.Length > DiscordActivityConfig.MaxTitleLength)
             {
-                if (!isUpdateLoop) Service.Log.Debug($"[ActivityManager] Title truncated from {title.Length} to 32 chars.");
-                title = title.Substring(0, 32);
+                if (!isUpdateLoop) Service.Log.Debug($"[ActivityManager] Title truncated from {title.Length} to {DiscordActivityConfig.MaxTitleLength} chars.");
+                title = title.Substring(0, DiscordActivityConfig.MaxTitleLength);
             }
 
             var player = _plugin.cachedLocalPlayer;
@@ -409,6 +409,29 @@ namespace Cordi.Services
 
                 if (config.ArtistLimit > 0 && state.Length > config.ArtistLimit)
                     state = state.Substring(0, config.ArtistLimit);
+
+                if (config.CharLimits != null)
+                {
+                    foreach (var rule in config.CharLimits)
+                    {
+                        if (rule == null || rule.Limit <= 0) continue;
+                        switch (rule.TargetPlaceholder)
+                        {
+                            case "{name}": name = Truncate(name, rule.Limit); break;
+                            case "{details}":
+                            case "{track}": details = Truncate(details, rule.Limit); break;
+                            case "{state}":
+                            case "{artist}": state = Truncate(state, rule.Limit); break;
+                            case "{album}": album = Truncate(album, rule.Limit); break;
+                            case "{large_image}": largeImage = Truncate(largeImage, rule.Limit); break;
+                            case "{small_image}": smallImage = Truncate(smallImage, rule.Limit); break;
+                            case "{elapsed}": elapsed = Truncate(elapsed, rule.Limit); break;
+                            case "{duration}": duration = Truncate(duration, rule.Limit); break;
+                            case "{time_start}": timeStart = Truncate(timeStart, rule.Limit); break;
+                            case "{time_end}": timeEnd = Truncate(timeEnd, rule.Limit); break;
+                        }
+                    }
+                }
             }
 
             name = SanitizeUrlLikeDots(name);
@@ -439,6 +462,9 @@ namespace Cordi.Services
             if (!silent) Service.Log.Debug($"[ActivityManager] RenderTitle result: \"{result}\"");
             return result;
         }
+
+        private static string Truncate(string value, int max)
+            => (!string.IsNullOrEmpty(value) && value.Length > max) ? value.Substring(0, max) : value;
 
         private string ApplyReplacements(string input, Dictionary<string, string> replacements)
         {
