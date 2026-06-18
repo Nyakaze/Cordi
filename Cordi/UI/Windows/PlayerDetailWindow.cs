@@ -31,11 +31,23 @@ public class PlayerDetailWindow : Window
     private List<HistoryGroup> _groupedHistory = new();
     private List<EncounterRow> _encounterRows = new();
     private string _encounterSummary = string.Empty;
-    private string _timeTogether = "—";
     private string? _cachedRace;
     private string? _cachedTribe;
     private string? _cachedGender;
     private string _glance = string.Empty;
+
+    // Stat-strip values: time-sensitive, so recomputed on the (1s) refresh tick — not per frame.
+    private string _statSeen = "0";
+    private string _statFirstRel = "—";
+    private string _statFirstAbs = "—";
+    private string _statLastRel = "—";
+    private string _statLastAbs = "—";
+    private string _statTogether = "—";
+    private string _statEncLabel = "0 encounters";
+
+    // Toolbar icon group width, measured once per font-scale change rather than every frame.
+    private float _toolbarScale = -1f;
+    private float _toolbarGroupW;
 
     // Transient UI state.
     private bool _confirmDelete;
@@ -65,6 +77,7 @@ public class PlayerDetailWindow : Window
         _confirmDelete = false;
         _tagInput = string.Empty;
         InvalidateCache();
+        if (_player != null) RecomputeStats(_player);
         IsOpen = true;
     }
 
@@ -76,7 +89,6 @@ public class PlayerDetailWindow : Window
         _groupedHistory.Clear();
         _encounterRows.Clear();
         _encounterSummary = string.Empty;
-        _timeTogether = "—";
         _cachedRace = null;
         _cachedTribe = null;
         _cachedGender = null;
@@ -125,7 +137,6 @@ public class PlayerDetailWindow : Window
                 .ToList();
 
             var total = p.Encounters.Aggregate(TimeSpan.Zero, (acc, e) => acc + e.Duration);
-            _timeTogether = p.Encounters.Count == 0 ? "—" : FormatDuration(total);
             _encounterSummary = p.Encounters.Count == 0
                 ? "No encounters recorded yet."
                 : $"{p.Encounters.Count} encounter{(p.Encounters.Count == 1 ? "" : "s")} · {FormatDuration(total)} together";
@@ -174,6 +185,7 @@ public class PlayerDetailWindow : Window
         {
             _player = _plugin.PlayerTracker.GetByLocalId(_playerId.Value);
             _lastRefresh = DateTime.UtcNow;
+            if (_player != null) RecomputeStats(_player);
         }
 
         if (_player == null)
@@ -274,14 +286,11 @@ public class PlayerDetailWindow : Window
             return;
         }
 
-        // Right-aligned icon actions. Widths are measured from the actual icon
-        // glyphs so the group sits flush inside the window instead of overflowing.
-        float sp = ImGui.GetStyle().ItemSpacing.X;
-        float groupW = IconButtonWidth(FontAwesomeIcon.Copy)
-            + IconButtonWidth(FontAwesomeIcon.ExternalLinkAlt)
-            + IconButtonWidth(FontAwesomeIcon.Trash)
-            + sp * 2f;
-        RightAlignCursor(groupW);
+        // Right-aligned icon actions. The group width is measured from the actual icon
+        // glyphs (so it sits flush inside the window) but only re-measured when the font
+        // scale changes, not every frame.
+        EnsureToolbarWidth();
+        RightAlignCursor(_toolbarGroupW);
 
         if (_theme.SecondaryIconButton("##copy", FontAwesomeIcon.Copy, "Copy \"Name@World\""))
             ImGui.SetClipboardText($"{p.Info.Name}@{p.Info.World}");
@@ -306,6 +315,19 @@ public class PlayerDetailWindow : Window
             ImGui.SetCursorPosX(startX);
     }
 
+    private void EnsureToolbarWidth()
+    {
+        float scale = ImGuiHelpers.GlobalScale;
+        if (MathF.Abs(scale - _toolbarScale) < 0.001f) return;
+        _toolbarScale = scale;
+
+        float sp = ImGui.GetStyle().ItemSpacing.X;
+        _toolbarGroupW = IconButtonWidth(FontAwesomeIcon.Copy)
+            + IconButtonWidth(FontAwesomeIcon.ExternalLinkAlt)
+            + IconButtonWidth(FontAwesomeIcon.Trash)
+            + sp * 2f;
+    }
+
     private static float IconButtonWidth(FontAwesomeIcon icon)
     {
         using (ImRaii.PushFont(UiBuilder.IconFont))
@@ -322,19 +344,30 @@ public class PlayerDetailWindow : Window
         if (!table) return;
 
         ImGui.TableNextColumn();
-        DrawStat("SEEN", p.Stats.SeenCount.ToString("N0"), "visits");
+        DrawStat("SEEN", _statSeen, "visits");
 
         ImGui.TableNextColumn();
-        DrawStat("FIRST SEEN", FormatRelative(p.Stats.FirstSeen),
-            $"{p.Stats.FirstSeen.ToLocalTime():yyyy-MM-dd HH:mm}", tooltipFromSub: true);
+        DrawStat("FIRST SEEN", _statFirstRel, _statFirstAbs, tooltipFromSub: true);
 
         ImGui.TableNextColumn();
-        DrawStat("LAST SEEN", FormatRelative(p.Stats.LastSeen),
-            $"{p.Stats.LastSeen.ToLocalTime():yyyy-MM-dd HH:mm}", tooltipFromSub: true);
+        DrawStat("LAST SEEN", _statLastRel, _statLastAbs, tooltipFromSub: true);
 
         ImGui.TableNextColumn();
-        DrawStat("TOGETHER", _timeTogether,
-            $"{p.Encounters.Count} encounter{(p.Encounters.Count == 1 ? "" : "s")}");
+        DrawStat("TOGETHER", _statTogether, _statEncLabel);
+    }
+
+    private void RecomputeStats(TrackedPlayer p)
+    {
+        _statSeen = p.Stats.SeenCount.ToString("N0");
+        _statFirstRel = FormatRelative(p.Stats.FirstSeen);
+        _statFirstAbs = p.Stats.FirstSeen == default ? "—" : p.Stats.FirstSeen.ToLocalTime().ToString("yyyy-MM-dd HH:mm");
+        _statLastRel = FormatRelative(p.Stats.LastSeen);
+        _statLastAbs = p.Stats.LastSeen == default ? "—" : p.Stats.LastSeen.ToLocalTime().ToString("yyyy-MM-dd HH:mm");
+
+        int ec = p.Encounters.Count;
+        var total = p.Encounters.Aggregate(TimeSpan.Zero, (acc, e) => acc + e.Duration);
+        _statTogether = ec == 0 ? "—" : FormatDuration(total);
+        _statEncLabel = $"{ec} encounter{(ec == 1 ? "" : "s")}";
     }
 
     private void DrawStat(string label, string value, string subtitle, bool tooltipFromSub = false)
@@ -485,24 +518,31 @@ public class PlayerDetailWindow : Window
         ImGui.TableSetupScrollFreeze(0, 1);
         ImGui.TableHeadersRow();
 
-        foreach (var row in _encounterRows)
+        var clipper = new ImGuiListClipper();
+        clipper.Begin(_encounterRows.Count, ImGui.GetTextLineHeightWithSpacing());
+        while (clipper.Step())
         {
-            ImGui.TableNextRow();
+            for (int i = clipper.DisplayStart; i < clipper.DisplayEnd; i++)
+            {
+                var row = _encounterRows[i];
+                ImGui.TableNextRow();
 
-            ImGui.TableNextColumn();
-            ImGui.TextUnformatted(row.WhenRelative);
-            if (ImGui.IsItemHovered()) ImGui.SetTooltip(row.WhenAbsolute);
+                ImGui.TableNextColumn();
+                ImGui.TextUnformatted(row.WhenRelative);
+                if (ImGui.IsItemHovered()) ImGui.SetTooltip(row.WhenAbsolute);
 
-            ImGui.TableNextColumn();
-            ImGui.TextUnformatted(row.Location);
-            if (ImGui.IsItemHovered()) ImGui.SetTooltip(row.Location);
+                ImGui.TableNextColumn();
+                ImGui.TextUnformatted(row.Location);
+                if (ImGui.IsItemHovered()) ImGui.SetTooltip(row.Location);
 
-            ImGui.TableNextColumn();
-            ImGui.TextColored(_theme.MutedText, row.Duration);
+                ImGui.TableNextColumn();
+                ImGui.TextColored(_theme.MutedText, row.Duration);
 
-            ImGui.TableNextColumn();
-            ImGui.TextColored(_theme.MutedText, row.LevelClass);
+                ImGui.TableNextColumn();
+                ImGui.TextColored(_theme.MutedText, row.LevelClass);
+            }
         }
+        clipper.End();
     }
 
     // ---- History tab ----------------------------------------------------------

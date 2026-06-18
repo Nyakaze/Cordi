@@ -20,14 +20,18 @@ public class PlayerTrackerTab : ConfigTabBase
 
     private string searchText = string.Empty;
     private StatusFilter statusFilter = StatusFilter.All;
-    private IReadOnlyList<TrackedPlayer> cachedList = Array.Empty<TrackedPlayer>();
+    private IReadOnlyList<RowVM> cachedList = Array.Empty<RowVM>();
     private DateTime lastListRefresh = DateTime.MinValue;
     private static readonly TimeSpan ListRefreshInterval = TimeSpan.FromSeconds(2);
 
-    private int countTotal;
-    private int countConfirmed;
-    private int countProvisional;
-    private int countRecent;
+    // KPI counts, formatted once when a refresh result is consumed (not every frame).
+    private string countTotal = "0";
+    private string countConfirmed = "0";
+    private string countProvisional = "0";
+    private string countRecent = "0";
+
+    private static readonly Vector4 ProvisionalDot = new(0.55f, 0.55f, 0.55f, 1f);
+    private static readonly Vector4 KpiProvisionalColor = new(0.65f, 0.65f, 0.65f, 1f);
 
     // Background refresh state. Only the UI thread reads/writes these fields,
     // except for `_pendingResult` which is published via Volatile.Write from the
@@ -35,9 +39,20 @@ public class PlayerTrackerTab : ConfigTabBase
     private int _refreshInFlight;
     private RefreshResult? _pendingResult;
 
+    // Fully pre-formatted row so per-frame drawing does zero string/format work.
+    private sealed record RowVM(
+        Guid LocalId,
+        bool Provisional,
+        string Name,
+        string World,
+        string Seen,
+        string LastSeenRelative,
+        string LastSeenAbsolute,
+        string Source);
+
     private sealed record RefreshResult(
         string Query,
-        IReadOnlyList<TrackedPlayer> List,
+        IReadOnlyList<RowVM> List,
         int Total,
         int Confirmed,
         int Provisional,
@@ -78,14 +93,14 @@ public class PlayerTrackerTab : ConfigTabBase
         {
             cachedList = statusFilter switch
             {
-                StatusFilter.Confirmed => ready.List.Where(x => !x.IsProvisional).ToList(),
-                StatusFilter.Provisional => ready.List.Where(x => x.IsProvisional).ToList(),
+                StatusFilter.Confirmed => ready.List.Where(x => !x.Provisional).ToList(),
+                StatusFilter.Provisional => ready.List.Where(x => x.Provisional).ToList(),
                 _ => ready.List,
             };
-            countTotal = ready.Total;
-            countConfirmed = ready.Confirmed;
-            countProvisional = ready.Provisional;
-            countRecent = ready.Recent;
+            countTotal = ready.Total.ToString("N0");
+            countConfirmed = ready.Confirmed.ToString("N0");
+            countProvisional = ready.Provisional.ToString("N0");
+            countRecent = ready.Recent.ToString("N0");
             Interlocked.Exchange(ref _refreshInFlight, 0);
 
             // If the user changed the query while the worker was running, force a
@@ -113,9 +128,12 @@ public class PlayerTrackerTab : ConfigTabBase
                     ? tracker.GetRecent(500)
                     : tracker.Search(query, 500);
 
+                var vms = new List<RowVM>(baseList.Count);
+                foreach (var p in baseList) vms.Add(BuildRowVM(p));
+
                 var result = new RefreshResult(
                     Query: query,
-                    List: baseList,
+                    List: vms,
                     Total: tracker.Count(),
                     Confirmed: tracker.CountConfirmed(),
                     Provisional: tracker.CountProvisional(),
@@ -134,13 +152,13 @@ public class PlayerTrackerTab : ConfigTabBase
     {
         float colW = avail / 4f;
 
-        DrawKpi("TOTAL TRACKED", countTotal.ToString("N0"));
+        DrawKpi("TOTAL TRACKED", countTotal);
         ImGui.SameLine(colW);
-        DrawKpi("CONFIRMED", countConfirmed.ToString("N0"), UiTheme.ColorSuccessText);
+        DrawKpi("CONFIRMED", countConfirmed, UiTheme.ColorSuccessText);
         ImGui.SameLine(colW * 2);
-        DrawKpi("PROVISIONAL", countProvisional.ToString("N0"), new Vector4(0.65f, 0.65f, 0.65f, 1f));
+        DrawKpi("PROVISIONAL", countProvisional, KpiProvisionalColor);
         ImGui.SameLine(colW * 3);
-        DrawKpi("LAST 7 DAYS", countRecent.ToString("N0"));
+        DrawKpi("LAST 7 DAYS", countRecent);
     }
 
     private void DrawKpi(string label, string value, Vector4? valueColor = null)
@@ -170,10 +188,13 @@ public class PlayerTrackerTab : ConfigTabBase
         DrawStatusFilterPills(pillsW);
     }
 
+    private static readonly StatusFilter[] FilterValues = { StatusFilter.All, StatusFilter.Confirmed, StatusFilter.Provisional };
+    private static readonly string[] FilterLabels = { "All", "Confirmed", "Provisional" };
+
     private void DrawStatusFilterPills(float totalWidth)
     {
-        var filters = new[] { StatusFilter.All, StatusFilter.Confirmed, StatusFilter.Provisional };
-        var labels = new[] { "All", "Confirmed", "Provisional" };
+        var filters = FilterValues;
+        var labels = FilterLabels;
         float btnW = totalWidth / filters.Length - theme.Gap(0.3f);
         float btnH = ImGui.GetFrameHeight();
 
@@ -228,45 +249,62 @@ public class PlayerTrackerTab : ConfigTabBase
         ImGui.TableSetupScrollFreeze(0, 1);
         ImGui.TableHeadersRow();
 
-        foreach (var p in cachedList)
+        // Only the visible rows are processed each frame; the rest are skipped entirely.
+        var clipper = new ImGuiListClipper();
+        clipper.Begin(cachedList.Count, ImGui.GetTextLineHeightWithSpacing());
+        while (clipper.Step())
         {
-            ImGui.TableNextRow();
-
-            ImGui.TableNextColumn();
-            var dotColor = p.IsProvisional
-                ? new Vector4(0.55f, 0.55f, 0.55f, 1f)
-                : UiTheme.ColorSuccessText;
-            ImGui.TextColored(dotColor, "●");
-            if (ImGui.IsItemHovered())
-                ImGui.SetTooltip(p.IsProvisional ? "Provisional (no ContentId / Lodestone ID resolved)" : "Confirmed");
-
-            ImGui.TableNextColumn();
-            if (ImGui.Selectable($"##row-{p.LocalId}", false, ImGuiSelectableFlags.SpanAllColumns))
-            {
-                plugin.PlayerDetailWindow.Show(p.LocalId);
-            }
-            theme.HoverHandIfItem();
-            ImGui.SameLine(0, 0);
-            ImGui.TextUnformatted(p.Info.Name);
-            ImGui.SameLine(0, 0);
-            ImGui.TextColored(theme.MutedText, " @ ");
-            ImGui.SameLine(0, 0);
-            ImGui.TextColored(theme.MutedText, p.Info.World);
-
-            ImGui.TableNextColumn();
-            ImGui.TextUnformatted(p.Stats.SeenCount.ToString("N0"));
-
-            ImGui.TableNextColumn();
-            ImGui.TextUnformatted(FormatRelative(p.Stats.LastSeen));
-            if (ImGui.IsItemHovered())
-                ImGui.SetTooltip(p.Stats.LastSeen.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss"));
-
-            ImGui.TableNextColumn();
-            ImGui.TextColored(theme.MutedText, p.Stats.FirstSeenVia.ToString());
+            for (int i = clipper.DisplayStart; i < clipper.DisplayEnd; i++)
+                DrawPlayerRow(cachedList[i]);
         }
+        clipper.End();
 
         ImGui.EndTable();
     }
+
+    private void DrawPlayerRow(RowVM p)
+    {
+        ImGui.TableNextRow();
+
+        ImGui.TableNextColumn();
+        ImGui.TextColored(p.Provisional ? ProvisionalDot : UiTheme.ColorSuccessText, "●");
+        if (ImGui.IsItemHovered())
+            ImGui.SetTooltip(p.Provisional ? "Provisional (no ContentId / Lodestone ID resolved)" : "Confirmed");
+
+        ImGui.TableNextColumn();
+        if (ImGui.Selectable($"##row-{p.LocalId}", false, ImGuiSelectableFlags.SpanAllColumns))
+            plugin.PlayerDetailWindow.Show(p.LocalId);
+        theme.HoverHandIfItem();
+        ImGui.SameLine(0, 0);
+        ImGui.TextUnformatted(p.Name);
+        ImGui.SameLine(0, 0);
+        ImGui.TextColored(theme.MutedText, " @ ");
+        ImGui.SameLine(0, 0);
+        ImGui.TextColored(theme.MutedText, p.World);
+
+        ImGui.TableNextColumn();
+        ImGui.TextUnformatted(p.Seen);
+
+        ImGui.TableNextColumn();
+        ImGui.TextUnformatted(p.LastSeenRelative);
+        if (ImGui.IsItemHovered())
+            ImGui.SetTooltip(p.LastSeenAbsolute);
+
+        ImGui.TableNextColumn();
+        ImGui.TextColored(theme.MutedText, p.Source);
+    }
+
+    private static RowVM BuildRowVM(TrackedPlayer p) => new(
+        LocalId: p.LocalId,
+        Provisional: p.IsProvisional,
+        Name: p.Info.Name,
+        World: p.Info.World,
+        Seen: p.Stats.SeenCount.ToString("N0"),
+        LastSeenRelative: FormatRelative(p.Stats.LastSeen),
+        LastSeenAbsolute: p.Stats.LastSeen == default
+            ? "—"
+            : p.Stats.LastSeen.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss"),
+        Source: p.Stats.FirstSeenVia.ToString());
 
     private static string FormatRelative(DateTime when)
     {
