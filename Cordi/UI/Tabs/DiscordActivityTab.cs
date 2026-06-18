@@ -156,10 +156,122 @@ public class DiscordActivityTab : ConfigTabBase
         var config = plugin.Config.ActivityConfig;
         bool changed = false;
 
+        EnsureCustomPresets(config, ref changed);
+
+        bool unused = true;
+        theme.DrawPluginCardAuto(
+            id: "act-custom-presets-card",
+            enabled: ref unused,
+            showCheckbox: false,
+            title: "Presets",
+            drawContent: (avail) =>
+            {
+                ImGui.TextColored(theme.MutedText, "Save multiple custom statuses and switch between them.");
+                theme.SpacerY(0.5f);
+
+                string[] names = config.CustomPresets.Select(p => p.Name).ToArray();
+                int active = Math.Clamp(config.ActiveCustomPreset, 0, config.CustomPresets.Count - 1);
+
+                ImGui.Text("Active Preset");
+                ImGui.SameLine();
+                ImGui.SetNextItemWidth(200f * ImGuiHelpers.GlobalScale);
+                if (ImGui.Combo("##CustomPresetSelect", ref active, names, names.Length))
+                {
+                    config.ActiveCustomPreset = active;
+                    config.TypeConfigs[ActivityType.Custom] = config.CustomPresets[active].Config;
+                    changed = true;
+                }
+                theme.HoverHandIfItem();
+
+                ImGui.SameLine();
+                if (theme.SecondaryButton("+ New##CustomPreset"))
+                {
+                    var preset = new ActivityPreset
+                    {
+                        Name = UniquePresetName(config, "Preset"),
+                        Config = new ActivityTypeConfig { Enabled = true, Priority = 0, Format = "{state}" }
+                    };
+                    config.CustomPresets.Add(preset);
+                    config.ActiveCustomPreset = config.CustomPresets.Count - 1;
+                    config.TypeConfigs[ActivityType.Custom] = preset.Config;
+                    changed = true;
+                }
+
+                ImGui.SameLine();
+                using (ImRaii.Disabled(config.CustomPresets.Count <= 1))
+                {
+                    if (theme.DangerIconButton("##DelCustomPreset", FontAwesomeIcon.Trash, "Delete Preset"))
+                    {
+                        config.CustomPresets.RemoveAt(active);
+                        config.ActiveCustomPreset = Math.Clamp(active, 0, config.CustomPresets.Count - 1);
+                        config.TypeConfigs[ActivityType.Custom] = config.CustomPresets[config.ActiveCustomPreset].Config;
+                        changed = true;
+                    }
+                }
+
+                theme.SpacerY(0.5f);
+
+                int safeActive = Math.Clamp(config.ActiveCustomPreset, 0, config.CustomPresets.Count - 1);
+                ImGui.Text("Name");
+                ImGui.SameLine();
+                string nm = config.CustomPresets[safeActive].Name;
+                ImGui.SetNextItemWidth(200f * ImGuiHelpers.GlobalScale);
+                if (ImGui.InputText("##CustomPresetName", ref nm, 64))
+                {
+                    config.CustomPresets[safeActive].Name = nm;
+                    changed = true;
+                }
+            }
+        );
+
+        theme.SpacerY();
+
         DrawTypeCard(ActivityType.Custom, "Activity: Custom Status", config, ref changed);
 
         if (changed)
             plugin.Config.Save();
+    }
+
+    private void EnsureCustomPresets(DiscordActivityConfig config, ref bool changed)
+    {
+        if (config.CustomPresets == null) config.CustomPresets = new();
+
+        if (config.CustomPresets.Count == 0)
+        {
+            if (!config.TypeConfigs.TryGetValue(ActivityType.Custom, out var existing) || existing == null)
+            {
+                existing = new ActivityTypeConfig { Enabled = true, Priority = 0, Format = "{state}" };
+                config.TypeConfigs[ActivityType.Custom] = existing;
+            }
+            config.CustomPresets.Add(new ActivityPreset { Name = "Default", Config = existing });
+            config.ActiveCustomPreset = 0;
+            changed = true;
+        }
+
+        config.ActiveCustomPreset = Math.Clamp(config.ActiveCustomPreset, 0, config.CustomPresets.Count - 1);
+
+        var activeConfig = config.CustomPresets[config.ActiveCustomPreset].Config;
+        if (activeConfig == null)
+        {
+            activeConfig = new ActivityTypeConfig { Enabled = true, Priority = 0, Format = "{state}" };
+            config.CustomPresets[config.ActiveCustomPreset].Config = activeConfig;
+            changed = true;
+        }
+
+        config.TypeConfigs.TryGetValue(ActivityType.Custom, out var current);
+        if (!ReferenceEquals(current, activeConfig))
+        {
+            config.TypeConfigs[ActivityType.Custom] = activeConfig;
+            changed = true;
+        }
+    }
+
+    private static string UniquePresetName(DiscordActivityConfig config, string baseName)
+    {
+        string name = baseName;
+        int i = 1;
+        while (config.CustomPresets.Any(p => p.Name == name)) name = $"{baseName} {i++}";
+        return name;
     }
 
     private void DrawGeneralSubTab()

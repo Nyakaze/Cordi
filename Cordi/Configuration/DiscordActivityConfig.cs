@@ -24,7 +24,17 @@ public class DiscordActivityConfig
 
     };
 
+    public List<ActivityPreset> CustomPresets { get; set; } = new();
+    public int ActiveCustomPreset { get; set; } = 0;
+
     public bool Enabled { get; set; } = true;
+}
+
+[Serializable]
+public class ActivityPreset
+{
+    public string Name { get; set; } = "Default";
+    public ActivityTypeConfig Config { get; set; } = new();
 }
 
 [Serializable]
