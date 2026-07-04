@@ -53,6 +53,14 @@ public class NearbyPlayerScanner : IDisposable
     public void Tick(IFramework framework)
     {
         if (_disposed) return;
+
+        // Player Tracker is opt-in. While disabled, don't scan or hold open encounters.
+        if (!_plugin.PlayerTracker.IsEnabled)
+        {
+            if (_openEncounters.Count > 0) _openEncounters.Clear();
+            return;
+        }
+
         Scan();
     }
 

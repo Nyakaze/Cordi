@@ -64,14 +64,20 @@ public class PlayerTrackerTab : ConfigTabBase
 
     public override void Draw()
     {
-        bool enabled = true;
+        bool enabled = plugin.Config.PlayerTracker.Enabled;
         theme.DrawPluginCardAuto(
             id: "player-tracker-list",
             title: "Tracked Players",
             enabled: ref enabled,
-            showCheckbox: false,
+            showCheckbox: true,
+            mutedText: "Opt-in. When off, no players are tracked, scanned, or recorded.",
             drawContent: (avail) =>
             {
+                // Previously tracked players stay viewable even when tracking is off;
+                // only new scanning/recording is paused (gated in the tracking service).
+                if (!plugin.Config.PlayerTracker.Enabled)
+                    DrawPausedNotice();
+
                 EnsureListFresh();
 
                 DrawKpiTiles(avail);
@@ -83,6 +89,22 @@ public class PlayerTrackerTab : ConfigTabBase
                 DrawPlayerTable();
             }
         );
+
+        if (enabled != plugin.Config.PlayerTracker.Enabled)
+        {
+            plugin.Config.PlayerTracker.Enabled = enabled;
+            plugin.Config.Save();
+            // Force the list to refetch next time tracking is turned back on.
+            lastListRefresh = DateTime.MinValue;
+        }
+    }
+
+    private void DrawPausedNotice()
+    {
+        ImGui.TextColored(theme.MutedText,
+            "Tracking is paused — no new players are being scanned or recorded. " +
+            "Previously tracked players remain viewable below.");
+        theme.SpacerY(0.5f);
     }
 
     private void EnsureListFresh()

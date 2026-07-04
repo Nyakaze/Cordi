@@ -27,6 +27,9 @@ public class PlayerTrackingService : IDisposable
     private CordiLogService Log => _plugin.LogService;
     private const string LogSource = "PlayerTracker";
 
+    /// <summary>Opt-in master switch. When off, no tracking writes happen.</summary>
+    public bool IsEnabled => _plugin.Config?.PlayerTracker?.Enabled ?? false;
+
     public PlayerTrackingService(CordiPlugin plugin, IPlayerTrackingStorage storage, ICacheRegistry cacheRegistry)
     {
         _plugin = plugin;
@@ -39,6 +42,7 @@ public class PlayerTrackingService : IDisposable
 
     public void Observe(Player player, ObservationContext ctx)
     {
+        if (!IsEnabled) return;
         if (string.IsNullOrWhiteSpace(player.Name) || string.IsNullOrWhiteSpace(player.World)) return;
 
         var nameWorldKey = MakeKey(player.Name, player.World);
@@ -150,6 +154,7 @@ public class PlayerTrackingService : IDisposable
     /// </summary>
     public void RecordEncounter(string name, string world, Encounter encounter)
     {
+        if (!IsEnabled) return;
         if (encounter == null) return;
         if (string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(world)) return;
 

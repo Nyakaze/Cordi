@@ -22,6 +22,7 @@ public class Configuration : IPluginConfiguration
     public DiscordActivityConfig ActivityConfig { get; set; } = new();
     public PartyConfig Party { get; set; } = new();
     public RememberMeConfig RememberMe { get; set; } = new();
+    public PlayerTrackerConfig PlayerTracker { get; set; } = new();
     public AdvertisementFilterConfig AdvertisementFilter { get; set; } = new();
     public LodestoneConfig Lodestone { get; set; } = new();
     public CombinedWindowConfig CombinedWindow { get; set; } = new();
