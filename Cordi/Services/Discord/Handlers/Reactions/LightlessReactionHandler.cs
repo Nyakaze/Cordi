@@ -19,6 +19,8 @@ public class LightlessReactionHandler : IDiscordReactionHandler
 
     public async Task HandleAsync(MessageReactionAddEventArgs e, CancellationToken ct)
     {
+        if (!LightlessConnectionMonitor.FeatureEnabled) return; // Feature retired from the UI.
+
         var monitor = _plugin.LightlessMonitor;
         if (monitor == null) return;
 

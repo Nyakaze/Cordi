@@ -164,9 +164,9 @@ public sealed class ConfigWindow : Window, IDisposable
                 // DrawSidebarButton("Combined", 9);
                 DrawSidebarButton("Activity", 5);
                 DrawSidebarButton("Party & Players", 6);
-                DrawSidebarButton("Player Tracker", 14);
+                // DrawSidebarButton("Player Tracker", 14);
                 DrawSidebarButton("Slash Commands", 13);
-                DrawSidebarButton("Lightless", 15);
+                // DrawSidebarButton("Lightless", 15);
                 DrawSidebarButton("Settings", 12);
 
 #if DEBUG

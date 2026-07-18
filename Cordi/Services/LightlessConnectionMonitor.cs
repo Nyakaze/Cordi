@@ -21,6 +21,14 @@ namespace Cordi.Services;
 /// </summary>
 public class LightlessConnectionMonitor : IDisposable
 {
+    /// <summary>
+    /// Feature-level kill switch. Lightless has been retired from the UI, so the monitor
+    /// loop is never started and no status/disconnect messages are posted, regardless of any
+    /// user's saved config. Set to true (and restore the sidebar button in ConfigWindow) to
+    /// bring the feature back.
+    /// </summary>
+    public const bool FeatureEnabled = false;
+
     public const string ReconnectEmoji = "🔄";
 
     private static readonly TimeSpan PollInterval = TimeSpan.FromSeconds(10);
@@ -81,6 +89,7 @@ public class LightlessConnectionMonitor : IDisposable
 
     public void Start()
     {
+        if (!FeatureEnabled) return;   // Feature retired from the UI; flip FeatureEnabled to restore.
         if (_loop != null) return;
         _loop = Task.Run(() => LoopAsync(_cts.Token));
     }

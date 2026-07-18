@@ -27,8 +27,16 @@ public class PlayerTrackingService : IDisposable
     private CordiLogService Log => _plugin.LogService;
     private const string LogSource = "PlayerTracker";
 
+    /// <summary>
+    /// Feature-level kill switch. The Player Tracker has been retired from the UI, so the
+    /// whole feature is forced off here regardless of any user's saved config — the scanner
+    /// won't run and no observations are recorded. Set to true (and restore the sidebar
+    /// button in ConfigWindow) to bring the feature back.
+    /// </summary>
+    public const bool FeatureEnabled = false;
+
     /// <summary>Opt-in master switch. When off, no tracking writes happen.</summary>
-    public bool IsEnabled => _plugin.Config?.PlayerTracker?.Enabled ?? false;
+    public bool IsEnabled => FeatureEnabled && (_plugin.Config?.PlayerTracker?.Enabled ?? false);
 
     public PlayerTrackingService(CordiPlugin plugin, IPlayerTrackingStorage storage, ICacheRegistry cacheRegistry)
     {
