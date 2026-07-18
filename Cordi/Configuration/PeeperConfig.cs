@@ -43,6 +43,10 @@ public class CordiPeepConfig
 
     public Vector4 TargetingHighlightColor { get; set; } = new Vector4(1f, 0.5f, 0.5f, 1f);
 
+    public bool TargetingGlowEnabled { get; set; } = false;
+    public Vector4 TargetingGlowColor { get; set; } = new Vector4(0f, 0f, 0f, 1f);
+    public float TargetingGlowThickness { get; set; } = 3f;
+
     public float BackgroundOpacity { get; set; } = 1.0f;
     public bool HideTitleBar { get; set; } = false;
     public bool TextShadow { get; set; } = false;

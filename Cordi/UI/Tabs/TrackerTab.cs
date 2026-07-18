@@ -530,6 +530,33 @@ public class TrackerTab : ConfigTabBase
                     plugin.Config.Save();
                 }
 
+                bool glowEnabled = plugin.Config.CordiPeep.TargetingGlowEnabled;
+                theme.ConfigCheckbox("Outline Glow on Targeting Players", ref glowEnabled, () =>
+                {
+                    plugin.Config.CordiPeep.TargetingGlowEnabled = glowEnabled;
+                    plugin.Config.Save();
+                });
+                theme.HoverHandIfItem();
+
+                if (plugin.Config.CordiPeep.TargetingGlowEnabled)
+                {
+                    var glowColor = plugin.Config.CordiPeep.TargetingGlowColor;
+                    if (ImGui.ColorEdit4("Glow Color##peepGlowColor", ref glowColor, ImGuiColorEditFlags.NoInputs | ImGuiColorEditFlags.AlphaBar))
+                    {
+                        plugin.Config.CordiPeep.TargetingGlowColor = glowColor;
+                        plugin.Config.Save();
+                    }
+
+                    ImGui.Text("Glow Thickness:");
+                    ImGui.SetNextItemWidth(avail);
+                    float glowThickness = plugin.Config.CordiPeep.TargetingGlowThickness;
+                    if (ImGui.SliderFloat("##peepGlowThickness", ref glowThickness, 1f, 10f, "%.1f px"))
+                    {
+                        plugin.Config.CordiPeep.TargetingGlowThickness = glowThickness;
+                        plugin.Config.Save();
+                    }
+                }
+
                 theme.SpacerY(1f);
                 ImGui.Separator();
                 theme.SpacerY(0.5f);

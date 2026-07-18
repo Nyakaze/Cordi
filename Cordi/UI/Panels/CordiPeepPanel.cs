@@ -333,6 +333,11 @@ public class CordiPeepPanel
         }
 
         if (textShadow) drawList.AddText(new Vector2(textX, textY) + ShadowOffset, shadowColor, label);
+        // Outline glow around the name of actively-targeting peepers
+        if (isActive && config.TargetingGlowEnabled && config.TargetingGlowThickness > 0f)
+        {
+            DrawTextGlow(drawList, new Vector2(textX, textY), label, config.TargetingGlowColor, config.TargetingGlowThickness);
+        }
         drawList.AddText(new Vector2(textX, textY), textColor, label);
 
         var timeSize = ImGui.CalcTextSize(rightText);
@@ -347,6 +352,25 @@ public class CordiPeepPanel
             var targetPos = new Vector2(targetItemMin.X + style.ItemSpacing.X, targetItemMin.Y);
             if (textShadow) drawList.AddText(targetPos + ShadowOffset, shadowColor, targetText);
             drawList.AddText(targetPos, ImGui.GetColorU32(ImGuiCol.TextDisabled), targetText);
+        }
+    }
+
+    // Draws a soft outline glow behind text by stamping it in a ring of offsets with fading alpha.
+    private static void DrawTextGlow(ImDrawListPtr drawList, Vector2 pos, string text, Vector4 color, float thickness)
+    {
+        const int layers = 3;
+        const int directions = 8;
+        for (int layer = layers; layer >= 1; layer--)
+        {
+            float radius = thickness * (layer / (float)layers);
+            float alpha = color.W * (1f - (layer - 1) / (float)layers) * 0.5f;
+            uint col = ImGui.GetColorU32(new Vector4(color.X, color.Y, color.Z, alpha));
+            for (int d = 0; d < directions; d++)
+            {
+                float angle = MathF.Tau * d / directions;
+                var off = new Vector2(MathF.Cos(angle) * radius, MathF.Sin(angle) * radius);
+                drawList.AddText(pos + off, col, text);
+            }
         }
     }
 
