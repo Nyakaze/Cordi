@@ -1,7 +1,23 @@
+## [2.3.0](https://github.com/Nyakaze/Cordi/compare/2.2.0...2.3.0) (26-05-2026)
+
+### Player Track Tab
+ - **REMOVED:** Completly removed
+
+### Peeper
+ - **Added:** Outer Glow for Peeper Text
+
+### Activity
+ - **Added:** Custom Activitys presets.
+ - **Fixed:** A bug where Custom Activitys cleared sometimes.
+ - **Fixed:** A bug where Custom Activitys where not clearing correctly.
+
+### Discord Chat
+ - **Updated:** More emote parsing
+
 ## [2.2.0](https://github.com/Nyakaze/Cordi/compare/2.0.5...2.2.0) (26-05-2026)
 
 ### Player Track Tab
- - **Added:** A new Tab called "Player Track"
+ - **Added:** A new Tab called "Player Track".
  - **Added:** Option to track player changes like Name, World, Free Company, etc.
 
 ### Discord Activity
