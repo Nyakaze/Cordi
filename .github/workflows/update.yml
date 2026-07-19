@@ -121,11 +121,16 @@ jobs:
           NEW_LINK="https://github.com/${{ github.repository }}/releases/download/${{ env.BUILD_VERSION }}/Cordi.zip"
           CURRENT_TIME=$(date +%s)
           
-          echo "Updating uwu.json..."
+          UWU_VERSION="${{ env.BUILD_VERSION }}"
+          if [[ "$UWU_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            UWU_VERSION="${UWU_VERSION}.0"
+          fi
+          
+          echo "Updating uwu.json to expect version $UWU_VERSION..."
 
           cd dalamud-plugins-repo
 
-          jq --arg ver "${{ env.BUILD_VERSION }}" \
+          jq --arg ver "$UWU_VERSION" \
              --arg link "$NEW_LINK" \
              --arg time "$CURRENT_TIME" \
              --arg changelog "$CHANGELOG_TEXT" \
@@ -144,7 +149,7 @@ jobs:
           
           if [[ -n $(git status -s) ]]; then
             git add uwu.json
-            git commit -m "Auto-update Cordi to ${{ env.BUILD_VERSION }}"
+            git commit -m "Auto-update Cordi to $UWU_VERSION"
             git push origin main
             echo "Successfully updated DalamudPlugins repo."
           else
