@@ -219,7 +219,7 @@ public class CordiPeepService : IDisposable
 
     private void UpdatePeeperState(IPlayerCharacter player)
     {
-        if (plugin.Config.CordiPeep.UnhideFromVisibility)
+        if (plugin.Config.CordiPeep.UnhideFromVisibilityEffective)
         {
             VisibilityBridge.UnhidePlayer(player, plugin.Config.CordiPeep.UnhideVoidedPlayers, isEmote: false);
         }

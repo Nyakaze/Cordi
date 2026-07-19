@@ -321,24 +321,28 @@ public class TrackerTab : ConfigTabBase
                 })) { }
                 theme.HoverHandIfItem();
 
-                bool unhideVis = plugin.Config.CordiPeep.UnhideFromVisibility;
-                if (theme.ConfigCheckbox("Unhide lookers from Visibility plugin##cpUnhideVis", ref unhideVis, () =>
-                {
-                    plugin.Config.CordiPeep.UnhideFromVisibility = unhideVis;
-                    plugin.Config.Save();
-                })) { }
-                theme.HoverHandIfItem();
-
-                if (unhideVis)
-                {
-                    bool unhideVoid = plugin.Config.CordiPeep.UnhideVoidedPlayers;
-                    if (theme.ConfigCheckbox("Allow unhiding voided players (looks)##cpUnhideVoid", ref unhideVoid, () =>
-                    {
-                        plugin.Config.CordiPeep.UnhideVoidedPlayers = unhideVoid;
-                        plugin.Config.Save();
-                    })) { }
-                    theme.HoverHandIfItem();
-                }
+                // "Unhide lookers from Visibility plugin" (and its nested "Allow unhiding voided
+                // players") is hidden while the feature isn't fully functioning. The behavior is
+                // also force-disabled via CordiPeepConfig.UnhideFromVisibilityFeatureEnabled.
+                // Restore this block together with that flag to bring the option back.
+                // bool unhideVis = plugin.Config.CordiPeep.UnhideFromVisibility;
+                // if (theme.ConfigCheckbox("Unhide lookers from Visibility plugin##cpUnhideVis", ref unhideVis, () =>
+                // {
+                //     plugin.Config.CordiPeep.UnhideFromVisibility = unhideVis;
+                //     plugin.Config.Save();
+                // })) { }
+                // theme.HoverHandIfItem();
+                //
+                // if (unhideVis)
+                // {
+                //     bool unhideVoid = plugin.Config.CordiPeep.UnhideVoidedPlayers;
+                //     if (theme.ConfigCheckbox("Allow unhiding voided players (looks)##cpUnhideVoid", ref unhideVoid, () =>
+                //     {
+                //         plugin.Config.CordiPeep.UnhideVoidedPlayers = unhideVoid;
+                //         plugin.Config.Save();
+                //     })) { }
+                //     theme.HoverHandIfItem();
+                // }
 
                 theme.SpacerY(0.5f);
 

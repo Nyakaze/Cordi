@@ -722,7 +722,7 @@ public static class VisibilityBridge
     public static unsafe void OnFrameworkUpdate()
     {
         // 1. Guard check: if Visibility integration is disabled in Peeper config, restore any unhidden players and return.
-        if (!CordiPlugin.Plugin.Config.CordiPeep.UnhideFromVisibility)
+        if (!CordiPlugin.Plugin.Config.CordiPeep.UnhideFromVisibilityEffective)
         {
             if (!TempUnhiddenPlayers.IsEmpty)
             {

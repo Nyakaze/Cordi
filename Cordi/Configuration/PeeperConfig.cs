@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Numerics;
+using Newtonsoft.Json;
 
 namespace Cordi.Configuration;
 
@@ -61,6 +62,21 @@ public class CordiPeepConfig
 
     public bool UnhideFromVisibility { get; set; } = false;
     public bool UnhideVoidedPlayers { get; set; } = false;
+
+    /// <summary>
+    /// Feature-level kill switch for the "Unhide lookers from Visibility plugin" option.
+    /// The option was removed from the UI while it's not fully functioning, so the auto-unhide
+    /// behavior is forced off regardless of the saved <see cref="UnhideFromVisibility"/> value.
+    /// Flip to true (and restore the checkbox in TrackerTab) to bring the feature back.
+    /// </summary>
+    public const bool UnhideFromVisibilityFeatureEnabled = false;
+
+    /// <summary>
+    /// Effective auto-unhide state for runtime code — honours both the user's saved toggle and
+    /// the <see cref="UnhideFromVisibilityFeatureEnabled"/> kill switch.
+    /// </summary>
+    [JsonIgnore]
+    public bool UnhideFromVisibilityEffective => UnhideFromVisibilityFeatureEnabled && UnhideFromVisibility;
 
     public List<CordiPeepBlacklistEntry> Blacklist { get; set; } = new();
 }
