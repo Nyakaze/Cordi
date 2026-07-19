@@ -32,12 +32,18 @@ namespace Cordi.Services
         private string _lastLoggedTitle = string.Empty;
 
         private DateTime _lastRefreshTick = DateTime.MinValue;
+        private DateTime _lastForcedRebroadcast = DateTime.MinValue;
         private string _lastBroadcastTitle = string.Empty;
         private volatile bool _hasPendingPresenceUpdate = false;
         private volatile bool _isIdle = true;
         private volatile bool _disposed = false;
 
         private const double RefreshIntervalSeconds = 1.0;
+
+        // Re-send the current title to Honorific on this cadence even when the text hasn't changed,
+        // so a static title (e.g. always-on Custom) recovers after Honorific drops the override
+        // on relog / character redraw / zone change.
+        private const double ForcedRebroadcastSeconds = 5.0;
 
         private static readonly Regex UrlLikeDotRegex = new Regex(@"(?<=\w)\.(?=\w)", RegexOptions.Compiled);
 
@@ -70,7 +76,10 @@ namespace Cordi.Services
                 return;
             }
 
-            if (_isIdle && !IsCustomAlwaysOn()) return;
+            // Keep running while a title is still broadcast so a state change
+            // (e.g. Custom disabled) is guaranteed to reach ProcessPresence and clear it,
+            // instead of waiting for an unrelated presence update to force a pass.
+            if (_isIdle && !IsCustomAlwaysOn() && string.IsNullOrEmpty(_lastBroadcastTitle)) return;
 
             if ((DateTime.Now - _lastRefreshTick).TotalSeconds < RefreshIntervalSeconds) return;
             _lastRefreshTick = DateTime.Now;
@@ -288,10 +297,13 @@ namespace Cordi.Services
             try
             {
                 var typeConf = best.Config;
-                if (title != _lastBroadcastTitle)
+                bool textChanged = title != _lastBroadcastTitle;
+                bool reassertDue = (DateTime.Now - _lastForcedRebroadcast).TotalSeconds >= ForcedRebroadcastSeconds;
+                if (textChanged || reassertDue)
                 {
                     _honorific.SetTitle(player, title, config.PrefixTitle, typeConf.Color, typeConf.Glow, typeConf.GradientColourSet, typeConf.GradientAnimationStyle);
                     _lastBroadcastTitle = title;
+                    _lastForcedRebroadcast = DateTime.Now;
                 }
             }
             catch (Exception ex)
