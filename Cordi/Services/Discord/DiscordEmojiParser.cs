@@ -1,28 +1,28 @@
+﻿using System;
 using System.Collections.Generic;
 using System.Text.RegularExpressions;
 
 namespace Cordi.Services.Discord;
 
-/// <summary>
-/// Converts Discord message content into a form suitable for the in-game chat.
-/// Discord auto-converts text smileys (":P", ":O", "&lt;3", ...) to Unicode emojis.
-/// FFXIV cannot render those, and certain emoji bytes can cause the message to be
-/// dropped silently. This parser reverses Discord's auto-conversion where possible,
-/// strips custom emoji markup to its shortcode text, and falls back to a readable
-/// ":shortcode:" form for other known emojis.
-/// </summary>
+public readonly record struct DiscordCustomEmote(ulong Id, string Name, bool Animated);
+
 public static class DiscordEmojiParser
 {
-    // <:name:123456789> or <a:name:123456789> -> :name:
     private static readonly Regex CustomEmojiRegex = new(
-        @"<a?:([A-Za-z0-9_]+):\d+>",
+        @"<(?<a>a?):(?<name>[A-Za-z0-9_~]{2,32}):(?<id>\d{5,25})>",
         RegexOptions.Compiled);
 
-    // [name](https://cdn.discordapp.com/emojis/123456789.png?...) -> :name:
-    // Discord sends emotes as markdown links when posted via webhooks / certain clients.
     private static readonly Regex EmoteLinkRegex = new(
-        @"\[([^\]]+)\]\(https?://(?:cdn|media)\.discord(?:app)?\.(?:com|net)/emojis/\d+\.[A-Za-z0-9]+(?:\?[^)]*)?\)",
+        @"\[(?<name>[^\]]+)\]\(https?://(?:cdn|media)\.discord(?:app)?\.(?:com|net)/emojis/(?<id>\d{5,25})\.(?<ext>[A-Za-z0-9]+)(?:\?[^)]*)?\)",
         RegexOptions.Compiled);
+
+    private static readonly Regex BareEmoteUrlRegex = new(
+        @"https?://(?:cdn|media)\.discord(?:app)?\.(?:com|net)/emojis/(?<id>\d{5,25})\.(?<ext>png|gif|webp|jpe?g)(?:\?(?<query>\S*))?",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+    private static readonly Regex UrlNameRegex = new(
+        @"(?:^|&)name=(?<name>[A-Za-z0-9_~%\-]{1,64})",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
     private static readonly Regex EmoteSuffixRegex = new(
         @"[^A-Za-z0-9]\d+$",
@@ -32,31 +32,27 @@ public static class DiscordEmojiParser
         @"[A-Za-z0-9_]+",
         RegexOptions.Compiled);
 
-    // Unicode emojis that Discord auto-creates from text shortcuts.
-    // Reversed back to the original text the user most likely typed.
     private static readonly Dictionary<string, string> UnicodeToTextSmiley = new()
     {
-        { "\U0001F642", ":)" },     // slight_smile
-        { "\U0001F641", ":(" },     // slight_frown
-        { "\U0001F603", ":D" },     // smiley
-        { "\U0001F61B", ":P" },     // stuck_out_tongue
-        { "\U0001F609", ";)" },     // wink
-        { "\U0001F62E", ":O" },     // open_mouth
-        { "\U0001F610", ":|" },     // neutral_face
-        { "\U0001F615", ":/" },     // confused
-        { "\U0001F617", ":*" },     // kissing
-        { "\U0001F622", ":'(" },    // cry
-        { "\U0001F626", "D:" },     // frowning
-        { "\U0001F607", "O:)" },    // innocent
-        { "\U0001F620", ">:(" },    // angry
-        { "\U0001F60E", "8)" },     // sunglasses
-        { "❤️", "<3" },   // heart (with VS16)
-        { "❤", "<3" },          // heart (bare)
-        { "\U0001F494", "</3" },    // broken_heart
+        { "\U0001F642", ":)" },
+        { "\U0001F641", ":(" },
+        { "\U0001F603", ":D" },
+        { "\U0001F61B", ":P" },
+        { "\U0001F609", ";)" },
+        { "\U0001F62E", ":O" },
+        { "\U0001F610", ":|" },
+        { "\U0001F615", ":/" },
+        { "\U0001F617", ":*" },
+        { "\U0001F622", ":'(" },
+        { "\U0001F626", "D:" },
+        { "\U0001F607", "O:)" },
+        { "\U0001F620", ">:(" },
+        { "\U0001F60E", "8)" },
+        { "❤️", "<3" },
+        { "❤", "<3" },
+        { "\U0001F494", "</3" },
     };
 
-    // Other common Unicode emojis -> :shortcode:
-    // Kept compact; unknown emojis are passed through unchanged.
     private static readonly Dictionary<string, string> UnicodeToShortcode = new()
     {
         { "\U0001F600", ":grinning:" },
@@ -201,26 +197,19 @@ public static class DiscordEmojiParser
 
     public static IReadOnlyDictionary<string, string> UnicodeTextSmileyMap => UnicodeToTextSmiley;
 
-    /// <summary>
-    /// Parses Discord message content into in-game-chat-safe text.
-    /// </summary>
     public static string Parse(string? content)
     {
         if (string.IsNullOrEmpty(content))
             return content ?? string.Empty;
 
-        // 1) Custom emojis: <:name:id> / <a:name:id>  ->  :name:
-        var result = CustomEmojiRegex.Replace(content, m => $":{m.Groups[1].Value}:");
+        var result = CustomEmojiRegex.Replace(content, m => $":{m.Groups["name"].Value}:");
 
-        // 2) Emote links: [name](https://cdn.discordapp.com/emojis/id.ext?...) -> :name:
-        result = EmoteLinkRegex.Replace(result, m => $":{CleanEmoteName(m.Groups[1].Value)}:");
+        result = EmoteLinkRegex.Replace(result, m => $":{CleanEmoteName(m.Groups["name"].Value)}:");
 
-        // 3) Unicode -> original text smiley (reverses Discord auto-convert)
         foreach (var kv in UnicodeToTextSmiley)
             if (result.Contains(kv.Key))
                 result = result.Replace(kv.Key, kv.Value);
 
-        // 4) Other known Unicode emojis -> :shortcode:
         foreach (var kv in UnicodeToShortcode)
             if (result.Contains(kv.Key))
                 result = result.Replace(kv.Key, kv.Value);
@@ -228,17 +217,81 @@ public static class DiscordEmojiParser
         return result;
     }
 
+    public static string ParseToUrls(string? content)
+    {
+        if (string.IsNullOrEmpty(content)) return content ?? string.Empty;
+
+        var result = CustomEmojiRegex.Replace(content, m =>
+            ulong.TryParse(m.Groups["id"].Value, out var id)
+                ? $" {EmoteUrl(id, m.Groups["a"].Value.Length > 0, m.Groups["name"].Value)} "
+                : m.Value);
+
+        result = EmoteLinkRegex.Replace(result, m =>
+            ulong.TryParse(m.Groups["id"].Value, out var id)
+                ? $" {EmoteUrl(id, IsAnimated(m.Groups["ext"].Value), CleanEmoteName(m.Groups["name"].Value))} "
+                : m.Value);
+
+        return result.Trim();
+    }
+
+    public static List<DiscordCustomEmote> Extract(string? content)
+    {
+        var found = new List<DiscordCustomEmote>();
+        if (string.IsNullOrEmpty(content)) return found;
+
+        foreach (Match match in CustomEmojiRegex.Matches(content))
+            Add(found, match.Groups["id"].Value, match.Groups["name"].Value, match.Groups["a"].Value.Length > 0);
+
+        foreach (Match match in EmoteLinkRegex.Matches(content))
+            Add(found, match.Groups["id"].Value, CleanEmoteName(match.Groups["name"].Value), IsAnimated(match.Groups["ext"].Value));
+
+        foreach (Match match in BareEmoteUrlRegex.Matches(content))
+            Add(found, match.Groups["id"].Value, NameFromQuery(match.Groups["query"]), IsAnimated(match.Groups["ext"].Value));
+
+        return found;
+    }
+
+    public static string EmoteUrl(ulong id, bool animated, string name)
+    {
+        var url = $"https://cdn.discordapp.com/emojis/{id}.{(animated ? "gif" : "png")}?size=48&quality=lossless";
+
+        return string.IsNullOrEmpty(name) ? url : $"{url}&name={name}";
+    }
+
+    private static string NameFromQuery(Group query)
+    {
+        if (!query.Success) return string.Empty;
+
+        var match = UrlNameRegex.Match(query.Value);
+        if (!match.Success) return string.Empty;
+
+        var decoded = System.Net.WebUtility.UrlDecode(match.Groups["name"].Value);
+
+        return string.IsNullOrWhiteSpace(decoded) ? string.Empty : CleanEmoteName(decoded);
+    }
+
+    private static bool IsAnimated(string extension) =>
+        string.Equals(extension, "gif", StringComparison.OrdinalIgnoreCase);
+
+    private static void Add(List<DiscordCustomEmote> found, string rawId, string name, bool animated)
+    {
+        if (!ulong.TryParse(rawId, out var id)) return;
+        if (string.IsNullOrEmpty(name)) return;
+
+        foreach (var existing in found)
+            if (existing.Id == id) return;
+
+        found.Add(new DiscordCustomEmote(id, name, animated));
+    }
+
     private static string CleanEmoteName(string name)
     {
         if (string.IsNullOrEmpty(name)) return string.Empty;
 
-        // Decode URL-encoded characters if any (e.g. %7E -> ~)
         name = System.Net.WebUtility.UrlDecode(name);
 
-        // Strip trailing separator + digits (e.g., pray~1 -> pray)
         name = EmoteSuffixRegex.Replace(name, "");
 
-        // Find the longest sequence of alphanumeric/underscore characters
         var matches = EmoteWordRegex.Matches(name);
         string longest = "";
         foreach (Match match in matches)

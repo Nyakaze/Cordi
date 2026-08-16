@@ -343,6 +343,10 @@ public partial class ChatboxTab : ConfigTabBase
             }
 
             theme.SpacerY(0.5f);
+            Check("Relay Discord Emotes as Links", () => Cfg.RelayEmotesAsUrls, v => Cfg.RelayEmotesAsUrls = v);
+            ImGui.TextDisabled("Rewrites custom emotes from Discord into their image link before the message is forwarded to game chat, so the chatbox renders the emote. Turn this off to forward the shorter :name: form instead.");
+
+            theme.SpacerY(0.5f);
             if (ImGui.Button("Clear Favorites & Recents"))
             {
                 Cfg.FavoriteEmojis.Clear();

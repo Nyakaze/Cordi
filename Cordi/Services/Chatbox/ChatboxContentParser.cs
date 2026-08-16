@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -137,6 +137,13 @@ public sealed class ChatboxContentParser
 
             if ((c == 'h' || c == 'H') && TryReadUrl(content, i, out var urlLength, out var url))
             {
+                if (cfg.RenderCustomEmotes && TryReadEmoteUrl(url, out var emoteLabel, out var emoteUrl))
+                {
+                    AddEmote(emoteLabel, emoteUrl);
+                    i += urlLength;
+                    continue;
+                }
+
                 Flush();
                 hasVisibleText = true;
                 segments.Add(new ContentSegment { Kind = SegmentKind.Link, Text = url, Url = url });
@@ -321,6 +328,43 @@ public sealed class ChatboxContentParser
         if (consumed <= (isHttps ? 8 : 7)) return false;
 
         url = content.Substring(index, consumed);
+        return true;
+    }
+
+    private static readonly Regex EmoteUrlRegex = new(
+        @"^https?://(?:cdn|media)\.discord(?:app)?\.(?:com|net)/emojis/(?<id>\d{5,25})\.(?<ext>png|gif|webp|jpe?g)(?:\?(?<query>\S*))?$",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+    private static readonly Regex EmoteUrlNameRegex = new(
+        @"(?:^|&)name=(?<name>[A-Za-z0-9_~%\-]{1,64})",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+    public static bool TryReadEmoteUrl(string url, out string label, out string imageUrl)
+    {
+        label = string.Empty;
+        imageUrl = string.Empty;
+
+        if (string.IsNullOrEmpty(url)) return false;
+
+        var match = EmoteUrlRegex.Match(url.TrimEnd('.', ',', ')', ']', '!', '?'));
+        if (!match.Success) return false;
+        if (!ulong.TryParse(match.Groups["id"].Value, out var emoteId)) return false;
+
+        var animated = string.Equals(match.Groups["ext"].Value, "gif", StringComparison.OrdinalIgnoreCase);
+        var name = "emote";
+
+        if (match.Groups["query"].Success)
+        {
+            var nameMatch = EmoteUrlNameRegex.Match(match.Groups["query"].Value);
+            if (nameMatch.Success)
+            {
+                var decoded = System.Net.WebUtility.UrlDecode(nameMatch.Groups["name"].Value);
+                if (!string.IsNullOrWhiteSpace(decoded)) name = decoded;
+            }
+        }
+
+        label = $":{name}:";
+        imageUrl = CustomEmoteUrl(emoteId, animated);
         return true;
     }
 

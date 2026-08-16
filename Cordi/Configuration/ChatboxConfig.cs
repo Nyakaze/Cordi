@@ -181,6 +181,7 @@ public class ChatboxConfig
     public int EmojiPickerRecentLimit { get; set; } = 32;
     public bool PickerIncludeSeenEmotes { get; set; } = true;
     public int SeenEmoteLimit { get; set; } = 500;
+    public bool RelayEmotesAsUrls { get; set; } = true;
     public List<string> FavoriteEmojis { get; set; } = new();
     public List<string> RecentEmojis { get; set; } = new();
 

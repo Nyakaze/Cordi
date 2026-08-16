@@ -644,7 +644,15 @@ public sealed partial class ChatboxService
                 return ChatboxContentParser.CustomEmoteUrl(emote.Id, emote.Animated);
         }
 
-        return Config.PickerIncludeSeenEmotes ? Emotes.FindByName(name)?.ImageUrl : null;
+        return Emotes.FindByName(name)?.ImageUrl;
+    }
+
+    public void RegisterEmotes(string? content)
+    {
+        if (_disposed || string.IsNullOrEmpty(content)) return;
+
+        foreach (var emote in DiscordEmojiParser.Extract(content))
+            Emotes.Record(emote.Id, emote.Name, emote.Animated);
     }
 
     private bool IsUsableGuildEmote(ulong id)

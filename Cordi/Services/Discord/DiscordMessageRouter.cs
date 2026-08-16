@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Linq;
 using System.Threading.Tasks;
 using Cordi.Core;
@@ -17,6 +17,15 @@ public class DiscordMessageRouter
         _plugin = plugin;
     }
 
+    private string ParseForGame(string? content)
+    {
+        _plugin.Chatbox?.RegisterEmotes(content);
+
+        return _plugin.Config.Chatbox.RelayEmotesAsUrls
+            ? DiscordEmojiParser.Parse(DiscordEmojiParser.ParseToUrls(content))
+            : DiscordEmojiParser.Parse(content);
+    }
+
     public async Task<bool> RouteExtraChatMessage(DiscordMessage message, ulong channelId)
     {
         var extraChatMapping = _plugin.Config.Chat.ExtraChatMappings.FirstOrDefault(x => x.Value.DiscordChannelId == channelId.ToString());
@@ -29,7 +38,7 @@ public class DiscordMessageRouter
 
         if (connection.ExtraChatNumber > 0)
         {
-            string contentToSend = DiscordEmojiParser.Parse(message.Content);
+            string contentToSend = ParseForGame(message.Content);
 
             try
             {
@@ -62,7 +71,7 @@ public class DiscordMessageRouter
         var mapping = _plugin.Config.Chat.Mappings.FirstOrDefault(m => m.DiscordChannelId == channelId.ToString());
         if (mapping == null) return false;
 
-        var content = DiscordEmojiParser.Parse(message.Content);
+        var content = ParseForGame(message.Content);
         _ = _plugin._chat.SendAsync(mapping.GameChatType, content);
         Logger.Info($"Forwarding message: {content} to {mapping.GameChatType}");
         try { await message.DeleteAsync(); } catch { }
@@ -74,7 +83,7 @@ public class DiscordMessageRouter
         var tellTarget = _plugin.Config.Chat.TellThreadMappings.FirstOrDefault(x => x.Value == channelId.ToString()).Key;
         if (string.IsNullOrEmpty(tellTarget)) return false;
 
-        var content = DiscordEmojiParser.Parse(message.Content);
+        var content = ParseForGame(message.Content);
         _ = _plugin._chat.SendTellAsync(tellTarget, content);
         Logger.Info($"Forwarding Tell reply: {content} to {tellTarget}");
         try { await message.DeleteAsync(); } catch { }
