@@ -1,8 +1,7 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Text;
-using Cordi.Services.Discord;
 
 namespace Cordi.Services.Chatbox;
 
@@ -13,12 +12,10 @@ public static class EmojiIndex
     private const int Keycap = 0x20E3;
 
     private static readonly Dictionary<string, string> ShortcodeToUnicode;
-    private static readonly Dictionary<string, string> TextSmileyToUnicode;
 
     static EmojiIndex()
     {
         ShortcodeToUnicode = BuildShortcodeMap();
-        TextSmileyToUnicode = BuildTextSmileyMap();
     }
 
     private static Dictionary<string, string> BuildShortcodeMap()
@@ -28,33 +25,148 @@ public static class EmojiIndex
         foreach (var pair in ExtraShortcodes)
             map[pair.Key] = pair.Value;
 
-        if (DiscordEmojiParser.UnicodeShortcodeMap != null)
-        {
-            foreach (var pair in DiscordEmojiParser.UnicodeShortcodeMap)
-            {
-                var name = pair.Value.Trim(':');
-                if (name.Length == 0) continue;
-                if (!map.ContainsKey(name))
-                    map[name] = pair.Key;
-            }
-        }
+        foreach (var pair in UnicodeShortcodes)
+            map.TryAdd(pair.Key, pair.Value);
 
         return map;
     }
 
-    private static Dictionary<string, string> BuildTextSmileyMap()
+    private static readonly Dictionary<string, string> UnicodeShortcodes = new(StringComparer.OrdinalIgnoreCase)
     {
-        var map = new Dictionary<string, string>(StringComparer.Ordinal);
-        if (DiscordEmojiParser.UnicodeTextSmileyMap != null)
-        {
-            foreach (var pair in DiscordEmojiParser.UnicodeTextSmileyMap)
-            {
-                if (!map.ContainsKey(pair.Value))
-                    map[pair.Value] = pair.Key;
-            }
-        }
-        return map;
-    }
+        { "grinning", "\U0001F600" },
+        { "smile", "\U0001F604" },
+        { "grin", "\U0001F601" },
+        { "laughing", "\U0001F606" },
+        { "sweat_smile", "\U0001F605" },
+        { "rofl", "\U0001F923" },
+        { "joy", "\U0001F602" },
+        { "upside_down", "\U0001F643" },
+        { "blush", "\U0001F60A" },
+        { "smiling_face_with_hearts", "\U0001F970" },
+        { "heart_eyes", "\U0001F60D" },
+        { "star_struck", "\U0001F929" },
+        { "kissing_heart", "\U0001F618" },
+        { "kissing_closed_eyes", "\U0001F61A" },
+        { "kissing_smiling_eyes", "\U0001F619" },
+        { "yum", "\U0001F60B" },
+        { "stuck_out_tongue_winking_eye", "\U0001F61C" },
+        { "zany_face", "\U0001F92A" },
+        { "stuck_out_tongue_closed_eyes", "\U0001F61D" },
+        { "money_mouth", "\U0001F911" },
+        { "hugging", "\U0001F917" },
+        { "hand_over_mouth", "\U0001F92D" },
+        { "shushing", "\U0001F92B" },
+        { "thinking", "\U0001F914" },
+        { "zipper_mouth", "\U0001F910" },
+        { "raised_eyebrow", "\U0001F928" },
+        { "expressionless", "\U0001F611" },
+        { "no_mouth", "\U0001F636" },
+        { "smirk", "\U0001F60F" },
+        { "unamused", "\U0001F612" },
+        { "roll_eyes", "\U0001F644" },
+        { "grimacing", "\U0001F62C" },
+        { "lying_face", "\U0001F925" },
+        { "relieved", "\U0001F60C" },
+        { "pensive", "\U0001F614" },
+        { "sleepy", "\U0001F62A" },
+        { "drooling", "\U0001F924" },
+        { "sleeping", "\U0001F634" },
+        { "mask", "\U0001F637" },
+        { "thermometer_face", "\U0001F912" },
+        { "head_bandage", "\U0001F915" },
+        { "nauseated", "\U0001F922" },
+        { "vomiting", "\U0001F92E" },
+        { "sneezing", "\U0001F927" },
+        { "hot_face", "\U0001F975" },
+        { "cold_face", "\U0001F976" },
+        { "woozy", "\U0001F974" },
+        { "dizzy_face", "\U0001F635" },
+        { "exploding_head", "\U0001F92F" },
+        { "cowboy", "\U0001F920" },
+        { "partying", "\U0001F973" },
+        { "nerd", "\U0001F913" },
+        { "monocle", "\U0001F9D0" },
+        { "worried", "\U0001F61F" },
+        { "frowning2", "☹️" },
+        { "hushed", "\U0001F62F" },
+        { "astonished", "\U0001F632" },
+        { "flushed", "\U0001F633" },
+        { "pleading", "\U0001F97A" },
+        { "anguished", "\U0001F627" },
+        { "fearful", "\U0001F628" },
+        { "cold_sweat", "\U0001F630" },
+        { "disappointed_relieved", "\U0001F625" },
+        { "sob", "\U0001F62D" },
+        { "scream", "\U0001F631" },
+        { "confounded", "\U0001F616" },
+        { "persevere", "\U0001F623" },
+        { "disappointed", "\U0001F61E" },
+        { "sweat", "\U0001F613" },
+        { "weary", "\U0001F629" },
+        { "tired_face", "\U0001F62B" },
+        { "triumph", "\U0001F624" },
+        { "rage", "\U0001F621" },
+        { "cursing", "\U0001F92C" },
+        { "smiling_imp", "\U0001F608" },
+        { "imp", "\U0001F47F" },
+        { "skull", "\U0001F480" },
+        { "skull_crossbones", "☠️" },
+        { "poop", "\U0001F4A9" },
+        { "clown", "\U0001F921" },
+        { "ogre", "\U0001F479" },
+        { "goblin", "\U0001F47A" },
+        { "ghost", "\U0001F47B" },
+        { "alien", "\U0001F47D" },
+        { "space_invader", "\U0001F47E" },
+        { "robot", "\U0001F916" },
+        { "orange_heart", "\U0001F9E1" },
+        { "yellow_heart", "\U0001F49B" },
+        { "green_heart", "\U0001F49A" },
+        { "blue_heart", "\U0001F499" },
+        { "purple_heart", "\U0001F49C" },
+        { "black_heart", "\U0001F5A4" },
+        { "white_heart", "\U0001F90D" },
+        { "brown_heart", "\U0001F90E" },
+        { "two_hearts", "\U0001F495" },
+        { "revolving_hearts", "\U0001F49E" },
+        { "heartbeat", "\U0001F493" },
+        { "heartpulse", "\U0001F497" },
+        { "sparkling_heart", "\U0001F496" },
+        { "cupid", "\U0001F498" },
+        { "gift_heart", "\U0001F49D" },
+        { "thumbsup", "\U0001F44D" },
+        { "thumbsdown", "\U0001F44E" },
+        { "ok_hand", "\U0001F44C" },
+        { "v", "✌️" },
+        { "crossed_fingers", "\U0001F91E" },
+        { "love_you_gesture", "\U0001F91F" },
+        { "metal", "\U0001F918" },
+        { "call_me", "\U0001F919" },
+        { "point_left", "\U0001F448" },
+        { "point_right", "\U0001F449" },
+        { "point_up", "\U0001F446" },
+        { "point_down", "\U0001F447" },
+        { "middle_finger", "\U0001F595" },
+        { "hand", "✋" },
+        { "hand_splayed", "\U0001F590" },
+        { "vulcan", "\U0001F596" },
+        { "wave", "\U0001F44B" },
+        { "raised_back_of_hand", "\U0001F91A" },
+        { "clap", "\U0001F44F" },
+        { "raised_hands", "\U0001F64C" },
+        { "handshake", "\U0001F91D" },
+        { "pray", "\U0001F64F" },
+        { "fire", "\U0001F525" },
+        { "star", "⭐" },
+        { "sparkles", "✨" },
+        { "100", "\U0001F4AF" },
+        { "check", "✅" },
+        { "x", "❌" },
+        { "question", "❓" },
+        { "exclamation", "❗" },
+        { "tada", "\U0001F389" },
+        { "confetti_ball", "\U0001F38A" },
+    };
 
     private static readonly Dictionary<string, string> ExtraShortcodes = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -174,9 +286,6 @@ public static class EmojiIndex
 
     public static bool TryGetShortcode(string name, out string unicode) =>
         ShortcodeToUnicode.TryGetValue(name, out unicode!);
-
-    public static bool TryGetTextSmiley(string smiley, out string unicode) =>
-        TextSmileyToUnicode.TryGetValue(smiley, out unicode!);
 
     private static bool TryCodepointAt(string text, int index, out int codepoint, out int length)
     {

@@ -6,6 +6,7 @@ using System.IO;
 using System.Linq;
 using System.Net.Http;
 using System.Security.Cryptography;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using Dalamud.Interface.Textures.TextureWraps;
@@ -17,6 +18,10 @@ public sealed class ChatboxImageCache : IDisposable
 {
     private const int DisposeDelayFrames = 4;
     private const int MaxImageBytes = 8 * 1024 * 1024;
+
+    private static readonly Regex EmoteFallbackRegex = new(
+        @"^(?<base>https?://(?:cdn|media)\.discord(?:app)?\.(?:com|net)/emojis/\d{5,25})\.(?:gif|webp)(?:\?\S*)?$",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
     private static readonly HttpClient Http = CreateClient();
     private static readonly TimeSpan FailureBackoff = TimeSpan.FromMinutes(5);
@@ -181,6 +186,14 @@ public sealed class ChatboxImageCache : IDisposable
             if (bytes is null)
             {
                 bytes = await DownloadAsync(url).ConfigureAwait(false);
+
+                if (bytes is null || bytes.Length == 0)
+                {
+                    var fallback = EmoteFallbackUrl(url);
+                    if (fallback != null)
+                        bytes = await DownloadAsync(fallback).ConfigureAwait(false);
+                }
+
                 if (bytes is null || bytes.Length == 0)
                 {
                     _failures[url] = DateTime.UtcNow;
@@ -225,6 +238,13 @@ public sealed class ChatboxImageCache : IDisposable
         {
             _inFlight.TryRemove(url, out _);
         }
+    }
+
+    private static string? EmoteFallbackUrl(string url)
+    {
+        var match = EmoteFallbackRegex.Match(url);
+
+        return match.Success ? $"{match.Groups["base"].Value}.png?size=96" : null;
     }
 
     private static bool IsGifBytes(byte[] bytes)

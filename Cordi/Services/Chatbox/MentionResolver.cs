@@ -16,6 +16,7 @@ public sealed class MentionResolver
     public Func<ulong, string?>? ResolveRole { get; set; }
     public Func<ulong, string?>? ResolveChannel { get; set; }
     public Func<string, string?>? ResolveEmoteByName { get; set; }
+    public Func<ulong, string?>? ResolveEmoteNameById { get; set; }
 
     public bool MatchOwnName { get; set; } = true;
     public bool MatchOwnNameParts { get; set; } = true;

@@ -564,6 +564,7 @@ public sealed partial class ChatboxService
             ResolveRole = ResolveDiscordRoleName,
             ResolveChannel = ResolveDiscordChannelName,
             ResolveEmoteByName = ResolveGuildEmoteUrl,
+            ResolveEmoteNameById = ResolveEmoteName,
         };
     }
 
@@ -647,6 +648,23 @@ public sealed partial class ChatboxService
         return Emotes.FindByName(name)?.ImageUrl;
     }
 
+    private string? ResolveEmoteName(ulong id)
+    {
+        var client = _plugin.Discord?.Client;
+        if (client != null)
+        {
+            foreach (var guild in client.Guilds.Values)
+            {
+                if (guild.Emojis.TryGetValue(id, out var emoji) && !string.IsNullOrEmpty(emoji.Name))
+                    return emoji.Name;
+            }
+        }
+
+        var seen = Emotes.FindById(id);
+
+        return seen != null && seen.Name != "emote" ? seen.Name : null;
+    }
+
     public void RegisterEmotes(string? content)
     {
         if (_disposed || string.IsNullOrEmpty(content)) return;
@@ -682,7 +700,7 @@ public sealed partial class ChatboxService
                 if (IsUsableGuildEmote(id)) return match.Value;
 
                 var animated = match.Groups["a"].Value.Length > 0;
-                return $" {ChatboxContentParser.CustomEmoteUrl(id, animated)}&name={match.Groups["token"].Value} ";
+                return $" {ChatboxContentParser.CustomEmoteLink(id, animated)} ";
             }
 
             var name = match.Groups["code"].Value;
@@ -697,10 +715,10 @@ public sealed partial class ChatboxService
                 }
             }
 
-            if (EmojiIndex.TryGetShortcode(name, out var unicode)) return unicode;
-
             var seen = Emotes.FindByName(name);
-            return seen != null ? $" {seen.ImageUrl}&name={seen.Name} " : match.Value;
+            if (seen != null) return $" {seen.ShareUrl} ";
+
+            return EmojiIndex.TryGetShortcode(name, out var unicode) ? unicode : match.Value;
         });
     }
 

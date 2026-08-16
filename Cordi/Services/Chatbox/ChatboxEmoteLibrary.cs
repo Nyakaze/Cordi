@@ -16,6 +16,7 @@ public sealed class ChatboxSeenEmote
 
     public string Token => $"<{(Animated ? "a" : string.Empty)}:{Name}:{Id}>";
     public string ImageUrl => ChatboxContentParser.CustomEmoteUrl(Id, Animated);
+    public string ShareUrl => ChatboxContentParser.CustomEmoteLink(Id, Animated);
 }
 
 public sealed class ChatboxEmoteLibrary
@@ -55,6 +56,9 @@ public sealed class ChatboxEmoteLibrary
     public int Version => Volatile.Read(ref _version);
 
     public bool Contains(ulong id) => _entries.ContainsKey(id);
+
+    public ChatboxSeenEmote? FindById(ulong id) =>
+        _entries.TryGetValue(id, out var entry) ? entry : null;
 
     public ChatboxSeenEmote? FindByName(string? name)
     {

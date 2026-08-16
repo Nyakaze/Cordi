@@ -137,7 +137,7 @@ public sealed class ChatboxContentParser
 
             if ((c == 'h' || c == 'H') && TryReadUrl(content, i, out var urlLength, out var url))
             {
-                if (cfg.RenderCustomEmotes && TryReadEmoteUrl(url, out var emoteLabel, out var emoteUrl))
+                if (cfg.RenderCustomEmotes && TryReadEmoteUrl(url, resolver, out var emoteLabel, out var emoteUrl))
                 {
                     AddEmote(emoteLabel, emoteUrl);
                     i += urlLength;
@@ -339,7 +339,14 @@ public sealed class ChatboxContentParser
         @"(?:^|&)name=(?<name>[A-Za-z0-9_~%\-]{1,64})",
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
-    public static bool TryReadEmoteUrl(string url, out string label, out string imageUrl)
+    private static readonly Regex EmoteUrlAnimatedRegex = new(
+        @"(?:^|&)animated=true",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+    public static bool TryReadEmoteUrl(string url, out string label, out string imageUrl) =>
+        TryReadEmoteUrl(url, null, out label, out imageUrl);
+
+    public static bool TryReadEmoteUrl(string url, MentionResolver? resolver, out string label, out string imageUrl)
     {
         label = string.Empty;
         imageUrl = string.Empty;
@@ -350,18 +357,22 @@ public sealed class ChatboxContentParser
         if (!match.Success) return false;
         if (!ulong.TryParse(match.Groups["id"].Value, out var emoteId)) return false;
 
-        var animated = string.Equals(match.Groups["ext"].Value, "gif", StringComparison.OrdinalIgnoreCase);
-        var name = "emote";
+        var query = match.Groups["query"].Success ? match.Groups["query"].Value : string.Empty;
 
-        if (match.Groups["query"].Success)
+        var animated = string.Equals(match.Groups["ext"].Value, "gif", StringComparison.OrdinalIgnoreCase)
+                       || EmoteUrlAnimatedRegex.IsMatch(query);
+
+        var name = string.Empty;
+
+        var nameMatch = EmoteUrlNameRegex.Match(query);
+        if (nameMatch.Success)
         {
-            var nameMatch = EmoteUrlNameRegex.Match(match.Groups["query"].Value);
-            if (nameMatch.Success)
-            {
-                var decoded = System.Net.WebUtility.UrlDecode(nameMatch.Groups["name"].Value);
-                if (!string.IsNullOrWhiteSpace(decoded)) name = decoded;
-            }
+            var decoded = System.Net.WebUtility.UrlDecode(nameMatch.Groups["name"].Value);
+            if (!string.IsNullOrWhiteSpace(decoded)) name = decoded;
         }
+
+        if (name.Length == 0) name = resolver?.ResolveEmoteNameById?.Invoke(emoteId) ?? string.Empty;
+        if (name.Length == 0) name = "emote";
 
         label = $":{name}:";
         imageUrl = CustomEmoteUrl(emoteId, animated);
@@ -401,6 +412,11 @@ public sealed class ChatboxContentParser
 
     public static string CustomEmoteUrl(ulong emoteId, bool animated = false) =>
         $"https://cdn.discordapp.com/emojis/{emoteId}.{(animated ? "gif" : "png")}?size=48&quality=lossless";
+
+    public static string CustomEmoteLink(ulong emoteId, bool animated = false) =>
+        animated
+            ? $"https://cdn.discordapp.com/emojis/{emoteId}.webp?size=96&animated=true"
+            : $"https://cdn.discordapp.com/emojis/{emoteId}.webp?size=96";
 
     private static readonly Dictionary<string, uint> _itemNameCache = new(StringComparer.OrdinalIgnoreCase);
     private static bool _itemCacheInitialized;
