@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Linq;
 using System.Numerics;
 using Cordi.Packets.Handler.Chat;
@@ -45,6 +45,7 @@ public sealed class ConfigWindow : Window, IDisposable
     private PlayerTrackerTab playerTrackerTab;
     private SlashCommandsTab slashCommandsTab;
     private LightlessTab lightlessTab;
+    private ChatboxTab chatboxTab;
 
 
     private LogsTab logsTab;
@@ -72,6 +73,7 @@ public sealed class ConfigWindow : Window, IDisposable
         this.playerTrackerTab = new PlayerTrackerTab(plugin, theme);
         this.slashCommandsTab = new SlashCommandsTab(plugin, theme);
         this.lightlessTab = new LightlessTab(plugin, theme);
+        this.chatboxTab = new ChatboxTab(plugin, theme);
         this.logsTab = new LogsTab(plugin, theme);
 
         // Apply saved font settings
@@ -158,6 +160,7 @@ public sealed class ConfigWindow : Window, IDisposable
                 theme.SpacerY(1f);
                 // DrawSidebarButton("General", 0);
                 DrawSidebarButton("Chats", 1, true);
+                DrawSidebarButton("Chatbox", 16);
                 DrawSidebarButton("Trackers", 8);
                 // DrawSidebarButton("Emote Log", 4);
                 // DrawSidebarButton("Peepers", 2);
@@ -236,6 +239,10 @@ public sealed class ConfigWindow : Window, IDisposable
 
                 case 15:
                     lightlessTab.Draw();
+                    break;
+
+                case 16:
+                    chatboxTab.Draw();
                     break;
 
                 case 99:

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
@@ -19,6 +19,10 @@ public class AdvertisementFilterService
 
     private readonly ConcurrentDictionary<string, List<(string Content, DateTime Timestamp, ulong MessageId)>> _messageBuffer = new();
     private readonly ConcurrentDictionary<string, DateTime> _penaltyBox = new();
+    private readonly ConcurrentDictionary<string, List<(string Content, DateTime Timestamp)>> _previewBuffer = new();
+
+    private const int PreviewWindowSeconds = 5;
+    private const int PreviewBufferSenderCap = 256;
 
     public AdvertisementFilterService(CordiPlugin plugin, DiscordWebhookService webhooks)
     {
@@ -109,6 +113,62 @@ public class AdvertisementFilterService
         }
 
         return false;
+    }
+
+    public bool IsAdvertisementPreview(string senderName, string senderWorld, string content)
+    {
+        if (!_plugin.Config.AdvertisementFilter.Enabled) return false;
+        if (string.IsNullOrWhiteSpace(content)) return false;
+
+        var senderKey = $"{senderName}@{senderWorld}";
+        var cleanupTime = DateTime.UtcNow.AddSeconds(-PreviewWindowSeconds);
+        var recent = _previewBuffer.GetOrAdd(senderKey, _ => new List<(string Content, DateTime Timestamp)>());
+
+        string combined;
+        lock (recent)
+        {
+            recent.RemoveAll(x => x.Timestamp < cleanupTime);
+            var parts = recent.Select(x => x.Content).ToList();
+            parts.Add(content);
+            combined = string.Join(" ", parts);
+            recent.Add((content, DateTime.UtcNow));
+        }
+
+        SweepPreviewBuffer(cleanupTime);
+
+        if (Score(content)) return true;
+
+        return combined != content && Score(combined);
+    }
+
+    private void SweepPreviewBuffer(DateTime cleanupTime)
+    {
+        if (_previewBuffer.Count <= PreviewBufferSenderCap) return;
+
+        foreach (var pair in _previewBuffer)
+        {
+            bool stale;
+            lock (pair.Value)
+            {
+                pair.Value.RemoveAll(x => x.Timestamp < cleanupTime);
+                stale = pair.Value.Count == 0;
+            }
+
+            if (stale) _previewBuffer.TryRemove(pair.Key, out _);
+        }
+    }
+
+    private bool Score(string content)
+    {
+        var filterConfig = _plugin.Config.AdvertisementFilter;
+        return AdvertisementFilter.IsAdvertisement(
+            content,
+            filterConfig.ScoreThreshold,
+            filterConfig.HighScoreRegexPatterns,
+            filterConfig.HighScoreKeywords,
+            filterConfig.MediumScoreRegexPatterns,
+            filterConfig.MediumScoreKeywords,
+            filterConfig.Whitelist);
     }
 
     public void AddMessageToBuffer(string senderName, string senderWorld, string sanitizedContent, ulong sentMessageId, bool channelFilterEnabled)

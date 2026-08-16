@@ -27,6 +27,7 @@
     <PackageReference Include="ECommons" Version="3.2.0.2" />
     <PackageReference Include="HtmlAgilityPack" Version="1.12.4" />
     <PackageReference Include="LiteDB" Version="5.0.21" />
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="9.0.0" />
     <PackageReference Include="Microsoft.Extensions.Logging.Console" Version="10.0.2" />
     <PackageReference Update="DalamudPackager" Version="15.0.0" />
     <PackageReference Update="DotNet.ReproducibleBuilds" Version="2.0.2" />
@@ -37,4 +38,11 @@
     <PackageReference Include="Vortice.Direct3D11" Version="3.8.2" />
     <PackageReference Include="Vortice.DXGI" Version="3.8.2" />
   </ItemGroup>
+  <Target Name="CordiFlattenSqliteNative" AfterTargets="ResolveReferences">
+    <ItemGroup>
+      <CordiSqliteNative Include="@(ReferenceCopyLocalPaths)" Condition="'%(Filename)' == 'e_sqlite3' AND $([System.String]::Copy('%(ReferenceCopyLocalPaths.DestinationSubDirectory)').Contains('win-x64'))" />
+      <ReferenceCopyLocalPaths Remove="@(ReferenceCopyLocalPaths)" Condition="$([System.String]::Copy('%(ReferenceCopyLocalPaths.DestinationSubDirectory)').StartsWith('runtimes'))" />
+      <ReferenceCopyLocalPaths Include="@(CordiSqliteNative)" DestinationSubDirectory="" />
+    </ItemGroup>
+  </Target>
 </Project>

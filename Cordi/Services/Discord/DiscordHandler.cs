@@ -264,7 +264,8 @@ public class DiscordHandler : IDisposable
 
                 var finalAvatarUrl = avatarUrl ?? await _plugin.Lodestone.GetAvatarUrlAsync(senderName, senderWorld);
 
-                var sanitizedContent = DiscordTextSanitizer.Sanitize(content);
+                var convertedContent = _plugin.Chatbox?.ConvertShortcodes(content) ?? content;
+                var sanitizedContent = DiscordTextSanitizer.Sanitize(convertedContent);
 
                 // Validation to prevent 400 Bad Request
                 if (string.IsNullOrWhiteSpace(sanitizedContent))
@@ -346,7 +347,8 @@ public class DiscordHandler : IDisposable
     public Task<ulong> SendWebhookMessage(ulong channelId, string content, string senderName, string senderWorld)
     {
         if (_client == null) return Task.FromResult(0UL);
-        var sanitizedContent = DiscordTextSanitizer.Sanitize(content);
+        var convertedContent = _plugin.Chatbox?.ConvertShortcodes(content) ?? content;
+        var sanitizedContent = DiscordTextSanitizer.Sanitize(convertedContent);
         if (string.IsNullOrWhiteSpace(sanitizedContent)) return Task.FromResult(0UL);
 
         return QueuedSendAsync($"webhook send (channel {channelId})", "webhook", async () =>

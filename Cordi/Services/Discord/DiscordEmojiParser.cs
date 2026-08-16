@@ -197,6 +197,10 @@ public static class DiscordEmojiParser
         { "\U0001F38A", ":confetti_ball:" },
     };
 
+    public static IReadOnlyDictionary<string, string> UnicodeShortcodeMap => UnicodeToShortcode;
+
+    public static IReadOnlyDictionary<string, string> UnicodeTextSmileyMap => UnicodeToTextSmiley;
+
     /// <summary>
     /// Parses Discord message content into in-game-chat-safe text.
     /// </summary>

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using Dalamud.Game.Command;
 using Dalamud.IoC;
 using Dalamud.Plugin;
@@ -38,6 +38,7 @@ using Cordi.Domain;
 using Cordi.Services.Discord.Dispatch;
 using Cordi.Services.Discord.Queue;
 using Cordi.Services.Observations;
+using Cordi.Services.Chatbox;
 using Cordi.Services.Storage;
 using Cordi.UI.Windows;
 using Newtonsoft.Json;
@@ -119,6 +120,8 @@ public class CordiPlugin : IDalamudPlugin
     public EmoteLogService EmoteLog { get; private set; }
     public EmoteLogWindow EmoteLogWindow { get; private set; }
     public CombinedWindow CombinedWindow { get; private set; }
+    public ChatboxService Chatbox { get; private set; }
+    public ChatboxWindow ChatboxWindow { get; private set; }
     public PartyService PartyService { get; private set; }
     public RememberMeService RememberMe { get; private set; }
 
@@ -176,12 +179,15 @@ public class CordiPlugin : IDalamudPlugin
         FrameworkScheduler = new FrameworkScheduler(this);
         FrameworkScheduler.Bind();
 
+        Chatbox = new ChatboxService(this);
+
         configWindow = new ConfigWindow(this);
         discordWindow = new DiscordWindow(this);
         CordiPeepWindow = new CordiPeepWindow(this);
         this.EmoteLogWindow = new EmoteLogWindow(this);
         CombinedWindow = new CombinedWindow(this);
         PlayerDetailWindow = new PlayerDetailWindow(this);
+        ChatboxWindow = new ChatboxWindow(this);
 
         windowSystem.AddWindow(discordWindow);
         windowSystem.AddWindow(configWindow);
@@ -189,6 +195,7 @@ public class CordiPlugin : IDalamudPlugin
         windowSystem.AddWindow(this.EmoteLogWindow);
         windowSystem.AddWindow(PlayerDetailWindow);
         windowSystem.AddWindow(CombinedWindow);
+        windowSystem.AddWindow(ChatboxWindow);
 
         PluginInterface.UiBuilder.Draw += DrawUI;
 
@@ -221,6 +228,7 @@ public class CordiPlugin : IDalamudPlugin
                 if (Config!.CordiPeep.OpenOnLogin) CordiPeepWindow.IsOpen = true;
                 if (Config!.EmoteLog.WindowOpenOnLogin) this.EmoteLogWindow.IsOpen = true;
                 if (Config!.CombinedWindow.OpenOnLogin) CombinedWindow.IsOpen = true;
+                if (Config!.Chatbox.Enabled && Config!.Chatbox.OpenOnLogin) ChatboxWindow.IsOpen = true;
             }
         });
 
@@ -342,6 +350,25 @@ public class CordiPlugin : IDalamudPlugin
             CommandManager.RemoveHandler(ElCmd);
         }
 
+        const string ChatboxCmd = "/cordichat";
+        bool chatboxEnabled = Config.Chatbox.Enabled;
+        bool chatboxRegistered = CommandManager.Commands.ContainsKey(ChatboxCmd);
+
+        if (chatboxEnabled && !chatboxRegistered)
+        {
+            CommandManager.AddHandler(ChatboxCmd, new CommandInfo((cmd, args) =>
+            {
+                ChatboxWindow.IsOpen = !ChatboxWindow.IsOpen;
+            })
+            {
+                HelpMessage = "Toggles the Chatbox Window"
+            });
+        }
+        else if (!chatboxEnabled && chatboxRegistered)
+        {
+            CommandManager.RemoveHandler(ChatboxCmd);
+        }
+
         const string PeepCmd = "/cordipeeper";
         bool peepEnabled = Config.CordiPeep.WindowEnabled;
         bool peepRegistered = CommandManager.Commands.ContainsKey(PeepCmd);
@@ -380,6 +407,7 @@ public class CordiPlugin : IDalamudPlugin
     {
         cachedLocalPlayer = Service.ObjectTable.LocalPlayer;
         VisibilityBridge.OnFrameworkUpdate();
+        Chatbox?.OnFrameworkUpdate();
 
         // Ctrl+Shift+L toggles hidden Logs tab (edge-triggered, only when config window is open)
         bool ctrl = Service.KeyState[0x11];   // VK_CONTROL
@@ -436,6 +464,8 @@ public class CordiPlugin : IDalamudPlugin
         {
             LogService.Debug("ChatRouter", $"[{message.LogKind}] {msg.SenderName}: {msg.Message.TextValue}");
         }
+        if (Config.Chatbox.Enabled) Chatbox?.IngestGameMessage(msg);
+
         _router.RouteAsync(msg, Discord);
 
     }
@@ -453,6 +483,8 @@ public class CordiPlugin : IDalamudPlugin
 
         this.commandManager.Dispose();
         this.CordiPeep?.Dispose();
+        this.Chatbox?.Dispose();
+        this.ChatboxWindow?.Dispose();
         this.EmoteLog?.Dispose();
         this.ActivityManager?.Dispose();
         this.HonorificBridge?.Dispose();
