@@ -49,8 +49,20 @@ public sealed partial class ChatboxService
 
         var merged = Channels
             .SelectMany(c => c.Snapshot())
+            .GroupBy(m => m.Seq)
+            .Select(g => g.First())
             .OrderBy(m => m.Seq)
             .ToList();
+
+        var directCombined = Store.Load(CombinedChannelId, LimitFor(CombinedChannelId));
+        if (directCombined.Count > 0)
+        {
+            merged = merged.Concat(directCombined)
+                .GroupBy(m => m.Seq)
+                .Select(g => g.First())
+                .OrderBy(m => m.Seq)
+                .ToList();
+        }
 
         var cap = Config.MaxMessagesPerChannel;
         if (cap > 0 && merged.Count > cap)

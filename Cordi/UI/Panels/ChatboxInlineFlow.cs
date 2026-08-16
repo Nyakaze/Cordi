@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Numerics;
 using Dalamud.Bindings.ImGui;
@@ -165,8 +165,12 @@ public sealed class ChatboxInlineFlow
         }
     }
 
-    public bool Pill(string text, Vector4 background, Vector4 foreground, float rounding)
+    public bool Pill(string text, Vector4 background, Vector4 foreground, float rounding) =>
+        Pill(text, background, foreground, rounding, out _);
+
+    public bool Pill(string text, Vector4 background, Vector4 foreground, float rounding, out bool hovered)
     {
+        hovered = false;
         if (!_active) return false;
 
         var padding = ImGui.GetStyle().FramePadding.X * 0.6f;
@@ -184,7 +188,7 @@ public sealed class ChatboxInlineFlow
         ImGui.SetCursorScreenPos(new Vector2(position.X + padding, min.Y + 1f));
         ImGui.TextColored(foreground, text);
 
-        var hovered = ImGui.IsMouseHoveringRect(min, max);
+        hovered = ImGui.IsMouseHoveringRect(min, max);
         if (hovered) AnyHovered = true;
         return hovered && ImGui.IsMouseClicked(ImGuiMouseButton.Left);
     }

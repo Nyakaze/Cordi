@@ -59,6 +59,15 @@ public sealed class ChatboxChannelState
         }
     }
 
+    public bool RemoveByDiscordId(ulong discordMessageId)
+    {
+        lock (_gate)
+        {
+            var count = _messages.RemoveAll(m => m.DiscordMessageId == discordMessageId);
+            return count > 0;
+        }
+    }
+
     public void ClearDivider()
     {
         lock (_gate)

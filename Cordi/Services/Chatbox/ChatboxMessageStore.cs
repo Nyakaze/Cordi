@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Globalization;
@@ -113,6 +113,14 @@ public sealed class ChatboxMessageStore : IDisposable
         ChatboxDatabase.Execute(connection, "DELETE FROM messages;");
         ChatboxDatabase.Execute(connection, "DELETE FROM channel_state;");
     }, "delete all messages");
+
+    public void DeleteByDiscordMessageId(ulong discordMessageId) => _database.Write(connection =>
+    {
+        using var command = connection.CreateCommand();
+        command.CommandText = "DELETE FROM messages WHERE discord_message_id = $id;";
+        command.Parameters.AddWithValue("$id", (long)discordMessageId);
+        command.ExecuteNonQuery();
+    }, "delete discord message " + discordMessageId);
 
     public void PruneOrphans(IReadOnlyCollection<string> knownChannelIds) => _database.Write(connection =>
     {

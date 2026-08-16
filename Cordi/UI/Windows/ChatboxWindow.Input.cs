@@ -86,4 +86,24 @@ public sealed partial class ChatboxWindow
         if (Config.KeepFocusAfterSend) _focusInput = true;
         _scrollToBottomFrames = 3;
     }
+
+    public void InsertText(string text)
+    {
+        if (string.IsNullOrEmpty(text)) return;
+
+        if (string.IsNullOrEmpty(_input))
+        {
+            _input = text;
+        }
+        else if (_input.EndsWith(' '))
+        {
+            _input += text;
+        }
+        else
+        {
+            _input += " " + text;
+        }
+
+        _focusInput = true;
+    }
 }

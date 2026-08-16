@@ -12,22 +12,32 @@ public static class EmojiIndex
     private const int VariationSelector16 = 0xFE0F;
     private const int Keycap = 0x20E3;
 
-    private static readonly Dictionary<string, string> ShortcodeToUnicode = BuildShortcodeMap();
-    private static readonly Dictionary<string, string> TextSmileyToUnicode = BuildTextSmileyMap();
+    private static readonly Dictionary<string, string> ShortcodeToUnicode;
+    private static readonly Dictionary<string, string> TextSmileyToUnicode;
+
+    static EmojiIndex()
+    {
+        ShortcodeToUnicode = BuildShortcodeMap();
+        TextSmileyToUnicode = BuildTextSmileyMap();
+    }
 
     private static Dictionary<string, string> BuildShortcodeMap()
     {
         var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var pair in DiscordEmojiParser.UnicodeShortcodeMap)
-        {
-            var name = pair.Value.Trim(':');
-            if (name.Length == 0) continue;
-            if (!map.ContainsKey(name))
-                map[name] = pair.Key;
-        }
 
         foreach (var pair in ExtraShortcodes)
             map[pair.Key] = pair.Value;
+
+        if (DiscordEmojiParser.UnicodeShortcodeMap != null)
+        {
+            foreach (var pair in DiscordEmojiParser.UnicodeShortcodeMap)
+            {
+                var name = pair.Value.Trim(':');
+                if (name.Length == 0) continue;
+                if (!map.ContainsKey(name))
+                    map[name] = pair.Key;
+            }
+        }
 
         return map;
     }
@@ -35,10 +45,13 @@ public static class EmojiIndex
     private static Dictionary<string, string> BuildTextSmileyMap()
     {
         var map = new Dictionary<string, string>(StringComparer.Ordinal);
-        foreach (var pair in DiscordEmojiParser.UnicodeTextSmileyMap)
+        if (DiscordEmojiParser.UnicodeTextSmileyMap != null)
         {
-            if (!map.ContainsKey(pair.Value))
-                map[pair.Value] = pair.Key;
+            foreach (var pair in DiscordEmojiParser.UnicodeTextSmileyMap)
+            {
+                if (!map.ContainsKey(pair.Value))
+                    map[pair.Value] = pair.Key;
+            }
         }
         return map;
     }

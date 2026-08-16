@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using FFXIVClientStructs.FFXIV.Client.UI;
 using FFXIVClientStructs.FFXIV.Component.GUI;
 
@@ -32,6 +32,35 @@ public sealed partial class ChatboxService
 
         UpdateGameChatVisibility();
         UpdateEnterCapture();
+        SyncFromGameChatInput();
+    }
+
+    private unsafe void SyncFromGameChatInput()
+    {
+        if (!Config.Enabled || !Service.ClientState.IsLoggedIn) return;
+
+        var addon = (AtkUnitBase*)Service.GameGui.GetAddonByName("ChatLog").Address;
+        if (addon == null || !addon->IsReady) return;
+
+        for (var i = 0; i < addon->UldManager.NodeListCount; i++)
+        {
+            var node = addon->UldManager.NodeList[i];
+            if (node == null || node->Type != NodeType.Text) continue;
+
+            var textNode = (AtkTextNode*)node;
+            var text = textNode->NodeText.ToString();
+            if (string.IsNullOrWhiteSpace(text)) continue;
+
+            // When game links an item, it contains the item link character '' or brackets '['
+            if (text.Contains('') || text.StartsWith('['))
+            {
+                _plugin.ChatboxWindow?.InsertText(text);
+                textNode->SetText(string.Empty);
+                if (_plugin.ChatboxWindow != null && !_plugin.ChatboxWindow.IsOpen)
+                    _plugin.ChatboxWindow.IsOpen = true;
+                break;
+            }
+        }
     }
 
     private void UpdateGameChatVisibility()

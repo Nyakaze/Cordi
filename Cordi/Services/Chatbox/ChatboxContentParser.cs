@@ -116,11 +116,23 @@ public sealed class ChatboxContentParser
                 }
             }
 
-            if (c == '[' && TryReadMarkdownEmote(content, i, out var mdLength, out var mdLabel, out var mdUrl))
+            if (c == '[')
             {
-                AddEmote(mdLabel, mdUrl);
-                i += mdLength;
-                continue;
+                if (TryReadMarkdownEmote(content, i, out var mdLength, out var mdLabel, out var mdUrl))
+                {
+                    AddEmote(mdLabel, mdUrl);
+                    i += mdLength;
+                    continue;
+                }
+
+                if (TryReadItemLink(content, i, out var itemLength, out var itemSegment))
+                {
+                    Flush();
+                    hasVisibleText = true;
+                    segments.Add(itemSegment);
+                    i += itemLength;
+                    continue;
+                }
             }
 
             if ((c == 'h' || c == 'H') && TryReadUrl(content, i, out var urlLength, out var url))
@@ -345,4 +357,60 @@ public sealed class ChatboxContentParser
 
     public static string CustomEmoteUrl(ulong emoteId, bool animated = false) =>
         $"https://cdn.discordapp.com/emojis/{emoteId}.{(animated ? "gif" : "png")}?size=48&quality=lossless";
+
+    private static readonly Dictionary<string, uint> _itemNameCache = new(StringComparer.OrdinalIgnoreCase);
+    private static bool _itemCacheInitialized;
+
+    public static uint FindItemIdByName(string name)
+    {
+        if (string.IsNullOrWhiteSpace(name)) return 0;
+        lock (_itemNameCache)
+        {
+            if (!_itemCacheInitialized)
+            {
+                var sheet = Service.DataManager.GetExcelSheet<Lumina.Excel.Sheets.Item>();
+                if (sheet != null)
+                {
+                    foreach (var item in sheet)
+                    {
+                        var n = item.Name.ExtractText();
+                        if (!string.IsNullOrEmpty(n) && !_itemNameCache.ContainsKey(n))
+                            _itemNameCache[n] = item.RowId;
+                    }
+                }
+                _itemCacheInitialized = true;
+            }
+
+            return _itemNameCache.TryGetValue(name, out var id) ? id : 0;
+        }
+    }
+
+    private static bool TryReadItemLink(string content, int index, out int consumed, out ContentSegment segment)
+    {
+        consumed = 0;
+        segment = ContentSegment.PlainText(string.Empty);
+
+        if (index >= content.Length || content[index] != '[') return false;
+        var close = content.IndexOf(']', index + 1);
+        if (close < 0 || close - index > 120) return false;
+
+        var body = content.Substring(index + 1, close - index - 1).Trim();
+        if (!body.StartsWith('')) return false;
+
+        var isHq = body.EndsWith("") || body.EndsWith("(HQ)", StringComparison.OrdinalIgnoreCase);
+        var name = body.TrimStart('').TrimEnd('').Replace("(HQ)", "", StringComparison.OrdinalIgnoreCase).Trim();
+
+        var itemId = FindItemIdByName(name);
+        var fullText = content.Substring(index, close - index + 1);
+        consumed = close - index + 1;
+
+        segment = new ContentSegment
+        {
+            Kind = SegmentKind.ItemLink,
+            Text = fullText,
+            ItemId = itemId,
+            IsHq = isHq,
+        };
+        return true;
+    }
 }

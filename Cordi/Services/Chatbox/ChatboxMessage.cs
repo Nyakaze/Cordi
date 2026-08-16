@@ -1,7 +1,9 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Numerics;
 using Dalamud.Game.Text;
+
+using Dalamud.Game.Text.SeStringHandling.Payloads;
 
 namespace Cordi.Services.Chatbox;
 
@@ -20,6 +22,10 @@ public enum SegmentKind
     ChannelRef,
     Link,
     LineBreak,
+    ItemLink,
+    StatusLink,
+    MapLink,
+    AutoTranslate,
 }
 
 public sealed class ContentSegment
@@ -29,6 +35,13 @@ public sealed class ContentSegment
     public string? ImageUrl { get; init; }
     public string? Url { get; init; }
     public bool TargetsMe { get; init; }
+
+    public uint ItemId { get; init; }
+    public bool IsHq { get; init; }
+    public uint StatusId { get; init; }
+    public uint IconId { get; init; }
+    public string? TooltipText { get; init; }
+    public MapLinkPayload? MapLink { get; init; }
 
     public static ContentSegment PlainText(string text) => new() { Kind = SegmentKind.Text, Text = text };
     public static ContentSegment Break() => new() { Kind = SegmentKind.LineBreak };

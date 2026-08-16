@@ -26,6 +26,26 @@ public sealed partial class ChatboxService
     private bool FilterAdvertisementsFor(ChatboxChannelState channel) =>
         Config.FilterAdvertisements && channel.Config.FilterAdvertisements;
 
+    public static bool IsCommunicationChatType(XivChatType type) =>
+        type is XivChatType.Say
+            or XivChatType.Shout
+            or XivChatType.Yell
+            or XivChatType.TellIncoming
+            or XivChatType.TellOutgoing
+            or XivChatType.Party
+            or XivChatType.CrossParty
+            or XivChatType.Alliance
+            or XivChatType.FreeCompany
+            or XivChatType.NoviceNetwork
+            or XivChatType.PvPTeam
+            or XivChatType.CustomEmote
+            or XivChatType.StandardEmote
+            or XivChatType.Ls1 or XivChatType.Ls2 or XivChatType.Ls3 or XivChatType.Ls4
+            or XivChatType.Ls5 or XivChatType.Ls6 or XivChatType.Ls7 or XivChatType.Ls8
+            or XivChatType.CrossLinkShell1 or XivChatType.CrossLinkShell2 or XivChatType.CrossLinkShell3 or XivChatType.CrossLinkShell4
+            or XivChatType.CrossLinkShell5 or XivChatType.CrossLinkShell6 or XivChatType.CrossLinkShell7 or XivChatType.CrossLinkShell8
+            or XivChatType.Echo;
+
     public void IngestGameMessage(ChatMessage message)
     {
         if (_disposed || !Config.Enabled) return;
@@ -34,46 +54,236 @@ public sealed partial class ChatboxService
             .Where(c => c.Config.GameChatTypes.Contains(message.ChatType))
             .ToList();
 
-        if (targets.Count == 0) return;
+        // If not mapped to any custom tab and not a player communication channel (e.g. battle logs, casting, actions, effect gains) -> skip spam
+        if (targets.Count == 0 && !IsCommunicationChatType(message.ChatType))
+            return;
 
         var (name, world) = ResolveGameSender(message);
         var localName = _plugin.cachedLocalPlayer?.Name.TextValue ?? string.Empty;
         var isSelf = message.ChatType == XivChatType.TellOutgoing
                      || (!string.IsNullOrEmpty(localName) && string.Equals(name, localName, StringComparison.Ordinal));
         var raw = message.Message?.TextValue ?? string.Empty;
+
         var filtered = !isSelf
                        && targets.Any(FilterAdvertisementsFor)
                        && _plugin.AdvertisementFilterService.IsAdvertisementPreview(name, world, raw);
 
-        foreach (var target in targets)
+        ChatboxMessage? combinedEntry = null;
+
+        if (targets.Count > 0)
         {
-            var resolver = BuildResolver(target);
-            var parsed = _parser.Parse(raw, resolver);
-            var blocked = filtered && FilterAdvertisementsFor(target);
-            var mentionsMe = !blocked && !isSelf
-                             && (parsed.MentionsMe || target.Config.TreatAllAsMention
-                                 || (Config.MentionOnTell && message.ChatType == XivChatType.TellIncoming));
+            foreach (var target in targets)
+            {
+                var resolver = BuildResolver(target);
+                var segments = ParseGameContent(message, resolver, out var onlyEmotes, out var parsedMentionsMe);
+                var blocked = filtered && FilterAdvertisementsFor(target);
+                var mentionsMe = !blocked && !isSelf
+                                 && (parsedMentionsMe || target.Config.TreatAllAsMention
+                                     || (Config.MentionOnTell && message.ChatType == XivChatType.TellIncoming));
+
+                var entry = new ChatboxMessage
+                {
+                    FilteredAsAd = blocked,
+                    ChannelId = target.Id,
+                    Origin = ChatboxOrigin.Game,
+                    AuthorKey = $"{name}@{world}",
+                    AuthorName = name,
+                    AuthorWorld = world,
+                    GameChatType = message.ChatType,
+                    RawContent = raw,
+                    Segments = segments,
+                    MentionsMe = mentionsMe,
+                    IsSelf = isSelf,
+                    AuthorColor = target.Config.Color,
+                    OnlyEmotes = onlyEmotes,
+                };
+
+                Publish(target, entry, notify: !blocked, addToCombined: false);
+                combinedEntry ??= entry;
+                RequestGameAvatar(entry);
+            }
+        }
+        else
+        {
+            // Message does not belong to any custom tab, but IS a valid communication chat type for Combined Channel
+            var resolver = BuildResolver(_combined);
+            var segments = ParseGameContent(message, resolver, out var onlyEmotes, out var parsedMentionsMe);
+            var mentionsMe = !isSelf && (parsedMentionsMe
+                             || (Config.MentionOnTell && message.ChatType == XivChatType.TellIncoming));
 
             var entry = new ChatboxMessage
             {
-                FilteredAsAd = blocked,
-                ChannelId = target.Id,
+                FilteredAsAd = false,
+                ChannelId = CombinedChannelId,
                 Origin = ChatboxOrigin.Game,
                 AuthorKey = $"{name}@{world}",
                 AuthorName = name,
                 AuthorWorld = world,
                 GameChatType = message.ChatType,
                 RawContent = raw,
-                Segments = parsed.Segments,
+                Segments = segments,
                 MentionsMe = mentionsMe,
                 IsSelf = isSelf,
-                AuthorColor = target.Config.Color,
-                OnlyEmotes = parsed.OnlyEmotes,
+                OnlyEmotes = onlyEmotes,
             };
 
-            Publish(target, entry, notify: !blocked);
+            entry.Seq = Interlocked.Increment(ref _sequence);
+            entry.SegmentsReady = true;
+            Persist(entry, _combined);
+            combinedEntry = entry;
             RequestGameAvatar(entry);
         }
+
+        if (Config.ShowCombinedChannel && combinedEntry != null)
+        {
+            _combined.Append(combinedEntry, Config.MaxMessagesPerChannel, markUnread: false);
+            MessageAdded?.Invoke(combinedEntry);
+        }
+    }
+
+    private IReadOnlyList<ContentSegment> ParseGameContent(ChatMessage message, MentionResolver resolver, out bool onlyEmotes, out bool mentionsMe)
+    {
+        onlyEmotes = false;
+        mentionsMe = false;
+
+        if (message.Message == null || message.Message.Payloads.Count == 0)
+        {
+            var p = _parser.Parse(message.Message?.TextValue ?? string.Empty, resolver);
+            onlyEmotes = p.OnlyEmotes;
+            mentionsMe = p.MentionsMe;
+            return p.Segments;
+        }
+
+        var segments = new List<ContentSegment>();
+        var itemSheet = Service.DataManager.GetExcelSheet<Lumina.Excel.Sheets.Item>();
+        var statusSheet = Service.DataManager.GetExcelSheet<Lumina.Excel.Sheets.Status>();
+
+        var payloads = message.Message.Payloads;
+        for (var i = 0; i < payloads.Count; i++)
+        {
+            var p = payloads[i];
+
+            if (p is ItemPayload itemPayload)
+            {
+                var itemId = itemPayload.ItemId;
+                var isHq = itemPayload.IsHQ;
+                var item = itemSheet?.GetRowOrDefault(itemId);
+                var itemName = item?.Name.ExtractText();
+                if (string.IsNullOrEmpty(itemName)) itemName = "Item";
+
+                segments.Add(new ContentSegment
+                {
+                    Kind = SegmentKind.ItemLink,
+                    Text = $"[{itemName}{(isHq ? " " : "")}]",
+                    ItemId = itemId,
+                    IsHq = isHq,
+                    IconId = item?.Icon ?? 0,
+                    TooltipText = item?.Description.ExtractText(),
+                });
+
+                while (i + 1 < payloads.Count)
+                {
+                    var next = payloads[i + 1];
+                    if (next is ItemPayload || next is RawPayload { Data: { Length: 1 } and [0xCF] })
+                    {
+                        i++;
+                        break;
+                    }
+                    if (next is TextPayload tp && (tp.Text.Contains(itemName) || tp.Text.StartsWith('')))
+                    {
+                        i++;
+                        continue;
+                    }
+                    if (next is UIForegroundPayload or UIGlowPayload)
+                    {
+                        i++;
+                        continue;
+                    }
+                    break;
+                }
+                continue;
+            }
+
+            if (p is StatusPayload statusPayload)
+            {
+                var status = statusPayload.Status.Value;
+                var statusId = statusPayload.Status.RowId;
+                var statusName = status.Name.ExtractText();
+                if (string.IsNullOrEmpty(statusName)) statusName = "Status";
+
+                segments.Add(new ContentSegment
+                {
+                    Kind = SegmentKind.StatusLink,
+                    Text = $"[{statusName}]",
+                    StatusId = statusId,
+                    IconId = status.Icon,
+                    TooltipText = status.Description.ExtractText(),
+                });
+
+                while (i + 1 < payloads.Count)
+                {
+                    var next = payloads[i + 1];
+                    if (next is StatusPayload)
+                    {
+                        i++;
+                        break;
+                    }
+                    if (next is TextPayload tp && tp.Text.Contains(statusName))
+                    {
+                        i++;
+                        continue;
+                    }
+                    if (next is UIForegroundPayload or UIGlowPayload)
+                    {
+                        i++;
+                        continue;
+                    }
+                    break;
+                }
+                continue;
+            }
+
+            if (p is MapLinkPayload mapPayload)
+            {
+                segments.Add(new ContentSegment
+                {
+                    Kind = SegmentKind.MapLink,
+                    Text = $"{mapPayload.PlaceName} ({mapPayload.XCoord:F1}, {mapPayload.YCoord:F1})",
+                    MapLink = mapPayload,
+                });
+                continue;
+            }
+
+            if (p is AutoTranslatePayload atPayload)
+            {
+                segments.Add(new ContentSegment
+                {
+                    Kind = SegmentKind.AutoTranslate,
+                    Text = $" {atPayload.Text} ",
+                });
+                continue;
+            }
+
+            if (p is TextPayload textPayload)
+            {
+                if (string.IsNullOrEmpty(textPayload.Text)) continue;
+                var parsed = _parser.Parse(textPayload.Text, resolver);
+                if (parsed.MentionsMe) mentionsMe = true;
+                segments.AddRange(parsed.Segments);
+                continue;
+            }
+        }
+
+        if (segments.Count == 0)
+        {
+            var p = _parser.Parse(message.Message?.TextValue ?? string.Empty, resolver);
+            onlyEmotes = p.OnlyEmotes;
+            mentionsMe = p.MentionsMe;
+            return p.Segments;
+        }
+
+        onlyEmotes = segments.All(s => s.Kind == SegmentKind.Emote);
+        return segments;
     }
 
     public void IngestDiscordMessage(DiscordMessage message, ulong channelId)
@@ -102,7 +312,15 @@ public sealed partial class ChatboxService
         if (message.WebhookMessage && isBridgedToGame)
             return;
 
-        // 2. If this message was sent by the user from Discord on a bridged channel, DiscordMessageRouter routes it into game chat, so it will be ingested as an in-game message -> SKIP so only in-game message is shown
+        // 2. If this Discord channel routes incoming Discord messages into the game chat via DiscordMessageRouter, skip ingesting it here because it will be ingested as an in-game message
+        var isRoutedToGame = _plugin.Config.Chat.Mappings.Any(m => m.DiscordChannelId == channelKey)
+                             || _plugin.Config.Chat.ExtraChatMappings.Any(m => m.Value.DiscordChannelId == channelKey)
+                             || _plugin.Config.Chat.TellThreadMappings.ContainsValue(channelKey);
+
+        if (isRoutedToGame)
+            return;
+
+        // 3. If this message was sent by the user from Discord on a bridged channel, DiscordMessageRouter routes it into game chat, so it will be ingested as an in-game message -> SKIP so only in-game message is shown
         if (isSelf && isBridgedToGame)
             return;
 
@@ -120,10 +338,6 @@ public sealed partial class ChatboxService
 
         foreach (var target in targets)
         {
-            // If the target channel listens to game chat, DiscordMessageRouter forwards the Discord message to the game, and IngestGameMessage will ingest the game echo -> SKIP to avoid duplicate
-            if (isBridgedToGame && target.Config.GameChatTypes.Count > 0)
-                continue;
-
             var resolver = BuildResolver(target);
             var parsed = _parser.Parse(raw, resolver);
 
@@ -150,6 +364,17 @@ public sealed partial class ChatboxService
         }
     }
 
+    public void DeleteDiscordMessage(ulong discordMessageId)
+    {
+        if (discordMessageId == 0) return;
+
+        foreach (var channel in Channels)
+            channel.RemoveByDiscordId(discordMessageId);
+
+        _combined.RemoveByDiscordId(discordMessageId);
+        Store.DeleteByDiscordMessageId(discordMessageId);
+    }
+
     public void PostSystemMessage(string channelId, string text)
     {
         var target = GetChannel(channelId);
@@ -167,7 +392,7 @@ public sealed partial class ChatboxService
         Publish(target, entry, notify: false);
     }
 
-    private void Publish(ChatboxChannelState target, ChatboxMessage entry, bool notify = true)
+    private void Publish(ChatboxChannelState target, ChatboxMessage entry, bool notify = true, bool addToCombined = true)
     {
         entry.Seq = Interlocked.Increment(ref _sequence);
         entry.SegmentsReady = true;
@@ -178,7 +403,7 @@ public sealed partial class ChatboxService
 
         target.Append(entry, LimitFor(target.Id), markUnread: !isActive && !entry.IsSelf && !entry.FilteredAsAd);
 
-        if (Config.ShowCombinedChannel)
+        if (addToCombined && Config.ShowCombinedChannel)
             _combined.Append(entry, Config.MaxMessagesPerChannel, markUnread: false);
 
         Persist(entry, target);

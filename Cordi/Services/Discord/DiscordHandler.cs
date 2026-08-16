@@ -97,6 +97,7 @@ public class DiscordHandler : IDisposable
 
             _client.Ready += OnReady;
             _client.MessageCreated += MessageCreatedHandler;
+            _client.MessageDeleted += MessageDeletedHandler;
             _client.MessageReactionAdded += MessageReactionAddedHandler;
             _client.PresenceUpdated += OnPresenceUpdatedHandler;
             await _client.ConnectAsync();
@@ -153,6 +154,13 @@ public class DiscordHandler : IDisposable
         Logger.Info($"[DiscordHandler] RAW REACTION: {e.Emoji.Name} by {e.User.Username} on Msg {e.Message.Id}");
         if (e.User.IsBot) return Task.CompletedTask;
         OnReactionAdded?.Invoke(e);
+        return Task.CompletedTask;
+    }
+
+    private Task MessageDeletedHandler(DiscordClient sender, MessageDeleteEventArgs e)
+    {
+        if (e.Message != null)
+            _plugin.Chatbox?.DeleteDiscordMessage(e.Message.Id);
         return Task.CompletedTask;
     }
 
