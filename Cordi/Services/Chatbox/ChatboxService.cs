@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
@@ -31,8 +31,13 @@ public sealed partial class ChatboxService : IDisposable
 
         Database = new ChatboxDatabase(configDirectory);
         Store = new ChatboxMessageStore(Database, LimitFor);
-        ImageCache = new ChatboxImageCache(Database, () => plugin.Config.Chatbox.ImageCacheMaxEntries);
+        ImageCache = new ChatboxImageCache(
+            Database,
+            () => plugin.Config.Chatbox.ImageCacheMaxEntries,
+            () => plugin.Config.Chatbox.AnimateGifs,
+            () => plugin.Config.Chatbox.AnimateIdleUnloadSeconds);
         EmbedCache = new ChatboxEmbedCache(Database, () => plugin.Config.Chatbox.EmbedCacheDays);
+        Emotes = new ChatboxEmoteLibrary(Database, () => plugin.Config.Chatbox.SeenEmoteLimit);
         _sequence = Store.HighestSeq();
 
         _combined = new ChatboxChannelState(new ChatboxChannelConfig
@@ -86,6 +91,8 @@ public sealed partial class ChatboxService : IDisposable
     public ChatboxImageCache ImageCache { get; }
 
     public ChatboxEmbedCache EmbedCache { get; }
+
+    public ChatboxEmoteLibrary Emotes { get; }
 
     public ChatboxChannelState Combined => _combined;
 

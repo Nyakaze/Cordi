@@ -50,6 +50,8 @@ public sealed partial class ChatboxService
 
     private bool SendToGame(ChatboxChannelState channel, string text, ChatboxReplyRef? reply)
     {
+        text = StripEmoteTokens(text);
+
         var body = reply != null ? FormatGameReply(reply, text) : text;
 
         if (IsTellChannel(channel) && channel.Config.SendGameChatType == XivChatType.None)

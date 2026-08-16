@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.RegularExpressions;
@@ -18,8 +18,15 @@ namespace Cordi.Services.Chatbox;
 public sealed partial class ChatboxService
 {
     private static readonly Regex ShortcodeRegex = new(@":([A-Za-z0-9_+-]{2,32}):", RegexOptions.Compiled);
+    private static readonly Regex EmoteTokenRegex = new(
+        @"<(?<a>a?):(?<name>[A-Za-z0-9_~]{2,32}):(?<id>\d{5,25})>",
+        RegexOptions.Compiled);
+    private static readonly Regex EmoteOrShortcodeRegex = new(
+        @"<(?<a>a?):(?<token>[A-Za-z0-9_~]{2,32}):(?<id>\d{5,25})>|:(?<code>[A-Za-z0-9_+-]{2,32}):",
+        RegexOptions.Compiled);
 
     private readonly Dictionary<string, (ulong Id, bool Animated)> _guildEmotes = new(StringComparer.OrdinalIgnoreCase);
+    private readonly HashSet<ulong> _guildEmoteIds = new();
     private DateTime _guildEmotesRefreshedAt = DateTime.MinValue;
     private readonly object _guildEmoteGate = new();
 
@@ -397,6 +404,8 @@ public sealed partial class ChatboxService
         entry.Seq = Interlocked.Increment(ref _sequence);
         entry.SegmentsReady = true;
 
+        Emotes.Record(entry);
+
         var isActive = WindowFocused
                        && _plugin.ChatboxWindow?.IsOpen == true
                        && (ResolveActiveChannelId() == target.Id || ResolveActiveChannelId() == CombinedChannelId);
@@ -611,13 +620,16 @@ public sealed partial class ChatboxService
         {
             _guildEmotesRefreshedAt = DateTime.UtcNow;
             _guildEmotes.Clear();
+            _guildEmoteIds.Clear();
 
             foreach (var guild in client.Guilds.Values)
             {
                 foreach (var emoji in guild.Emojis.Values)
                 {
                     if (string.IsNullOrEmpty(emoji.Name)) continue;
+
                     _guildEmotes[emoji.Name] = (emoji.Id, emoji.IsAnimated);
+                    _guildEmoteIds.Add(emoji.Id);
                 }
             }
         }
@@ -628,22 +640,45 @@ public sealed partial class ChatboxService
         RefreshGuildEmotes();
         lock (_guildEmoteGate)
         {
-            return _guildEmotes.TryGetValue(name, out var emote)
-                ? ChatboxContentParser.CustomEmoteUrl(emote.Id, emote.Animated)
-                : null;
+            if (_guildEmotes.TryGetValue(name, out var emote))
+                return ChatboxContentParser.CustomEmoteUrl(emote.Id, emote.Animated);
+        }
+
+        return Config.PickerIncludeSeenEmotes ? Emotes.FindByName(name)?.ImageUrl : null;
+    }
+
+    private bool IsUsableGuildEmote(ulong id)
+    {
+        RefreshGuildEmotes();
+        lock (_guildEmoteGate)
+        {
+            return _guildEmoteIds.Contains(id);
         }
     }
+
+    public static string StripEmoteTokens(string text) =>
+        string.IsNullOrEmpty(text)
+            ? text
+            : EmoteTokenRegex.Replace(text, match => $":{match.Groups["name"].Value}:");
 
     public string ConvertShortcodes(string text)
     {
         if (string.IsNullOrEmpty(text)) return text;
         RefreshGuildEmotes();
 
-        return ShortcodeRegex.Replace(text, match =>
+        return EmoteOrShortcodeRegex.Replace(text, match =>
         {
-            var name = match.Groups[1].Value;
+            if (match.Groups["id"].Success)
+            {
+                if (!ulong.TryParse(match.Groups["id"].Value, out var id)) return match.Value;
+                if (IsUsableGuildEmote(id)) return match.Value;
 
-            // 1. Guild Emotes (Custom animated/static Discord emojis)
+                var animated = match.Groups["a"].Value.Length > 0;
+                return $" {ChatboxContentParser.CustomEmoteUrl(id, animated)}&name={match.Groups["token"].Value} ";
+            }
+
+            var name = match.Groups["code"].Value;
+
             lock (_guildEmoteGate)
             {
                 if (_guildEmotes.TryGetValue(name, out var emote))
@@ -654,15 +689,12 @@ public sealed partial class ChatboxService
                 }
             }
 
-            // 2. Unicode shortcodes (:sob: -> 😭, :heart: -> ❤️, etc.)
-            if (EmojiIndex.TryGetShortcode(name, out var unicode))
-            {
-                return unicode;
-            }
+            if (EmojiIndex.TryGetShortcode(name, out var unicode)) return unicode;
 
-            return match.Value;
+            var seen = Emotes.FindByName(name);
+            return seen != null ? $" {seen.ImageUrl}&name={seen.Name} " : match.Value;
         });
     }
 
-    private string ConvertShortcodesForDiscord(string text) => ConvertShortcodes(text);
+    private string ConvertShortcodesForDiscord(string text) => ConvertShortcodes(text).Trim();
 }

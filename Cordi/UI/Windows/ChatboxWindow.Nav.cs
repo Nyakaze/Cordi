@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Numerics;
 using Cordi.Configuration;
@@ -73,12 +73,15 @@ public sealed partial class ChatboxWindow
 
         draw.AddRectFilled(min, max, ImGui.GetColorU32(background), rounding);
 
+        Chatbox.ImageCache.Request(channel.Config.IconUrl);
+
         var texture = string.IsNullOrWhiteSpace(channel.Config.IconUrl)
             ? null
             : Chatbox.ImageCache.Get(channel.Config.IconUrl);
 
         if (texture != null)
         {
+            AnimatedTextureWrap.MarkVisible(texture, min, max);
             draw.AddImageRounded(
                 texture.Handle,
                 min,
@@ -376,7 +379,7 @@ public sealed partial class ChatboxWindow
     private void Activate(ChatboxChannelState channel)
     {
         Chatbox.SetActiveChannel(channel.Id);
-        _scrollToBottomFrames = 3;
+        _scrollToBottomFrames = ScrollSettleFrames;
         _focusInput = true;
     }
 

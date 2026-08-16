@@ -173,6 +173,16 @@ public class ChatboxConfig
 
     public bool ImageCacheEnabled { get; set; } = true;
     public int ImageCacheMaxEntries { get; set; } = 600;
+    public bool AnimateGifs { get; set; } = true;
+    public bool AnimateOnlyWhenFocused { get; set; } = true;
+    public int AnimateIdleUnloadSeconds { get; set; } = 30;
+
+    public bool ShowEmojiPicker { get; set; } = true;
+    public int EmojiPickerRecentLimit { get; set; } = 32;
+    public bool PickerIncludeSeenEmotes { get; set; } = true;
+    public int SeenEmoteLimit { get; set; } = 500;
+    public List<string> FavoriteEmojis { get; set; } = new();
+    public List<string> RecentEmojis { get; set; } = new();
 
     public bool PersistHistory { get; set; } = true;
 

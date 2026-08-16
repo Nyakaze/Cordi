@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Numerics;
 using Cordi.Configuration;
 using Cordi.Services.Chatbox;
@@ -12,8 +12,12 @@ namespace Cordi.UI.Windows;
 
 public sealed partial class ChatboxWindow
 {
+    private const int ScrollSettleFrames = 3;
+
     private long _scrollToSeq;
-    private long _lastRenderedSeq;
+    private float _lastScrollY;
+    private float _lastScrollMax;
+    private bool _stickToBottom = true;
     private readonly System.Collections.Generic.HashSet<long> _revealedAds = new();
 
     private void DrawMessages(ChatboxChannelState channel)
@@ -26,9 +30,7 @@ public sealed partial class ChatboxWindow
             return;
         }
 
-        var maxScroll = ImGui.GetScrollMaxY();
-        var threshold = 6f * ImGuiHelpers.GlobalScale;
-        var wasAtBottom = maxScroll <= 0f || ImGui.GetScrollY() >= maxScroll - threshold;
+        UpdateStickToBottom();
         var dividerSeq = Config.ShowNewMessageDivider ? channel.DividerSeq : 0;
         var pendingJump = _scrollToSeq;
 
@@ -43,10 +45,6 @@ public sealed partial class ChatboxWindow
 
         if (pendingJump != 0 && _scrollToSeq == pendingJump) _scrollToSeq = 0;
 
-        var lastSeq = messages[^1].Seq;
-        var hasNewMessages = lastSeq != _lastRenderedSeq;
-        _lastRenderedSeq = lastSeq;
-
         ImGui.Dummy(new Vector2(0f, 4f * ImGuiHelpers.GlobalScale));
 
         if (_scrollToBottomFrames > 0)
@@ -54,20 +52,40 @@ public sealed partial class ChatboxWindow
             ImGui.SetScrollHereY(1f);
             _scrollToBottomFrames--;
         }
-        else if (pendingJump == 0 && Config.AutoScroll && wasAtBottom && hasNewMessages)
+        else if (pendingJump == 0 && Config.AutoScroll && _stickToBottom)
         {
             ImGui.SetScrollHereY(1f);
-            _scrollToBottomFrames = 2;
         }
 
-        var currentScroll = ImGui.GetScrollY();
-        var currentMax = ImGui.GetScrollMaxY();
-        var isAtBottom = currentMax <= 0f || currentScroll >= currentMax - threshold;
-
-        if (isAtBottom && channel.DividerSeq != 0 && Chatbox.WindowFocused)
+        if (_stickToBottom && channel.DividerSeq != 0 && Chatbox.WindowFocused)
         {
             Chatbox.ClearDivider(channel);
         }
+    }
+
+    private void UpdateStickToBottom()
+    {
+        var scrollY = ImGui.GetScrollY();
+        var maxScroll = ImGui.GetScrollMaxY();
+        var threshold = 6f * ImGuiHelpers.GlobalScale;
+        var scrolledUp = maxScroll >= _lastScrollMax - 0.5f && scrollY < _lastScrollY - 0.5f;
+        var grew = maxScroll > _lastScrollMax + 0.5f;
+
+        if (_scrollToBottomFrames > 0)
+        {
+            if (scrolledUp) _scrollToBottomFrames = 0;
+            else if (grew) _scrollToBottomFrames = ScrollSettleFrames;
+        }
+
+        if (_scrollToBottomFrames > 0)
+            _stickToBottom = true;
+        else if (scrolledUp)
+            _stickToBottom = false;
+        else if (maxScroll <= 0f || scrollY >= maxScroll - threshold)
+            _stickToBottom = true;
+
+        _lastScrollY = scrollY;
+        _lastScrollMax = maxScroll;
     }
 
     private bool ShouldGroup(ChatboxMessage? previous, ChatboxMessage message)
@@ -124,6 +142,8 @@ public sealed partial class ChatboxWindow
         var rowMin = new Vector2(origin.X - _theme.PadX(0.3f), origin.Y - 1f);
         var rowMax = new Vector2(origin.X + width, MathF.Max(end.Y, origin.Y + ImGui.GetTextLineHeight()) + 1f);
         var hovered = ImGui.IsWindowHovered(ImGuiHoveredFlags.ChildWindows) && ImGui.IsMouseHoveringRect(rowMin, rowMax);
+
+        if (Chatbox.ImageCache.HasUnloaded && ImGui.IsRectVisible(rowMin, rowMax)) RequestRowMedia(message);
 
         draw.ChannelsSetCurrent(0);
         DrawRowBackground(draw, message, rowMin, rowMax, hovered);
@@ -217,6 +237,25 @@ public sealed partial class ChatboxWindow
                     break;
             }
         }
+    }
+
+    private void RequestRowMedia(ChatboxMessage message)
+    {
+        var cache = Chatbox.ImageCache;
+
+        foreach (var media in _embedMedia)
+            cache.Request(media);
+
+        foreach (var attachment in message.Attachments)
+            cache.Request(attachment);
+
+        foreach (var segment in message.Segments)
+        {
+            if (segment.Kind == SegmentKind.Emote) cache.Request(segment.ImageUrl);
+        }
+
+        cache.Request(message.AvatarUrl);
+        cache.Request(message.Reply?.AvatarUrl);
     }
 
     private void DrawEmoteSegment(ContentSegment segment, float emoteSize, Vector4 textColor)
@@ -404,6 +443,7 @@ public sealed partial class ChatboxWindow
             size.Y = size.X * ratio;
 
             var origin = ImGui.GetCursorScreenPos();
+            AnimatedTextureWrap.MarkVisible(texture, size);
             ImGui.Image(texture.Handle, size);
             var imageMax = origin + size;
             var hovered = ImGui.IsWindowHovered(ImGuiHoveredFlags.ChildWindows) && ImGui.IsMouseHoveringRect(origin, imageMax);
@@ -459,6 +499,7 @@ public sealed partial class ChatboxWindow
         {
             var mini = ImGui.GetTextLineHeight();
             var origin = ImGui.GetCursorScreenPos();
+            AnimatedTextureWrap.MarkVisible(avatar, new Vector2(mini, mini));
             ImGui.Dummy(new Vector2(mini, mini));
             ImGui.GetWindowDrawList().AddImageRounded(
                 avatar.Handle,
@@ -523,6 +564,8 @@ public sealed partial class ChatboxWindow
         if (seq == 0 || channel.FindBySeq(seq) == null) return;
 
         _scrollToSeq = seq;
+        _scrollToBottomFrames = 0;
+        _stickToBottom = false;
         _highlightSeq = seq;
         _highlightUntil = DateTime.Now.AddSeconds(2);
     }
@@ -580,6 +623,7 @@ public sealed partial class ChatboxWindow
 
         if (texture != null)
         {
+            AnimatedTextureWrap.MarkVisible(texture, min, max);
             draw.AddImageRounded(texture.Handle, min, max, Vector2.Zero, Vector2.One, 0xFFFFFFFF, rounding);
             return;
         }

@@ -4,6 +4,7 @@ using System.IO;
 using System.Net;
 using System.Net.Http;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -17,7 +18,24 @@ public sealed class ChatboxEmbedCache : IDisposable
 
     private static readonly HttpClient Http = CreateClient();
     private static readonly TimeSpan FailureBackoff = TimeSpan.FromMinutes(10);
+    private static readonly TimeSpan EmptyLifetime = TimeSpan.FromHours(6);
     private static readonly JsonSerializerOptions Json = new() { WriteIndented = false };
+
+    private const string SelectEmbedSql = """
+        SELECT payload FROM embeds
+        WHERE url = $url
+          AND fetched_at >= (CASE WHEN length(payload) = 0 THEN $oldestEmpty ELSE $oldest END);
+        """;
+
+    private const string PruneEmbedSql = """
+        DELETE FROM embeds
+        WHERE (length(payload) > 0 AND fetched_at < $oldest)
+           OR (length(payload) = 0 AND fetched_at < $oldestEmpty);
+        """;
+
+    private static readonly Regex KlipyGif = new(
+        @"^https?://(?:www\.)?klipy\.com/gifs/(?<slug>[A-Za-z0-9._~-]+)",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     private readonly ChatboxDatabase _database;
     private readonly Func<int> _lifetimeDays;
@@ -32,6 +50,8 @@ public sealed class ChatboxEmbedCache : IDisposable
     {
         _database = database;
         _lifetimeDays = lifetimeDays;
+
+        PruneUnresolved();
     }
 
     public int PendingFetches => _inFlight.Count;
@@ -164,6 +184,9 @@ public sealed class ChatboxEmbedCache : IDisposable
 
         try
         {
+            var provider = await FetchProviderAsync(url).ConfigureAwait(false);
+            if (provider != null) return provider;
+
             using var response = await Http
                 .GetAsync(url, HttpCompletionOption.ResponseHeadersRead, _cts.Token)
                 .ConfigureAwait(false);
@@ -187,6 +210,54 @@ public sealed class ChatboxEmbedCache : IDisposable
             try { _fetchGate.Release(); }
             catch (ObjectDisposedException) { }
         }
+    }
+
+    private async Task<ChatboxLinkEmbed?> FetchProviderAsync(string url)
+    {
+        var match = KlipyGif.Match(url);
+        if (!match.Success) return null;
+
+        using var response = await Http
+            .GetAsync($"https://api.klipy.com/api/v1/gifs/{match.Groups["slug"].Value}", _cts.Token)
+            .ConfigureAwait(false);
+
+        if (!response.IsSuccessStatusCode) return null;
+
+        var payload = await response.Content.ReadAsStringAsync(_cts.Token).ConfigureAwait(false);
+
+        try
+        {
+            using var document = JsonDocument.Parse(payload);
+            if (!document.RootElement.TryGetProperty("data", out var data)) return null;
+            if (!data.TryGetProperty("file", out var file)) return null;
+
+            var media = FirstGifUrl(file);
+            if (media == null) return null;
+
+            var embed = ChatboxLinkEmbed.ForImage(media);
+            embed.Url = url;
+            embed.SiteName = "Klipy";
+            return embed;
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
+    private static string? FirstGifUrl(JsonElement file)
+    {
+        foreach (var quality in new[] { "hd", "md", "sd" })
+        {
+            if (!file.TryGetProperty(quality, out var bucket)) continue;
+            if (!bucket.TryGetProperty("gif", out var gif)) continue;
+            if (!gif.TryGetProperty("url", out var value)) continue;
+
+            var url = value.GetString();
+            if (!string.IsNullOrEmpty(url)) return url;
+        }
+
+        return null;
     }
 
     private async Task<string> ReadCappedAsync(HttpResponseMessage response)
@@ -220,13 +291,15 @@ public sealed class ChatboxEmbedCache : IDisposable
     private ChatboxLinkEmbed? ReadStored(string url)
     {
         var oldest = DateTimeOffset.UtcNow.AddDays(-Math.Max(1, _lifetimeDays())).ToUnixTimeSeconds();
+        var oldestEmpty = DateTimeOffset.UtcNow.Subtract(EmptyLifetime).ToUnixTimeSeconds();
 
         return _database.Read(connection =>
         {
             using var command = connection.CreateCommand();
-            command.CommandText = "SELECT payload FROM embeds WHERE url = $url AND fetched_at >= $oldest;";
+            command.CommandText = SelectEmbedSql;
             command.Parameters.AddWithValue("$url", url);
             command.Parameters.AddWithValue("$oldest", oldest);
+            command.Parameters.AddWithValue("$oldestEmpty", oldestEmpty);
 
             if (command.ExecuteScalar() is not string payload) return null;
             if (payload.Length == 0) return new ChatboxLinkEmbed { Url = url };
@@ -273,15 +346,21 @@ public sealed class ChatboxEmbedCache : IDisposable
     public void PruneExpired()
     {
         var oldest = DateTimeOffset.UtcNow.AddDays(-Math.Max(1, _lifetimeDays())).ToUnixTimeSeconds();
+        var oldestEmpty = DateTimeOffset.UtcNow.Subtract(EmptyLifetime).ToUnixTimeSeconds();
 
         _database.Write(connection =>
         {
             using var command = connection.CreateCommand();
-            command.CommandText = "DELETE FROM embeds WHERE fetched_at < $oldest;";
+            command.CommandText = PruneEmbedSql;
             command.Parameters.AddWithValue("$oldest", oldest);
+            command.Parameters.AddWithValue("$oldestEmpty", oldestEmpty);
             command.ExecuteNonQuery();
         }, "prune embeds");
     }
+
+    private void PruneUnresolved() => _database.Write(
+        connection => ChatboxDatabase.Execute(connection, "DELETE FROM embeds WHERE length(payload) = 0;"),
+        "prune unresolved embeds");
 
     public void Dispose()
     {

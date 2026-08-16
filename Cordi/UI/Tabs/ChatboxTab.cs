@@ -7,6 +7,7 @@ using Cordi.UI.Themes;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Interface;
 using Dalamud.Interface.Utility;
+using Dalamud.Interface.Utility.Raii;
 
 namespace Cordi.UI.Tabs;
 
@@ -326,6 +327,33 @@ public partial class ChatboxTab : ConfigTabBase
             TextField("Twemoji Base URL", () => Cfg.TwemojiBaseUrl, v => Cfg.TwemojiBaseUrl = v, 260);
         });
 
+        Card("chatbox-picker", "Emoji Picker", _ =>
+        {
+            Check("Show Picker Button", () => Cfg.ShowEmojiPicker, v => Cfg.ShowEmojiPicker = v);
+            ImGui.TextDisabled("Adds a button left of the send button. Right-click an entry in the picker to favorite it.");
+
+            using (ImRaii.Disabled(!Cfg.ShowEmojiPicker))
+            {
+                SliderInt("Recent Emoji to Keep", () => Cfg.EmojiPickerRecentLimit,
+                    v => Cfg.EmojiPickerRecentLimit = v, 0, 128);
+
+                Check("Offer Emotes seen in Chat", () => Cfg.PickerIncludeSeenEmotes,
+                    v => Cfg.PickerIncludeSeenEmotes = v);
+                ImGui.TextDisabled($"Every custom emote that arrives through Discord is remembered and can be sent again, even from servers the bot is not in. Currently {plugin.Chatbox.Emotes.Count} known.");
+            }
+
+            theme.SpacerY(0.5f);
+            if (ImGui.Button("Clear Favorites & Recents"))
+            {
+                Cfg.FavoriteEmojis.Clear();
+                Cfg.RecentEmojis.Clear();
+                Save();
+            }
+
+            ImGui.SameLine();
+            if (ImGui.Button("Forget Seen Emotes")) plugin.Chatbox.Emotes.Clear();
+        });
+
         Card("chatbox-cache", "Image Cache", _ =>
         {
             Check("Enable Image Cache", () => Cfg.ImageCacheEnabled, v => Cfg.ImageCacheEnabled = v);
@@ -333,6 +361,25 @@ public partial class ChatboxTab : ConfigTabBase
 
             ImGui.TextDisabled(plugin.Chatbox.ImageCache.InspectSummary());
             ImGui.TextDisabled("Stored inside the chatbox database, deduplicated by content.");
+
+            theme.SpacerY(0.5f);
+            Check("Animate GIFs", () => Cfg.AnimateGifs, v =>
+            {
+                Cfg.AnimateGifs = v;
+                plugin.Chatbox.ImageCache.ResetTextures();
+            });
+            ImGui.TextDisabled("Plays animated GIFs from links and Discord emotes. Only GIFs currently on screen are animated.");
+
+            using (ImRaii.Disabled(!Cfg.AnimateGifs))
+            {
+                Check("Animate only while focused", () => Cfg.AnimateOnlyWhenFocused,
+                    v => Cfg.AnimateOnlyWhenFocused = v);
+                ImGui.TextDisabled("GIFs freeze on the current frame whenever the Chatbox window is not focused.");
+
+                SliderInt("Unload Idle GIFs after", () => Cfg.AnimateIdleUnloadSeconds,
+                    v => Cfg.AnimateIdleUnloadSeconds = v, 0, 300);
+                ImGui.TextDisabled($"Seconds off screen before decoded frames are released. 0 keeps them in memory. Currently {plugin.Chatbox.ImageCache.AnimatedTextures} decoded.");
+            }
 
             if (theme.Button("Clear Cache##chatbox")) plugin.Chatbox.ImageCache.Clear();
 

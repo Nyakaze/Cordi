@@ -1,6 +1,7 @@
-using System;
+﻿using System;
 using System.Numerics;
 using Cordi.Services.Chatbox;
+using Cordi.UI.Panels;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Interface;
 
@@ -23,7 +24,10 @@ public sealed partial class ChatboxWindow
 
         var spacing = _theme.Gap(0.4f);
         var buttonWidth = ImGui.GetFrameHeight();
-        ImGui.SetNextItemWidth(MathF.Max(80f, ImGui.GetContentRegionAvail().X - buttonWidth - spacing * 2f));
+        var buttons = Config.ShowEmojiPicker ? 2 : 1;
+        ImGui.SetNextItemWidth(MathF.Max(
+            80f,
+            ImGui.GetContentRegionAvail().X - buttonWidth * buttons - spacing * (buttons + 1)));
 
         if (_focusInput)
         {
@@ -41,12 +45,23 @@ public sealed partial class ChatboxWindow
         _theme.PopInputScope();
 
         var inputActive = ImGui.IsItemActive();
-        Chatbox.InputActive = inputActive;
+        var pickerOpen = false;
+
+        if (Config.ShowEmojiPicker)
+        {
+            ImGui.SameLine(0, spacing);
+            if (_theme.IconButton("##chatbox-emoji", FontAwesomeIcon.Smile, "Emoji")) _picker.Open();
+
+            _picker.Draw(InsertText);
+            pickerOpen = _picker.InputActive;
+        }
+
+        Chatbox.InputActive = inputActive || pickerOpen;
 
         ImGui.SameLine(0, spacing);
         if (_theme.IconButton("##chatbox-send", FontAwesomeIcon.PaperPlane, "Send")) submitted = true;
 
-        if (inputActive && _replyTarget != null && ImGui.IsKeyPressed(ImGuiKey.Escape)) CancelReply();
+        if (inputActive && !pickerOpen && _replyTarget != null && ImGui.IsKeyPressed(ImGuiKey.Escape)) CancelReply();
 
         if (submitted) Submit(channel);
     }
@@ -84,7 +99,7 @@ public sealed partial class ChatboxWindow
         _replyTarget = null;
         if (Config.ClearInputAfterSend) _input = string.Empty;
         if (Config.KeepFocusAfterSend) _focusInput = true;
-        _scrollToBottomFrames = 3;
+        _scrollToBottomFrames = ScrollSettleFrames;
     }
 
     public void InsertText(string text)

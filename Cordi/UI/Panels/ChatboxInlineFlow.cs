@@ -1,6 +1,7 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Numerics;
+using Cordi.Services.Chatbox;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Interface.Textures.TextureWraps;
 
@@ -127,6 +128,7 @@ public sealed class ChatboxInlineFlow
         var position = Place(size, size);
 
         ImGui.SetCursorScreenPos(position);
+        AnimatedTextureWrap.MarkVisible(texture, new Vector2(size, size));
         ImGui.Image(texture.Handle, new Vector2(size, size));
 
         if (!ImGui.IsItemHovered()) return;

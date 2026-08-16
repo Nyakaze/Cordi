@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Numerics;
 using Cordi.Configuration;
 using Cordi.Core;
@@ -20,12 +20,13 @@ public sealed partial class ChatboxWindow : Window, IDisposable
     private readonly CordiPlugin _plugin;
     private readonly UiTheme _theme = new();
     private readonly ChatboxInlineFlow _flow = new();
+    private readonly ChatboxEmojiPicker _picker;
 
     private string _input = string.Empty;
     private ChatboxReplyRef? _replyTarget;
     private long _highlightSeq;
     private DateTime _highlightUntil = DateTime.MinValue;
-    private int _scrollToBottomFrames = 3;
+    private int _scrollToBottomFrames = ScrollSettleFrames;
     private bool _focusInput;
     private ImRaii.ColorDisposable? _opacityScope;
     private ImRaii.StyleDisposable? _borderScope;
@@ -33,6 +34,7 @@ public sealed partial class ChatboxWindow : Window, IDisposable
     public ChatboxWindow(CordiPlugin plugin) : base("Chatbox" + WindowId, ImGuiWindowFlags.None)
     {
         _plugin = plugin;
+        _picker = new ChatboxEmojiPicker(plugin, _theme);
 
         SizeConstraints = new WindowSizeConstraints
         {
@@ -103,9 +105,12 @@ public sealed partial class ChatboxWindow : Window, IDisposable
     public override void Draw()
     {
         _theme.ApplyFontScale();
-        Chatbox.ImageCache.Tick();
         Chatbox.WindowFocused = ImGui.IsWindowFocused(ImGuiFocusedFlags.RootAndChildWindows);
         if (Chatbox.WindowFocused) Chatbox.MarkActiveRead();
+
+        Chatbox.ImageCache.Tick(
+            ImGui.GetIO().DeltaTime,
+            Config.AnimateGifs && (!Config.AnimateOnlyWhenFocused || Chatbox.WindowFocused));
 
         if (Chatbox.RequestInputFocus)
         {

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.IO;
 using System.Runtime.InteropServices;
 using Microsoft.Data.Sqlite;
@@ -7,7 +7,7 @@ namespace Cordi.Services.Chatbox;
 
 public sealed class ChatboxDatabase : IDisposable
 {
-    private const int SchemaVersion = 3;
+    private const int SchemaVersion = 4;
 
     private static bool _nativeReady;
     private static readonly object NativeGate = new();
@@ -132,6 +132,15 @@ public sealed class ChatboxDatabase : IDisposable
             );
 
             CREATE INDEX IF NOT EXISTS idx_embeds_fetched ON embeds(fetched_at);
+
+            CREATE TABLE IF NOT EXISTS emotes (
+                id        INTEGER PRIMARY KEY,
+                name      TEXT    NOT NULL,
+                animated  INTEGER NOT NULL DEFAULT 0,
+                last_seen INTEGER NOT NULL
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_emotes_last_seen ON emotes(last_seen);
 
             CREATE TABLE IF NOT EXISTS hidden_embeds (
                 seq INTEGER NOT NULL,

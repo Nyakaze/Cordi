@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -82,6 +82,8 @@ public sealed partial class ChatboxService
         var parsed = _parser.Parse(message.RawContent, CachedResolver(channel));
         message.Segments = parsed.Segments;
         message.OnlyEmotes = parsed.OnlyEmotes;
+
+        Emotes.Record(message);
     }
 
     private MentionResolver CachedResolver(ChatboxChannelState channel)

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Globalization;
@@ -23,25 +23,37 @@ public sealed class ChatboxImageCache : IDisposable
 
     private readonly ChatboxDatabase _database;
     private readonly Func<int> _maxEntries;
+    private readonly Func<bool> _animationEnabled;
+    private readonly Func<int> _animationIdleSeconds;
     private readonly ConcurrentDictionary<string, IDalamudTextureWrap> _textures = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, long> _lastUsed = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, byte> _inFlight = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, DateTime> _failures = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, AnimatedTextureWrap> _animated = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, byte> _unloaded = new(StringComparer.Ordinal);
     private readonly ConcurrentQueue<(IDalamudTextureWrap Wrap, long Frame)> _graveyard = new();
     private readonly SemaphoreSlim _downloadGate = new(4, 4);
     private readonly CancellationTokenSource _cts = new();
     private long _frame;
     private bool _disposed;
 
-    public ChatboxImageCache(ChatboxDatabase database, Func<int> maxEntries)
+    public ChatboxImageCache(
+        ChatboxDatabase database,
+        Func<int> maxEntries,
+        Func<bool> animationEnabled,
+        Func<int> animationIdleSeconds)
     {
         _database = database;
         _maxEntries = maxEntries;
+        _animationEnabled = animationEnabled;
+        _animationIdleSeconds = animationIdleSeconds;
     }
 
     public int PendingDownloads => _inFlight.Count;
     public int FailedDownloads => _failures.Count;
     public int LoadedTextures => _textures.Count;
+    public int AnimatedTextures => _animated.Count;
+    public bool HasUnloaded => !_unloaded.IsEmpty;
 
     private static HttpClient CreateClient()
     {
@@ -67,15 +79,31 @@ public sealed class ChatboxImageCache : IDisposable
             return wrap;
         }
 
+        if (_unloaded.ContainsKey(url)) return null;
+
         Enqueue(url);
         return null;
     }
 
-    public void Tick()
+    public void Request(string? url)
+    {
+        if (_unloaded.IsEmpty || string.IsNullOrEmpty(url)) return;
+
+        _unloaded.TryRemove(url, out _);
+    }
+
+    public void Tick(float deltaSeconds, bool animate)
     {
         if (_disposed) return;
 
         var frame = Interlocked.Increment(ref _frame);
+
+        if (animate && !_animated.IsEmpty)
+        {
+            var milliseconds = deltaSeconds * 1000d;
+            foreach (var wrap in _animated.Values)
+                wrap.Advance(milliseconds);
+        }
 
         while (_graveyard.TryPeek(out var pending) && frame - pending.Frame >= DisposeDelayFrames)
         {
@@ -85,7 +113,30 @@ public sealed class ChatboxImageCache : IDisposable
             catch (Exception ex) { Service.Log.Debug($"[Chatbox] Texture dispose failed: {ex.Message}"); }
         }
 
+        if (frame % 60 == 0) EvictIdleAnimations(frame);
         if (frame % 120 == 0) EvictOverflow(frame);
+    }
+
+    private void EvictIdleAnimations(long frame)
+    {
+        if (_animated.IsEmpty) return;
+
+        var seconds = _animationIdleSeconds();
+        if (seconds <= 0) return;
+
+        var cutoff = Environment.TickCount64 - seconds * 1000L;
+
+        foreach (var pair in _animated)
+        {
+            if (pair.Value.LastSeenMs > cutoff) continue;
+            if (!_animated.TryRemove(pair.Key, out _)) continue;
+
+            _lastUsed.TryRemove(pair.Key, out _);
+            _unloaded[pair.Key] = 0;
+
+            if (_textures.TryRemove(pair.Key, out var texture))
+                _graveyard.Enqueue((texture, frame));
+        }
     }
 
     private void EvictOverflow(long frame)
@@ -102,6 +153,7 @@ public sealed class ChatboxImageCache : IDisposable
         foreach (var url in stale)
         {
             _lastUsed.TryRemove(url, out _);
+            _animated.TryRemove(url, out _);
             if (_textures.TryRemove(url, out var wrap))
                 _graveyard.Enqueue((wrap, frame));
         }
@@ -153,7 +205,13 @@ public sealed class ChatboxImageCache : IDisposable
 
             _lastUsed[url] = Interlocked.Read(ref _frame);
             if (!_textures.TryAdd(url, wrap))
+            {
                 wrap.Dispose();
+                return;
+            }
+
+            if (wrap is AnimatedTextureWrap animated)
+                _animated[url] = animated;
         }
         catch (OperationCanceledException)
         {
@@ -178,7 +236,7 @@ public sealed class ChatboxImageCache : IDisposable
 
     private async Task<IDalamudTextureWrap?> CreateTextureWrapAsync(byte[] bytes, CancellationToken token)
     {
-        if (IsGifBytes(bytes))
+        if (_animationEnabled() && IsGifBytes(bytes))
         {
             try
             {
@@ -369,9 +427,29 @@ public sealed class ChatboxImageCache : IDisposable
             : $"{entries} image(s), {megabytes} MB";
     }
 
+    public void ResetTextures()
+    {
+        if (_disposed) return;
+
+        var frame = Interlocked.Read(ref _frame);
+        _animated.Clear();
+        _unloaded.Clear();
+
+        foreach (var url in _textures.Keys.ToArray())
+        {
+            if (_textures.TryRemove(url, out var wrap))
+                _graveyard.Enqueue((wrap, frame));
+        }
+
+        _lastUsed.Clear();
+        _failures.Clear();
+    }
+
     public void Clear()
     {
         _failures.Clear();
+        _animated.Clear();
+        _unloaded.Clear();
 
         var frame = Interlocked.Read(ref _frame);
         foreach (var url in _textures.Keys.ToArray())
@@ -423,6 +501,8 @@ public sealed class ChatboxImageCache : IDisposable
         }
 
         _textures.Clear();
+        _animated.Clear();
+        _unloaded.Clear();
 
         while (_graveyard.TryDequeue(out var pending))
         {

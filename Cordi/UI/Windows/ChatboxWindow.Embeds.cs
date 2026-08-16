@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
@@ -205,12 +205,15 @@ public sealed partial class ChatboxWindow
         if (embed.SiteName.Length == 0) return;
 
         var iconSize = ImGui.GetTextLineHeight();
+        Chatbox.ImageCache.Request(embed.IconUrl);
+
         var icon = Config.ImageCacheEnabled && !string.IsNullOrEmpty(embed.IconUrl)
             ? Chatbox.ImageCache.Get(embed.IconUrl)
             : null;
 
         if (icon != null)
         {
+            AnimatedTextureWrap.MarkVisible(icon, new Vector2(iconSize, iconSize));
             ImGui.Image(icon.Handle, new Vector2(iconSize, iconSize));
             ImGui.SameLine(0, _theme.Gap(0.35f));
         }
@@ -231,6 +234,7 @@ public sealed partial class ChatboxWindow
         }
 
         var origin = ImGui.GetCursorScreenPos();
+        AnimatedTextureWrap.MarkVisible(texture, new Vector2(width, height));
         ImGui.Image(texture.Handle, new Vector2(width, height));
 
         var imageMax = origin + new Vector2(width, height);
