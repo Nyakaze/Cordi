@@ -185,13 +185,13 @@ public sealed class ChatboxImageCache : IDisposable
 
             if (bytes is null)
             {
-                bytes = await DownloadAsync(url).ConfigureAwait(false);
+                bytes = await TryDownloadAsync(url).ConfigureAwait(false);
 
                 if (bytes is null || bytes.Length == 0)
                 {
                     var fallback = EmoteFallbackUrl(url);
                     if (fallback != null)
-                        bytes = await DownloadAsync(fallback).ConfigureAwait(false);
+                        bytes = await TryDownloadAsync(fallback).ConfigureAwait(false);
                 }
 
                 if (bytes is null || bytes.Length == 0)
@@ -314,6 +314,23 @@ public sealed class ChatboxImageCache : IDisposable
         return await Service.TextureProvider
             .CreateFromImageAsync(bytes, "Cordi.Chatbox", token)
             .ConfigureAwait(false);
+    }
+
+    private async Task<byte[]?> TryDownloadAsync(string url)
+    {
+        try
+        {
+            return await DownloadAsync(url).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            Service.Log.Debug($"[Chatbox] Image download failed for {url}: {ex.Message}");
+            return null;
+        }
     }
 
     private async Task<byte[]?> DownloadAsync(string url)

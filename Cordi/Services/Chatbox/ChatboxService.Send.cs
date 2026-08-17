@@ -50,7 +50,7 @@ public sealed partial class ChatboxService
 
     private bool SendToGame(ChatboxChannelState channel, string text, ChatboxReplyRef? reply)
     {
-        text = StripEmoteTokens(text);
+        text = EncodeEmojiForGame(StripEmoteTokens(text));
 
         var body = reply != null ? FormatGameReply(reply, text) : text;
 

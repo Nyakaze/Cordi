@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
@@ -24,6 +24,7 @@ public static class EmojiCatalog
 
     private static IReadOnlyList<EmojiCatalogGroup>? _groups;
     private static Dictionary<string, EmojiCatalogEntry>? _byGlyph;
+    private static Dictionary<string, EmojiCatalogEntry>? _byShortcode;
 
     public static IReadOnlyList<EmojiCatalogGroup> Groups
     {
@@ -40,6 +41,14 @@ public static class EmojiCatalog
 
         Ensure();
         return _byGlyph!.TryGetValue(glyph, out var entry) ? entry : null;
+    }
+
+    public static EmojiCatalogEntry? FindByShortcode(string? shortcode)
+    {
+        if (string.IsNullOrEmpty(shortcode)) return null;
+
+        Ensure();
+        return _byShortcode!.TryGetValue(shortcode, out var entry) ? entry : null;
     }
 
     public static void Search(string query, List<EmojiCatalogEntry> results, int limit)
@@ -74,6 +83,7 @@ public static class EmojiCatalog
 
         var groups = new List<EmojiCatalogGroup>();
         var byGlyph = new Dictionary<string, EmojiCatalogEntry>(StringComparer.Ordinal);
+        var byShortcode = new Dictionary<string, EmojiCatalogEntry>(StringComparer.OrdinalIgnoreCase);
 
         try
         {
@@ -109,6 +119,7 @@ public static class EmojiCatalog
 
                     current.Entries.Add(entry);
                     byGlyph.TryAdd(glyph, entry);
+                    if (entry.Shortcode.Length > 0) byShortcode.TryAdd(entry.Shortcode, entry);
                 }
             }
         }
@@ -119,6 +130,7 @@ public static class EmojiCatalog
 
         _groups = groups;
         _byGlyph = byGlyph;
+        _byShortcode = byShortcode;
     }
 
     private static string ToShortcode(string name)

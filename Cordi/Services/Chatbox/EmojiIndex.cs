@@ -12,10 +12,26 @@ public static class EmojiIndex
     private const int Keycap = 0x20E3;
 
     private static readonly Dictionary<string, string> ShortcodeToUnicode;
+    private static readonly Dictionary<string, string> UnicodeToShortcodeName;
 
     static EmojiIndex()
     {
         ShortcodeToUnicode = BuildShortcodeMap();
+        UnicodeToShortcodeName = BuildReverseMap(ShortcodeToUnicode);
+    }
+
+    private static Dictionary<string, string> BuildReverseMap(Dictionary<string, string> source)
+    {
+        var map = new Dictionary<string, string>(StringComparer.Ordinal);
+
+        foreach (var pair in source)
+        {
+            if (map.TryGetValue(pair.Value, out var existing) && existing.Length <= pair.Key.Length) continue;
+
+            map[pair.Value] = pair.Key;
+        }
+
+        return map;
     }
 
     private static Dictionary<string, string> BuildShortcodeMap()
@@ -284,8 +300,27 @@ public static class EmojiIndex
         { "poo", "\U0001F4A9" },
     };
 
-    public static bool TryGetShortcode(string name, out string unicode) =>
-        ShortcodeToUnicode.TryGetValue(name, out unicode!);
+    public static bool TryGetShortcode(string name, out string unicode)
+    {
+        if (ShortcodeToUnicode.TryGetValue(name, out unicode!)) return true;
+
+        var entry = EmojiCatalog.FindByShortcode(name);
+        if (entry == null || entry.Glyph.Length == 0) return false;
+
+        unicode = entry.Glyph;
+        return true;
+    }
+
+    public static bool TryGetShortcodeName(string cluster, out string name)
+    {
+        if (UnicodeToShortcodeName.TryGetValue(cluster, out name!)) return true;
+
+        var entry = EmojiCatalog.Find(cluster);
+        if (entry == null || entry.Shortcode.Length == 0) return false;
+
+        name = entry.Shortcode;
+        return true;
+    }
 
     private static bool TryCodepointAt(string text, int index, out int codepoint, out int length)
     {

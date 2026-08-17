@@ -682,6 +682,56 @@ public sealed partial class ChatboxService
         }
     }
 
+    public string EncodeEmojiForGame(string text)
+    {
+        if (string.IsNullOrEmpty(text)) return text;
+
+        var builder = new System.Text.StringBuilder(text.Length);
+
+        for (var i = 0; i < text.Length;)
+        {
+            if (!EmojiIndex.IsEmojiStart(text, i))
+            {
+                builder.Append(text[i]);
+                i++;
+                continue;
+            }
+
+            var length = EmojiIndex.MeasureCluster(text, i);
+            var cluster = text.Substring(i, length);
+
+            builder.Append(EmojiShortcodeForGame(cluster) ?? cluster);
+            i += length;
+        }
+
+        return builder.ToString();
+    }
+
+    private string? EmojiShortcodeForGame(string cluster)
+    {
+        var indexed = EmojiIndex.TryGetShortcodeName(cluster, out var shortName) ? shortName : null;
+        var catalog = EmojiCatalog.Find(cluster)?.Shortcode;
+
+        if (indexed != null && !IsCustomEmoteName(indexed)) return $":{indexed}:";
+        if (!string.IsNullOrEmpty(catalog) && !IsCustomEmoteName(catalog!)) return $":{catalog}:";
+
+        var fallback = catalog ?? indexed;
+
+        return string.IsNullOrEmpty(fallback) ? null : $":{fallback}:";
+    }
+
+    private bool IsCustomEmoteName(string name)
+    {
+        RefreshGuildEmotes();
+
+        lock (_guildEmoteGate)
+        {
+            if (_guildEmotes.ContainsKey(name)) return true;
+        }
+
+        return Emotes.FindByName(name) != null;
+    }
+
     public static string StripEmoteTokens(string text) =>
         string.IsNullOrEmpty(text)
             ? text
