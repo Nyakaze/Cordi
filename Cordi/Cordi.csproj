@@ -42,6 +42,10 @@
     <PackageReference Include="Vortice.Direct3D11" Version="3.8.2" />
     <PackageReference Include="Vortice.DXGI" Version="3.8.2" />
   </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Crovus\Crovus.csproj" />
+  </ItemGroup>
   <Target Name="CordiFlattenSqliteNative" AfterTargets="ResolveReferences">
     <ItemGroup>
       <CordiSqliteNative Include="@(ReferenceCopyLocalPaths)" Condition="'%(Filename)' == 'e_sqlite3' AND $([System.String]::Copy('%(ReferenceCopyLocalPaths.DestinationSubDirectory)').Contains('win-x64'))" />
