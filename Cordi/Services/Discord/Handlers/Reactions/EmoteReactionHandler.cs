@@ -2,7 +2,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Cordi.Core;
 using Cordi.Services.Discord.Dispatch;
-using DSharpPlus.EventArgs;
+using Crovus.Events;
 
 namespace Cordi.Services.Discord.Handlers.Reactions;
 
@@ -16,6 +16,6 @@ public class EmoteReactionHandler : IDiscordReactionHandler
         _plugin = plugin;
     }
 
-    public Task HandleAsync(MessageReactionAddEventArgs e, CancellationToken ct)
+    public Task HandleAsync(ReactionAddedEvent e, CancellationToken ct)
         => _plugin.EmoteLog.DiscordNotifier.OnDiscordReactionAdded(e);
 }

@@ -12,7 +12,7 @@ using Dalamud.Game.ClientState.Objects.Types;
 using Dalamud.Plugin.Services;
 using DSharpPlus;
 using DSharpPlus.Entities;
-using DSharpPlus.EventArgs;
+using Crovus.Events;
 using Lumina.Excel.Sheets;
 using Dalamud.Bindings.ImGui;
 using Cordi.Core;
@@ -550,37 +550,32 @@ public class CordiPeepService : IDisposable
         catch (Exception ex) { Service.Log.Error(ex, "Failed to initiate sound playback"); }
     }
 
-    public Task OnDiscordReactionAdded(MessageReactionAddEventArgs e)
+    public Task OnDiscordReactionAdded(ReactionAddedEvent e)
     {
-        if (e.User.IsBot) return Task.CompletedTask;
-
-        if (e.User.IsBot) return Task.CompletedTask;
-
         bool isEyes = e.Emoji.Name == "👀" ||
-                      e.Emoji.Name == "\ud83d\udc40" ||
-                      e.Emoji.GetDiscordName() == ":eyes:";
+                      e.Emoji.Name == "\ud83d\udc40";
 
         if (!isEyes)
         {
-            Service.Log.Debug($"[CordiPeep] Ignored reaction '{e.Emoji.Name}' ({e.Emoji.GetDiscordName()}) on msg {e.Message.Id}");
+            Service.Log.Debug($"[CordiPeep] Ignored reaction '{e.Emoji.Name}' on msg {e.MessageId}");
             return Task.CompletedTask;
         }
 
-        Service.Log.Info($"[CordiPeep] \ud83d\udc40 Processing reaction target for MsgID {e.Message.Id}...");
+        Service.Log.Info($"[CordiPeep] \ud83d\udc40 Processing reaction target for MsgID {e.MessageId}...");
 
         PeeperState peeper = null;
-        if (_messageIdCache.TryGet(e.Message.Id, out var cachedPeeper))
+        if (_messageIdCache.TryGet(e.MessageId, out var cachedPeeper))
         {
             peeper = cachedPeeper;
         }
         else
         {
-            peeper = ActivePeepers.Values.FirstOrDefault(p => p.DiscordMessageId == e.Message.Id);
+            peeper = ActivePeepers.Values.FirstOrDefault(p => p.DiscordMessageId == e.MessageId);
         }
 
         if (peeper == null)
         {
-            Service.Log.Warning($"[CordiPeep] \u274c FAILED: No peeper state found for MsgID {e.Message.Id}. Cache size: {_messageIdCache.Count}");
+            Service.Log.Warning($"[CordiPeep] \u274c FAILED: No peeper state found for MsgID {e.MessageId}. Cache size: {_messageIdCache.Count}");
             return Task.CompletedTask;
         }
 

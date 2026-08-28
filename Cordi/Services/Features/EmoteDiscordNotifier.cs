@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Concurrent;
 using System.Linq;
 using System.Threading.Tasks;
@@ -8,7 +8,7 @@ using Cordi.Services.Discord;
 using Dalamud.Plugin.Services;
 using DSharpPlus;
 using DSharpPlus.Entities;
-using DSharpPlus.EventArgs;
+using Crovus.Events;
 
 namespace Cordi.Services.Features;
 
@@ -142,14 +142,13 @@ public class EmoteDiscordNotifier
         return embedBuilder.Build();
     }
 
-    public async Task OnDiscordReactionAdded(MessageReactionAddEventArgs e)
+    public async Task OnDiscordReactionAdded(ReactionAddedEvent e)
     {
-        if (e.User.IsBot) return;
         if (e.Emoji.Name != "🔙") return;
 
-        if (!_messageIdCache.TryGet(e.Message.Id, out var state))
+        if (!_messageIdCache.TryGet(e.MessageId, out var state))
         {
-            state = _activeDiscordEmotes.Values.FirstOrDefault(x => x.MessageId == e.Message.Id);
+            state = _activeDiscordEmotes.Values.FirstOrDefault(x => x.MessageId == e.MessageId);
         }
 
         if (state == null) return;

@@ -12,5 +12,9 @@ public class ActivityManagerTickHandler : IFrameworkTickHandler
         _plugin = plugin;
     }
 
-    public void Tick(IFramework framework) => _plugin.ActivityManager.OnFrameworkUpdate(framework);
+    public void Tick(IFramework framework)
+    {
+        _plugin.PresenceWatcher.Sync();
+        _plugin.ActivityManager.OnFrameworkUpdate(framework);
+    }
 }

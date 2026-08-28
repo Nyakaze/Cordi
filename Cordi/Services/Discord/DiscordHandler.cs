@@ -54,7 +54,7 @@ public class DiscordHandler : IDisposable
             "discord.processedMessages", plugin.CacheRegistry,
             maxSize: 1000, ttl: TimeSpan.FromMinutes(10));
 
-        _intent = DiscordIntents.AllUnprivileged | DiscordIntents.MessageContents | DiscordIntents.Guilds | DiscordIntents.GuildWebhooks | DiscordIntents.GuildMessageReactions | DiscordIntents.GuildMembers | DiscordIntents.GuildPresences;
+        _intent = DiscordIntents.AllUnprivileged | DiscordIntents.MessageContents | DiscordIntents.Guilds | DiscordIntents.GuildWebhooks | DiscordIntents.GuildMessageReactions | DiscordIntents.GuildMembers;
     }
 
     private readonly Cordi.Core.Caching.Cache<ulong, DateTime> _processedMessages;
@@ -99,7 +99,6 @@ public class DiscordHandler : IDisposable
             _client.MessageCreated += MessageCreatedHandler;
             _client.MessageDeleted += MessageDeletedHandler;
             _client.MessageReactionAdded += MessageReactionAddedHandler;
-            _client.PresenceUpdated += OnPresenceUpdatedHandler;
             await _client.ConnectAsync();
             await Task.Yield();
             Logger.Info($"Discord handler started");
@@ -121,12 +120,6 @@ public class DiscordHandler : IDisposable
 
     public event Func<MessageReactionAddEventArgs, Task> OnReactionAdded;
     public event Func<MessageCreateEventArgs, Task> OnMessageCreated;
-    public event Func<DiscordClient, PresenceUpdateEventArgs, Task> OnPresenceUpdated;
-
-    private Task OnPresenceUpdatedHandler(DiscordClient sender, PresenceUpdateEventArgs e)
-    {
-        return OnPresenceUpdated?.Invoke(sender, e) ?? Task.CompletedTask;
-    }
 
     private async Task OnReady(DiscordClient sender, ReadyEventArgs e)
     {

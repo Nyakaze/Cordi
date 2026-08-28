@@ -103,12 +103,6 @@
         "resolved": "10.0.2",
         "contentHash": "zy8ey7I16G9neZ6uzxrnYwS7pidElzN8XarsBjGu7lE2m7afTKMEe18KbY3ZSmh/z/bR40oxjd6hlUcmOEaMHw=="
       },
-      "System.Windows.Extensions": {
-        "type": "Direct",
-        "requested": "[10.0.2, )",
-        "resolved": "10.0.2",
-        "contentHash": "FJEb7THQLoYQDSIfu656zidYmLFZTBE9gi/IdKpPV9KhGuMZL/xLpLpRNLr7WDt2oLNldae8Jp/1e2H+MPCxGg=="
-      },
       "Vortice.Direct3D11": {
         "type": "Direct",
         "requested": "[3.8.2, )",
@@ -190,8 +184,8 @@
       },
       "Microsoft.Extensions.DependencyInjection.Abstractions": {
         "type": "Transitive",
-        "resolved": "10.0.2",
-        "contentHash": "zOIurr59+kUf9vNcsUkCvKWZv+fPosUZXURZesYkJCvl0EzTc9F7maAO4Cd2WEV7ZJJ0AZrFQvuH6Npph9wdBw=="
+        "resolved": "10.0.4",
+        "contentHash": "SIe9zlVQJecnk/DTmevIcl6+aEDYhoVLc2eG2AKwVeNEC8CSyxHAbh4lf0xtHq9JUum0vVTEByGNTK+b6oihTQ=="
       },
       "Microsoft.Extensions.Logging": {
         "type": "Transitive",
@@ -205,10 +199,10 @@
       },
       "Microsoft.Extensions.Logging.Abstractions": {
         "type": "Transitive",
-        "resolved": "10.0.2",
-        "contentHash": "RZkez/JjpnO+MZ6efKkSynN6ZztLpw3WbxNzjLCPBd97wWj1S9ZYPWi0nmT4kWBRa6atHsdM1ydGkUr8GudyDQ==",
+        "resolved": "10.0.4",
+        "contentHash": "PDMMt7fvBatv6hcxxyJtXIzSwn7Dy00W6I2vDAOTYrQqNM2dF5A2L9n0uMzdPz2IPoNZWkAmYjoOCEdDLq0i4w==",
         "dependencies": {
-          "Microsoft.Extensions.DependencyInjection.Abstractions": "10.0.2"
+          "Microsoft.Extensions.DependencyInjection.Abstractions": "10.0.4"
         }
       },
       "Microsoft.Extensions.Logging.Configuration": {
@@ -356,6 +350,12 @@
         "type": "Transitive",
         "resolved": "2.1.0",
         "contentHash": "KK+SjNSuKdP+zbavekubi+vaeb1Jo4k87ZF6CMkVWjr6RjJwc8peVtmgzXXDIMy4ZC3ZISyk3llY3q65ISOkBQ=="
+      },
+      "crovus": {
+        "type": "Project",
+        "dependencies": {
+          "Microsoft.Extensions.Logging.Abstractions": "[10.0.4, )"
+        }
       }
     }
   }

@@ -2,7 +2,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Cordi.Core;
 using Cordi.Services.Discord.Dispatch;
-using DSharpPlus.EventArgs;
+using Crovus.Events;
 
 namespace Cordi.Services.Discord.Handlers.Messages;
 
@@ -16,10 +16,10 @@ public class ChatboxRelayHandler : IDiscordMessageHandler
         _plugin = plugin;
     }
 
-    public Task HandleAsync(MessageCreateEventArgs e, CancellationToken ct)
+    public Task HandleAsync(MessageCreatedEvent e, CancellationToken ct)
     {
         if (_plugin.Config.Chatbox.Enabled)
-            _plugin.Chatbox?.IngestDiscordMessage(e.Message, e.Channel.Id);
+            _plugin.Chatbox?.IngestDiscordMessage(e);
 
         return Task.CompletedTask;
     }

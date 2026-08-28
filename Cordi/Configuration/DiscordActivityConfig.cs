@@ -1,5 +1,5 @@
 using System;
-using DSharpPlus.Entities;
+using Crovus.Models;
 using System.Collections.Generic;
 
 namespace Cordi.Configuration;

@@ -11,7 +11,8 @@ using Cordi.Services.Discord;
 using Dalamud.Game.Text;
 using Dalamud.Game.Text.SeStringHandling;
 using Dalamud.Game.Text.SeStringHandling.Payloads;
-using DSharpPlus.Entities;
+using Crovus.Events;
+using Crovus.Models;
 
 namespace Cordi.Services.Chatbox;
 
@@ -293,10 +294,12 @@ public sealed partial class ChatboxService
         return segments;
     }
 
-    public void IngestDiscordMessage(DiscordMessage message, ulong channelId)
+    public void IngestDiscordMessage(MessageCreatedEvent e)
     {
-        if (_disposed || !Config.Enabled || message == null) return;
+        if (_disposed || !Config.Enabled || e == null) return;
 
+        var message = e.Message;
+        ulong channelId = e.ChannelId;
         var channelKey = channelId.ToString();
         var targets = Channels
             .Where(c => c.Config.DiscordChannelId == channelKey)
@@ -306,8 +309,8 @@ public sealed partial class ChatboxService
 
         var author = message.Author;
         var selfId = ParseSelfDiscordId();
-        var isBot = author != null && _plugin.Discord?.Client?.CurrentUser?.Id == author.Id;
-        var isSelf = (selfId != 0 && author?.Id == selfId) || isBot;
+        var isBot = _plugin.DiscordConnection.Session.IsSelf(author);
+        var isSelf = (selfId != 0 && author.Id == selfId) || isBot;
 
         // Check if this Discord channel is bridged to in-game chat (standard, extra chat, or tell)
         var isBridgedToGame = targets.Any(t => t.Config.GameChatTypes.Count > 0 || t.Config.SendToGame)
@@ -316,7 +319,7 @@ public sealed partial class ChatboxService
                               || _plugin.Config.Chat.TellThreadMappings.ContainsValue(channelKey);
 
         // 1. If this message is a Webhook message on a bridged channel, it's an echo of a game message already ingested by IngestGameMessage -> SKIP
-        if (message.WebhookMessage && isBridgedToGame)
+        if (message.IsWebhook && isBridgedToGame)
             return;
 
         // 2. If this Discord channel routes incoming Discord messages into the game chat via DiscordMessageRouter, skip ingesting it here because it will be ingested as an in-game message
@@ -331,17 +334,16 @@ public sealed partial class ChatboxService
         if (isSelf && isBridgedToGame)
             return;
 
-        var displayName = (message.Channel?.Guild != null && author is DiscordMember member && !string.IsNullOrEmpty(member.Nickname))
-            ? member.Nickname
-            : author?.Username ?? "unknown";
+        var displayName = (e.Guild != null && !string.IsNullOrEmpty(e.Member?.Nickname))
+            ? e.Member.Nickname
+            : author.DisplayName;
 
-        var avatarUrl = author?.AvatarUrl ?? author?.DefaultAvatarUrl;
+        var avatarUrl = author.AvatarUrl;
         var raw = message.Content ?? string.Empty;
-        var attachments = message.Attachments?.Select(a => a.Url).Where(u => !string.IsNullOrEmpty(u)).ToList()
-                          ?? new List<string>();
+        var attachments = message.Attachments.Select(a => a.Url).Where(u => !string.IsNullOrEmpty(u)).ToList();
 
-        var explicitlyMentioned = message.MentionEveryone
-                                  || (selfId != 0 && message.MentionedUsers?.Any(u => u?.Id == selfId) == true);
+        var explicitlyMentioned = message.MentionsEveryone
+                                  || (selfId != 0 && message.Mentions.Any(u => u.Id == selfId));
 
         foreach (var target in targets)
         {
@@ -352,7 +354,7 @@ public sealed partial class ChatboxService
             {
                 ChannelId = target.Id,
                 Origin = ChatboxOrigin.Discord,
-                AuthorKey = author?.Id.ToString() ?? displayName,
+                AuthorKey = author.Id.ToString(),
                 AuthorName = displayName,
                 AvatarUrl = avatarUrl,
                 DiscordMessageId = message.Id,
@@ -364,7 +366,7 @@ public sealed partial class ChatboxService
                 AuthorColor = target.Config.Color,
                 Attachments = attachments,
                 OnlyEmotes = parsed.OnlyEmotes,
-                Reply = BuildReplyRef(message.ReferencedMessage),
+                Reply = BuildReplyRef(message.ReplyTo),
             };
 
             Publish(target, entry);
@@ -493,8 +495,8 @@ public sealed partial class ChatboxService
         return new ChatboxReplyRef
         {
             DiscordMessageId = referenced.Id,
-            AuthorName = referenced.Author?.Username ?? "unknown",
-            AvatarUrl = referenced.Author?.AvatarUrl,
+            AuthorName = referenced.Author.DisplayName,
+            AvatarUrl = referenced.Author.AvatarUrl,
             Excerpt = Excerpt(referenced.Content ?? string.Empty, Config.ReplyExcerptLength),
         };
     }

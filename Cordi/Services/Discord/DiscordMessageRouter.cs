@@ -3,7 +3,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using Cordi.Core;
 using Dalamud.Plugin.Services;
-using DSharpPlus.Entities;
+using Crovus.Models;
 
 namespace Cordi.Services.Discord;
 

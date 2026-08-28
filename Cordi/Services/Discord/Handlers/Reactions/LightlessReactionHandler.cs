@@ -3,7 +3,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Cordi.Core;
 using Cordi.Services.Discord.Dispatch;
-using DSharpPlus.EventArgs;
+using Crovus.Events;
 
 namespace Cordi.Services.Discord.Handlers.Reactions;
 
@@ -17,26 +17,25 @@ public class LightlessReactionHandler : IDiscordReactionHandler
         _plugin = plugin;
     }
 
-    public async Task HandleAsync(MessageReactionAddEventArgs e, CancellationToken ct)
+    public async Task HandleAsync(ReactionAddedEvent e, CancellationToken ct)
     {
-        if (!LightlessConnectionMonitor.FeatureEnabled) return; // Feature retired from the UI.
+        if (!LightlessConnectionMonitor.FeatureEnabled) return;
 
         var monitor = _plugin.LightlessMonitor;
         if (monitor == null) return;
 
         Service.Log.Information(
             $"[LightlessReaction] got reaction emoji='{e.Emoji.Name}' " +
-            $"channel={e.Channel?.Id} msg={e.Message?.Id} user={e.User?.Id} bot={e.User?.IsBot} " +
+            $"channel={e.ChannelId} msg={e.MessageId} user={e.UserId} bot={e.User.IsBot} " +
             $"active=({monitor.ActiveNotifyChannelId}, {monitor.ActiveNotifyMessageId})");
 
-        if (e.User.IsBot) return;
         if (e.Emoji.Name != LightlessConnectionMonitor.ReconnectEmoji) return;
-        if (e.Channel.Id != monitor.ActiveNotifyChannelId) return;
-        if (e.Message.Id != monitor.ActiveNotifyMessageId) return;
+        if (e.ChannelId != monitor.ActiveNotifyChannelId) return;
+        if (e.MessageId != monitor.ActiveNotifyMessageId) return;
 
         try
         {
-            await monitor.HandleReconnectReactionAsync(e.Channel.Id, e.Message.Id);
+            await monitor.HandleReconnectReactionAsync(e.ChannelId, e.MessageId);
         }
         catch (Exception ex)
         {

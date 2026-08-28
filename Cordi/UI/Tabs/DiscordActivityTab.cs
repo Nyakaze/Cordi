@@ -7,7 +7,7 @@ using System.Linq;
 using System.Collections.Generic;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Interface.Utility.Raii;
-using DSharpPlus.Entities;
+using Crovus.Models;
 
 using Cordi.Configuration;
 using Cordi.Core;

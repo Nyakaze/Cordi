@@ -36,6 +36,8 @@ using Cordi.Core.Caching;
 using Cordi.Core.Scheduling;
 using Cordi.Domain;
 using Cordi.Services.Discord.Dispatch;
+using Cordi.Services.Discord.Presence;
+using DiscordConnection = Cordi.Services.Discord.Connection.DiscordConnection;
 using Cordi.Services.Discord.Queue;
 using Cordi.Services.Observations;
 using Cordi.Services.Chatbox;
@@ -81,7 +83,9 @@ public class CordiPlugin : IDalamudPlugin
     public PlayerTrackingService PlayerTracker { get; private set; } = null!;
     public PlayerObservationDispatcher PlayerObservations { get; private set; } = null!;
     public NearbyPlayerScanner NearbyScanner { get; private set; } = null!;
-    public DiscordEventDispatcher DiscordDispatcher { get; private set; } = null!;
+    public DiscordConnection DiscordConnection { get; private set; } = null!;
+    public DiscordEventPump DiscordDispatcher { get; private set; } = null!;
+    public DiscordPresenceWatcher PresenceWatcher { get; private set; } = null!;
     public DiscordSendQueue DiscordSendQueue { get; private set; } = null!;
     public FrameworkScheduler FrameworkScheduler { get; private set; } = null!;
     private IPlayerTrackingStorage _playerTrackingStorage = null!;
@@ -170,8 +174,10 @@ public class CordiPlugin : IDalamudPlugin
         RememberMe = new RememberMeService(this);
         ActivityManager = new ActivityManager(this, HonorificBridge);
 
-        DiscordDispatcher = new DiscordEventDispatcher(this);
+        DiscordConnection = new DiscordConnection(this);
+        DiscordDispatcher = new DiscordEventPump(this, DiscordConnection);
         DiscordDispatcher.Bind();
+        PresenceWatcher = new DiscordPresenceWatcher(this, DiscordConnection);
 
         DiscordSendQueue = new DiscordSendQueue(this);
         DiscordSendQueue.Start();
@@ -496,7 +502,9 @@ public class CordiPlugin : IDalamudPlugin
         this.RememberMe?.Dispose();
         this.FrameworkScheduler?.Dispose();
         this.NearbyScanner?.Dispose();
+        this.PresenceWatcher?.Dispose();
         this.DiscordDispatcher?.Dispose();
+        this.DiscordConnection?.DisposeAsync().AsTask().GetAwaiter().GetResult();
         this.DiscordSendQueue?.Dispose();
         this.LocalPlayer?.Dispose();
         this.PlayerTracker?.Dispose();

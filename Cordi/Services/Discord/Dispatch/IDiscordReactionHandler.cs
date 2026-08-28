@@ -1,10 +1,10 @@
 using System.Threading;
 using System.Threading.Tasks;
-using DSharpPlus.EventArgs;
+using Crovus.Events;
 
 namespace Cordi.Services.Discord.Dispatch;
 
 public interface IDiscordReactionHandler
 {
-    Task HandleAsync(MessageReactionAddEventArgs e, CancellationToken ct);
+    Task HandleAsync(ReactionAddedEvent e, CancellationToken ct);
 }

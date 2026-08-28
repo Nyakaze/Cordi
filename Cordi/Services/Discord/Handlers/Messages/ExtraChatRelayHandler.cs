@@ -2,7 +2,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Cordi.Core;
 using Cordi.Services.Discord.Dispatch;
-using DSharpPlus.EventArgs;
+using Crovus.Events;
 
 namespace Cordi.Services.Discord.Handlers.Messages;
 
@@ -16,8 +16,8 @@ public class ExtraChatRelayHandler : IDiscordMessageHandler
         _plugin = plugin;
     }
 
-    public async Task HandleAsync(MessageCreateEventArgs e, CancellationToken ct)
+    public async Task HandleAsync(MessageCreatedEvent e, CancellationToken ct)
     {
-        await _plugin.Discord.MessageRouter.RouteExtraChatMessage(e.Message, e.Channel.Id);
+        await _plugin.Discord.MessageRouter.RouteExtraChatMessage(e.Message, e.ChannelId);
     }
 }
