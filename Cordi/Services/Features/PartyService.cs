@@ -256,7 +256,6 @@ public class PartyService : IDisposable
             var classJob = classJobSheet?.GetRow(classJobId);
             var classJobAbbr = classJob?.Abbreviation.ToString() ?? string.Empty;
 
-            Service.Log.Info($"[PartyService] NotifyJoin: {name}@{world} (Job: {classJobAbbr}).");
             Log.Info(LogSource, $"Member joined: {name}@{world} [{classJobAbbr}] ({count}/8)");
 
             var message = $"**{name}@{world}** has joined the party. ({count}/8)";
@@ -386,9 +385,7 @@ public class PartyService : IDisposable
         }
         catch (Exception ex)
         {
-            Service.Log.Error(ex, $"Error fetching data for {member.Name}@{member.World}");
-            Log.Error(LogSource, $"Data fetch failed for {member.Name}@{member.World}: {ex.Message}");
-            // Ensure properties are set to stop any wait loops
+            Log.Error(LogSource, $"Data fetch failed for {member.Name}@{member.World}", ex);
             member.ItemLevel ??= 0;
             member.RaidActivity ??= new RaidActivity(Array.Empty<RaidEncounter>());
         }
@@ -432,8 +429,7 @@ public class PartyService : IDisposable
         }
         catch (Exception ex)
         {
-            Service.Log.Error(ex, "Error in NotifyLeave");
-            Log.Error(LogSource, $"Error in NotifyLeave: {ex.Message}");
+            Log.Error(LogSource, "Error in NotifyLeave", ex);
         }
     }
 

@@ -34,8 +34,7 @@ public class PlayerObservationDispatcher
             }
             catch (Exception ex)
             {
-                Service.Log.Error(ex, $"[ObservationDispatcher] {handler.GetType().Name} threw");
-                Log.Error(LogSource, $"{handler.GetType().Name} threw: {ex.Message}");
+                Log.Error(LogSource, $"{handler.GetType().Name} threw", ex);
             }
         }
     }

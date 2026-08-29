@@ -541,8 +541,7 @@ public class CordiPeepService : IDisposable
                 }
                 catch (Exception ex)
                 {
-                    Service.Log.Error(ex, "Error playing sound via NAudio");
-                    Log.Error(LogSource, $"Sound playback error: {ex.Message}");
+                    Log.Error(LogSource, "Sound playback error", ex);
                 }
             });
             _lastSoundPlayTime = DateTime.Now;
@@ -597,14 +596,12 @@ public class CordiPeepService : IDisposable
                         VisibilityBridge.UnhidePlayer(pc, allowVoided: true, isEmote: false);
                     }
                     Service.TargetManager.Target = target;
-                    Service.Log.Info($"[CordiPeep] \u2705 TARGETED: {target.Name} (ID: {target.GameObjectId:X})");
-                    Log.Info(LogSource, $"Targeted via reaction: {target.Name}");
+                    Log.Info(LogSource, $"Targeted via reaction: {target.Name} (ID: {target.GameObjectId:X})");
                     _ = UpdateEmbedTargetedBack(peeper);
                 }
                 else
                 {
-                    Service.Log.Warning($"[CordiPeep] \u26a0\ufe0f Could not find entity {peeper.Name}@{peeper.World} in object table.");
-                    Log.Warning(LogSource, $"Target not found: {peeper.Name}@{peeper.World}");
+                    Log.Warning(LogSource, $"Target not found in object table: {peeper.Name}@{peeper.World}");
                 }
             }
             catch (Exception ex)

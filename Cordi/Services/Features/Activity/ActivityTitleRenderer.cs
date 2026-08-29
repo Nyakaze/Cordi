@@ -6,20 +6,22 @@ namespace Cordi.Services.Activity;
 
 public static class ActivityTitleRenderer
 {
+    private const string LogSource = "Activity";
+
     public static string Render(DiscordActivity? activity, ActivityTypeConfig config, int cycleIndex,
-        IReadOnlyDictionary<string, string>? replacements, ActivityTrace trace)
+        IReadOnlyDictionary<string, string>? replacements, CordiLogService? log)
     {
-        var format = SelectFormat(config, cycleIndex, trace);
+        var format = SelectFormat(config, cycleIndex, log);
 
         if (string.IsNullOrEmpty(format))
         {
-            trace.Debug("Format string is empty — returning empty title.");
+            log?.Debug(LogSource, "Format string is empty — returning empty title.");
             return "";
         }
 
         var values = ActivityPlaceholders.From(activity).WithLimits(config).Sanitized();
 
-        trace.Debug(activity is null
+        log?.Debug(LogSource, activity is null
             ? "Rendering fallback custom activity."
             : $"Rendering {values}");
 
@@ -27,12 +29,12 @@ public static class ActivityTitleRenderer
 
         result = ActivityText.CollapseWhitespace(result);
 
-        trace.Debug($"Rendered title: \"{result}\"");
+        log?.Debug(LogSource, $"Rendered title: \"{result}\"");
 
         return result;
     }
 
-    private static string SelectFormat(ActivityTypeConfig config, int cycleIndex, ActivityTrace trace)
+    private static string SelectFormat(ActivityTypeConfig config, int cycleIndex, CordiLogService? log)
     {
         if (!config.EnableCycling
             || config.CycleFormats is not { } formats
@@ -40,7 +42,7 @@ public static class ActivityTitleRenderer
             || cycleIndex >= formats.Count)
             return config.Format;
 
-        trace.Debug($"Using cycle format [{cycleIndex}]: \"{formats[cycleIndex]}\"");
+        log?.Debug(LogSource, $"Using cycle format [{cycleIndex}]: \"{formats[cycleIndex]}\"");
 
         return formats[cycleIndex];
     }

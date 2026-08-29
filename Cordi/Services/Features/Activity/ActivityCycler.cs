@@ -5,13 +5,15 @@ namespace Cordi.Services.Activity;
 
 public sealed class ActivityCycler
 {
+    private const string LogSource = "Activity";
+
     private ActivityType? _type;
     private DateTime _lastSwap = DateTime.MinValue;
     private int _index = -1;
 
     public int Index => _index;
 
-    public void Advance(ActivityCandidate candidate, ActivityTrace trace)
+    public void Advance(ActivityCandidate candidate, CordiLogService? log)
     {
         var config = candidate.Config;
 
@@ -27,7 +29,7 @@ public sealed class ActivityCycler
             _lastSwap = DateTime.Now;
             _index = -1;
 
-            trace.Debug($"Cycling reset for new activity type {candidate.Type}.");
+            log?.Debug(LogSource, $"Cycling reset for new activity type {candidate.Type}.");
         }
 
         if ((DateTime.Now - _lastSwap).TotalSeconds < config.CycleIntervalSeconds) return;
@@ -38,7 +40,7 @@ public sealed class ActivityCycler
 
         _lastSwap = DateTime.Now;
 
-        trace.Debug($"Cycle advanced to index {_index}.");
+        log?.Debug(LogSource, $"Cycle advanced to index {_index}.");
     }
 
     public void Reset()

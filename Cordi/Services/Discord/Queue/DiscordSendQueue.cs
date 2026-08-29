@@ -165,8 +165,7 @@ public class DiscordSendQueue : IDisposable
             else
             {
                 Interlocked.Increment(ref _failed);
-                Service.Log.Error(ex, $"[DiscordQueue] '{op.Description}' permanently failed after {op.Attempts} attempt(s)");
-                Log.Error(LogSource, $"'{op.Description}' failed permanently after {op.Attempts} attempt(s): {ex.Message}");
+                Log.Error(LogSource, $"'{op.Description}' failed permanently after {op.Attempts} attempt(s)", ex);
                 try { op.OnPermanentFailure?.Invoke(ex); } catch { }
             }
         }

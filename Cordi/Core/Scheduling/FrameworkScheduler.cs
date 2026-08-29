@@ -59,8 +59,7 @@ public class FrameworkScheduler : IDisposable
             }
             catch (Exception ex)
             {
-                Service.Log.Error(ex, $"[FrameworkScheduler] {entry.Handler.GetType().Name} threw");
-                Log.Error(LogSource, $"{entry.Handler.GetType().Name} threw: {ex.Message}");
+                Log.Error(LogSource, $"{entry.Handler.GetType().Name} threw", ex);
             }
         }
     }

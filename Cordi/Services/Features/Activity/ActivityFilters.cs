@@ -6,7 +6,9 @@ namespace Cordi.Services.Activity;
 
 public static class ActivityFilters
 {
-    public static bool IsFilteredOut(ActivityPlaceholders values, ActivityTypeConfig config, ActivityTrace trace)
+    private const string LogSource = "Activity";
+
+    public static bool IsFilteredOut(ActivityPlaceholders values, ActivityTypeConfig config, CordiLogService? log)
     {
         if (config.Filters is not { Count: > 0 }) return false;
 
@@ -16,9 +18,9 @@ public static class ActivityFilters
 
             var fieldValue = values.Resolve(filter.TargetPlaceholder);
 
-            if (!Matches(filter, fieldValue, trace)) continue;
+            if (!Matches(filter, fieldValue, log)) continue;
 
-            trace.Debug($"Filter matched: {filter.TargetPlaceholder} {filter.Mode} '{filter.Value}' against '{fieldValue}'");
+            log?.Debug(LogSource, $"Filter matched: {filter.TargetPlaceholder} {filter.Mode} '{filter.Value}' against '{fieldValue}'");
 
             return true;
         }
@@ -26,7 +28,7 @@ public static class ActivityFilters
         return false;
     }
 
-    private static bool Matches(FilterRule filter, string fieldValue, ActivityTrace trace)
+    private static bool Matches(FilterRule filter, string fieldValue, CordiLogService? log)
     {
         try
         {
@@ -42,7 +44,7 @@ public static class ActivityFilters
         }
         catch (ArgumentException ex)
         {
-            trace.Warning($"Filter '{filter.Value}' ({filter.Mode}) is invalid and was ignored: {ex.Message}");
+            log?.Warning(LogSource, $"Filter '{filter.Value}' ({filter.Mode}) is invalid and was ignored: {ex.Message}");
 
             return false;
         }

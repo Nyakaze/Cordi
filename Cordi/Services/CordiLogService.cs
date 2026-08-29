@@ -28,14 +28,19 @@ public sealed class CordiLogService
 
     public int MaxEntries { get; set; } = 5000;
 
-    public void Log(string source, CordiLogLevel level, string message)
+    public void Log(string source, CordiLogLevel level, string message, Exception? exception = null,
+        bool mute = false)
     {
+        if (mute) return;
+
+        var text = exception is null ? message : $"{message}: {exception.Message}";
+
         var entry = new CordiLogEntry
         {
             Timestamp = DateTime.Now,
             Source = source,
             Level = level,
-            Message = message,
+            Message = text,
         };
 
         lock (_lock)
@@ -44,12 +49,53 @@ public sealed class CordiLogService
             if (_entries.Count > MaxEntries)
                 _entries.RemoveRange(0, _entries.Count - MaxEntries);
         }
+
+        Forward(source, level, text, exception);
     }
 
-    public void Debug(string source, string message) => Log(source, CordiLogLevel.Debug, message);
-    public void Info(string source, string message) => Log(source, CordiLogLevel.Info, message);
-    public void Warning(string source, string message) => Log(source, CordiLogLevel.Warning, message);
-    public void Error(string source, string message) => Log(source, CordiLogLevel.Error, message);
+    public void Debug(string source, string message, bool mute = false) =>
+        Log(source, CordiLogLevel.Debug, message, mute: mute);
+
+    public void Info(string source, string message, bool mute = false) =>
+        Log(source, CordiLogLevel.Info, message, mute: mute);
+
+    public void Warning(string source, string message, bool mute = false) =>
+        Log(source, CordiLogLevel.Warning, message, mute: mute);
+
+    public void Error(string source, string message, bool mute = false) =>
+        Log(source, CordiLogLevel.Error, message, mute: mute);
+
+    public void Error(string source, string message, Exception exception, bool mute = false) =>
+        Log(source, CordiLogLevel.Error, message, exception, mute);
+
+    private static void Forward(string source, CordiLogLevel level, string message, Exception? exception)
+    {
+        var log = Service.Log;
+
+        if (log is null) return;
+
+        var line = $"[{source}] {message}";
+
+        switch (level)
+        {
+            case CordiLogLevel.Debug:
+                log.Debug(line);
+                break;
+
+            case CordiLogLevel.Info:
+                log.Info(line);
+                break;
+
+            case CordiLogLevel.Warning:
+                log.Warning(line);
+                break;
+
+            default:
+                if (exception is null) log.Error(line);
+                else log.Error(exception, line);
+                break;
+        }
+    }
 
     public List<CordiLogEntry> GetEntries()
     {
