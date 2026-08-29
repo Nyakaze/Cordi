@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
@@ -34,7 +34,6 @@ public class CordiPeepTab : ConfigTabBase
         bool enabled = true;
 
 
-        plugin.ChannelCache.RefreshIfNeeded();
 
 
         DrawConfigCard(ref enabled);
@@ -104,7 +103,7 @@ public class CordiPeepTab : ConfigTabBase
                 theme.ChannelPicker(
                     "peepChannel",
                     plugin.Config.CordiPeep.DiscordChannelId,
-                    plugin.ChannelCache.TextChannels,
+                    plugin.Channels.TextChannels,
                     (newId) =>
                     {
                         plugin.Config.CordiPeep.DiscordChannelId = newId;

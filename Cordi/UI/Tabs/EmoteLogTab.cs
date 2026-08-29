@@ -1,4 +1,4 @@
-using Cordi.Services;
+﻿using Cordi.Services;
 using Dalamud.Interface;
 using Dalamud.Interface.Utility;
 using Dalamud.Bindings.ImGui;
@@ -35,7 +35,6 @@ public class EmoteLogTab : ConfigTabBase
         theme.SpacerY(2f);
 
 
-        plugin.ChannelCache.RefreshIfNeeded();
 
         bool enabled = true;
 
@@ -77,9 +76,9 @@ public class EmoteLogTab : ConfigTabBase
                 string currentId = plugin.Config.EmoteLog.ChannelId;
                 string preview = "None";
 
-                if (!string.IsNullOrEmpty(currentId) && plugin.ChannelCache.TextChannels != null)
+                if (!string.IsNullOrEmpty(currentId) && plugin.Channels.TextChannels != null)
                 {
-                    var ch = plugin.ChannelCache.TextChannels.FirstOrDefault(c => c.Id.ToString() == currentId);
+                    var ch = plugin.Channels.TextChannels.FirstOrDefault(c => c.Id.ToString() == currentId);
                     if (ch != null) preview = $"#{ch.Name}";
                     else preview = currentId;
                 }
@@ -87,7 +86,7 @@ public class EmoteLogTab : ConfigTabBase
                 theme.ChannelPicker(
                     "emoteLogChannel",
                     plugin.Config.EmoteLog.ChannelId,
-                    plugin.ChannelCache.TextChannels,
+                    plugin.Channels.TextChannels,
                     (newId) =>
                     {
                         plugin.Config.EmoteLog.ChannelId = newId;

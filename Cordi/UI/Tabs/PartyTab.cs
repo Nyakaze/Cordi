@@ -1,4 +1,4 @@
-using System.Linq;
+﻿using System.Linq;
 using System.Numerics;
 using System.Collections.Generic;
 using Cordi.Configuration;
@@ -26,7 +26,6 @@ public class PartyTab : ConfigTabBase
     {
         bool enabled = true;
 
-        plugin.ChannelCache.RefreshIfNeeded();
 
         DrawGeneralCard(ref enabled);
 
@@ -110,7 +109,7 @@ public class PartyTab : ConfigTabBase
                 theme.ChannelPicker(
                     "partyChannel",
                     plugin.Config.Party.DiscordChannelId,
-                    plugin.ChannelCache.TextChannels,
+                    plugin.Channels.TextChannels,
                     (newId) =>
                     {
                         plugin.Config.Party.DiscordChannelId = newId;

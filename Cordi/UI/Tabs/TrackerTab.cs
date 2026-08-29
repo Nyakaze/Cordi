@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
@@ -27,7 +27,6 @@ public class TrackerTab : ConfigTabBase
     protected override IReadOnlyList<(string Label, Action Draw)> GetSubTabs()
     {
         bool enabled = true;
-        plugin.ChannelCache.RefreshIfNeeded();
         
         var tabs = new List<(string Label, Action Draw)>
         {
@@ -350,7 +349,7 @@ public class TrackerTab : ConfigTabBase
                 theme.ChannelPicker(
                     "peepChannel",
                     plugin.Config.CordiPeep.DiscordChannelId,
-                    plugin.ChannelCache.TextChannels,
+                    plugin.Channels.TextChannels,
                     (newId) =>
                     {
                         plugin.Config.CordiPeep.DiscordChannelId = newId;
@@ -897,9 +896,9 @@ public class TrackerTab : ConfigTabBase
                 string currentId = plugin.Config.EmoteLog.ChannelId;
                 string preview = "None";
 
-                if (!string.IsNullOrEmpty(currentId) && plugin.ChannelCache.TextChannels != null)
+                if (!string.IsNullOrEmpty(currentId) && plugin.Channels.TextChannels != null)
                 {
-                    var ch = plugin.ChannelCache.TextChannels.FirstOrDefault(c => c.Id.ToString() == currentId);
+                    var ch = plugin.Channels.TextChannels.FirstOrDefault(c => c.Id.ToString() == currentId);
                     if (ch != null) preview = $"#{ch.Name}";
                     else preview = currentId;
                 }
@@ -907,7 +906,7 @@ public class TrackerTab : ConfigTabBase
                 theme.ChannelPicker(
                     "emoteLogChannel",
                     plugin.Config.EmoteLog.ChannelId,
-                    plugin.ChannelCache.TextChannels,
+                    plugin.Channels.TextChannels,
                     (newId) =>
                     {
                         plugin.Config.EmoteLog.ChannelId = newId;

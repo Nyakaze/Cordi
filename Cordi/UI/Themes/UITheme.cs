@@ -1566,7 +1566,7 @@ public sealed class UiTheme
     public void ChannelPicker(
         string id,
         string currentId,
-        IReadOnlyList<DSharpPlus.Entities.DiscordChannel>? channels,
+        IReadOnlyList<Crovus.Models.DiscordChannel>? channels,
         Action<string> onWaitSelection,
         string defaultLabel = "None",
         bool showLabel = true,
@@ -1608,7 +1608,6 @@ public sealed class UiTheme
                     foreach (var channel in channels)
                     {
                         bool isSelected = channel.Id.ToString() == currentId;
-                        // Use ID in label to prevent ImGui ID collisions with identical channel names
                         if (ImGui.Selectable($"#{channel.Name}##{channel.Id}", isSelected))
                         {
                             onWaitSelection(channel.Id.ToString());

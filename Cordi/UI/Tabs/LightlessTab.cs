@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Numerics;
 using Cordi.Core;
 using Cordi.Services;
@@ -84,11 +84,10 @@ public class LightlessTab : ConfigTabBase
 
                 using (ImRaii.Disabled(!enabled))
                 {
-                    plugin.ChannelCache.RefreshIfNeeded();
                     theme.ChannelPicker(
                         "lightless-channel",
                         plugin.Config.Lightless.DiscordChannelId,
-                        plugin.ChannelCache.TextChannels,
+                        plugin.Channels.TextChannels,
                         (newId) =>
                         {
                             plugin.Config.Lightless.DiscordChannelId = newId;

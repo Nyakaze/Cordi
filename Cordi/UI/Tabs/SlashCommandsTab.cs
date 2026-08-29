@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
@@ -75,7 +75,7 @@ public class SlashCommandsTab : ConfigTabBase
 
                 // Command Channel restriction
                 ImGui.TextColored(theme.MutedText, "Restrict to Channel (optional):");
-                var textChannels = plugin.ChannelCache.TextChannels;
+                var textChannels = plugin.Channels.TextChannels;
                 theme.ChannelPicker(
                     "slash-cmd-channel",
                     config.CommandChannelId,

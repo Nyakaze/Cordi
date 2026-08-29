@@ -50,22 +50,16 @@ public class DiscordHandler : IDisposable
         _webhooks = webhooks;
         _adFilter = adFilter;
         _messageRouter = new DiscordMessageRouter(plugin);
-        _processedMessages = new Cordi.Core.Caching.Cache<ulong, DateTime>(
-            "discord.processedMessages", plugin.CacheRegistry,
-            maxSize: 1000, ttl: TimeSpan.FromMinutes(10));
 
         _intent = DiscordIntents.AllUnprivileged | DiscordIntents.MessageContents | DiscordIntents.Guilds | DiscordIntents.GuildWebhooks | DiscordIntents.GuildMessageReactions | DiscordIntents.GuildMembers;
     }
-
-    private readonly Cordi.Core.Caching.Cache<ulong, DateTime> _processedMessages;
 
     public async Task Start()
     {
         if (string.IsNullOrEmpty(_plugin.Config.Discord.BotToken))
 
         {
-
-            Logger.Error("Token empty, cannot start bot.");
+            Log.Error(LogSource, "Bot token is empty. Please configure the bot token in the settings.");
             _plugin.Config.Discord.BotStarted = false;
             _plugin.Config.Save();
             return;
@@ -89,17 +83,11 @@ public class DiscordHandler : IDisposable
                 MinimumLogLevel = LogLevel.Debug,
             });
 
-            // Bind Cache
-            _plugin.ChannelCache.Bind(_client);
-
-            // Bind Slash Commands
             _plugin.SlashCommandService.Bind(_client);
 
             _client.Ready += OnReady;
-            _client.MessageCreated += MessageCreatedHandler;
-            _client.MessageDeleted += MessageDeletedHandler;
-            _client.MessageReactionAdded += MessageReactionAddedHandler;
             await _client.ConnectAsync();
+            await _plugin.DiscordConnection.StartAsync();
             await Task.Yield();
             Logger.Info($"Discord handler started");
             Log.Info(LogSource, "Bot connected successfully");
@@ -117,9 +105,6 @@ public class DiscordHandler : IDisposable
         }
         _plugin.Config.Save();
     }
-
-    public event Func<MessageReactionAddEventArgs, Task> OnReactionAdded;
-    public event Func<MessageCreateEventArgs, Task> OnMessageCreated;
 
     private async Task OnReady(DiscordClient sender, ReadyEventArgs e)
     {
@@ -140,42 +125,6 @@ public class DiscordHandler : IDisposable
                 Log.Error(LogSource, $"Failed to auto-register slash commands: {ex.Message}");
             }
         }
-    }
-
-    private Task MessageReactionAddedHandler(DiscordClient sender, MessageReactionAddEventArgs e)
-    {
-        Logger.Info($"[DiscordHandler] RAW REACTION: {e.Emoji.Name} by {e.User.Username} on Msg {e.Message.Id}");
-        if (e.User.IsBot) return Task.CompletedTask;
-        OnReactionAdded?.Invoke(e);
-        return Task.CompletedTask;
-    }
-
-    private Task MessageDeletedHandler(DiscordClient sender, MessageDeleteEventArgs e)
-    {
-        if (e.Message != null)
-            _plugin.Chatbox?.DeleteDiscordMessage(e.Message.Id);
-        return Task.CompletedTask;
-    }
-
-    private async Task MessageCreatedHandler(DiscordClient sender, MessageCreateEventArgs e)
-    {
-        if (sender != _client) return;
-        if (e.Author.IsBot || e.Message.WebhookMessage
-            || (sender.CurrentUser != null && e.Author.Id == sender.CurrentUser.Id)) return;
-
-        if (!_processedMessages.TryAdd(e.Message.Id, DateTime.UtcNow))
-        {
-            Logger.Debug($"[DiscordHandler {_instanceId}] Ignored duplicate message ID: {e.Message.Id}");
-            return;
-        }
-
-        Logger.Info($"[DiscordHandler {_instanceId}] Processing message {e.Message.Id} from {e.Author.Username} in {e.Channel.Name} ({e.Channel.Id})");
-        Log.Debug(LogSource, $"Received from {e.Author.Username} in #{e.Channel.Name}: {e.Message.Content}");
-
-        _plugin.Config.Stats.IncrementTotal();
-
-        if (OnMessageCreated != null)
-            await OnMessageCreated.Invoke(e);
     }
 
     public async Task SendMessage(DiscordChannel channel, Dalamud.Game.Text.SeStringHandling.SeString message, string senderName, string senderWorld, XivChatType chatType = XivChatType.None, string? correspondentName = null)
@@ -546,16 +495,15 @@ public class DiscordHandler : IDisposable
         Log.Info(LogSource, "Bot disconnecting...");
         Logger.Info($"[{_instanceId}] Disconnecting Discord client...");
 
-        _plugin.ChannelCache.Unbind();
         _plugin.SlashCommandService.Unbind();
 
+        await _plugin.DiscordConnection.StopAsync();
+
         await _client.DisconnectAsync();
-        _client.MessageCreated -= MessageCreatedHandler;
         _client.Ready -= OnReady;
         _client.Dispose();
         _client = null;
         _webhooks.ClearCache();
-        _processedMessages.Clear();
         Logger.Info("Discord client disconnected.");
         _plugin.Config.Discord.BotStarted = false;
         _plugin.Config.Save();

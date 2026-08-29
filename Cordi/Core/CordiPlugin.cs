@@ -37,6 +37,7 @@ using Cordi.Core.Scheduling;
 using Cordi.Domain;
 using Cordi.Services.Discord.Dispatch;
 using Cordi.Services.Discord.Presence;
+using Cordi.Services.Discord.Projections;
 using DiscordConnection = Cordi.Services.Discord.Connection.DiscordConnection;
 using Cordi.Services.Discord.Queue;
 using Cordi.Services.Observations;
@@ -64,7 +65,6 @@ public class CordiPlugin : IDalamudPlugin
     public HonorificBridge HonorificBridge { get; private set; }
     public LightlessBridge Lightless { get; private set; }
     public LightlessConnectionMonitor LightlessMonitor { get; private set; }
-    public DiscordChannelCache ChannelCache { get; private set; }
     public DiscordSlashCommandService SlashCommandService { get; private set; }
     public ScreenshotService Screenshot { get; private set; }
 
@@ -86,6 +86,7 @@ public class CordiPlugin : IDalamudPlugin
     public DiscordConnection DiscordConnection { get; private set; } = null!;
     public DiscordEventPump DiscordDispatcher { get; private set; } = null!;
     public DiscordPresenceWatcher PresenceWatcher { get; private set; } = null!;
+    public DiscordChannelProjection Channels { get; private set; } = null!;
     public DiscordSendQueue DiscordSendQueue { get; private set; } = null!;
     public FrameworkScheduler FrameworkScheduler { get; private set; } = null!;
     private IPlayerTrackingStorage _playerTrackingStorage = null!;
@@ -153,7 +154,6 @@ public class CordiPlugin : IDalamudPlugin
         Lodestone = new LodestoneService(this);
         Tomestone = new TomestoneService(this);
         Webhook = new DiscordWebhookService(this);
-        ChannelCache = new DiscordChannelCache(this);
         AdvertisementFilterService = new AdvertisementFilterService(this, Webhook);
         Discord = new DiscordHandler(this, Webhook, AdvertisementFilterService);
         Screenshot = new ScreenshotService();
@@ -178,6 +178,8 @@ public class CordiPlugin : IDalamudPlugin
         DiscordDispatcher = new DiscordEventPump(this, DiscordConnection);
         DiscordDispatcher.Bind();
         PresenceWatcher = new DiscordPresenceWatcher(this, DiscordConnection);
+        Channels = new DiscordChannelProjection(this, DiscordConnection);
+        Channels.Bind();
 
         DiscordSendQueue = new DiscordSendQueue(this);
         DiscordSendQueue.Start();
@@ -503,6 +505,7 @@ public class CordiPlugin : IDalamudPlugin
         this.FrameworkScheduler?.Dispose();
         this.NearbyScanner?.Dispose();
         this.PresenceWatcher?.Dispose();
+        this.Channels?.Dispose();
         this.DiscordDispatcher?.Dispose();
         this.DiscordConnection?.DisposeAsync().AsTask().GetAwaiter().GetResult();
         this.DiscordSendQueue?.Dispose();

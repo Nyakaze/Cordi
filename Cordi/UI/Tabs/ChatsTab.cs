@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
@@ -6,7 +6,7 @@ using Dalamud.Game.Text;
 using Dalamud.Interface;
 using Dalamud.Interface.Utility;
 using Dalamud.Interface.Utility.Raii;
-using DSharpPlus.Entities;
+using DiscordChannel = Crovus.Models.DiscordChannel;
 using Dalamud.Bindings.ImGui;
 using Cordi.Services;
 using Cordi.Core;
@@ -51,8 +51,8 @@ public class ChatsTab : ConfigTabBase
 
         var tabs = new List<(string Label, Action Draw)>
         {
-            ("Channel Mappings", () => DrawChatMappingsCard(plugin.ChannelCache.TextChannels, plugin.ChannelCache.ForumChannels, ref activeTellsExpanded)),
-            ("Active Conversations", () => DrawActiveTellsCard(plugin.ChannelCache.ForumChannels, ref activeTellsExpanded)),
+            ("Channel Mappings", () => DrawChatMappingsCard(plugin.Channels.TextChannels, plugin.Channels.ForumChannels, ref activeTellsExpanded)),
+            ("Active Conversations", () => DrawActiveTellsCard(plugin.Channels.ForumChannels, ref activeTellsExpanded)),
             ("Custom Avatars", () => DrawExistingAvatarsCard(ref existingAvatarsExpanded))
         };
 
@@ -60,7 +60,7 @@ public class ChatsTab : ConfigTabBase
         {
             tabs.Add(("ExtraChat Mappings", () =>
             {
-                DrawExtraChatMappingsCard(plugin.ChannelCache.TextChannels, ref extraChatExpanded, extraChatService);
+                DrawExtraChatMappingsCard(plugin.Channels.TextChannels, ref extraChatExpanded, extraChatService);
             }
             ));
         }
@@ -73,58 +73,13 @@ public class ChatsTab : ConfigTabBase
 
 
 
-    // public override void Draw()
-    // {
-    //     theme.SpacerY(2f);
-    //     bool enabled = true;
-    //
-    //
-    //     RefreshThreadCache();
-    //
-    //     var textChannels = plugin.ChannelCache.TextChannels;
-    //     var forumChannels = plugin.ChannelCache.ForumChannels;
-    //
-    //
-    //     DrawDefaultChannelCard(textChannels, ref enabled);
-    //
-    //     theme.SpacerY(2f);
-    //
-    //     ImGui.Separator();
-    //     theme.SpacerY(2f);
-    //
-    //     DrawActiveTellsCard(forumChannels, ref enabled);
-    //
-    //     theme.SpacerY(1f);
-    //
-    //
-    //     DrawExistingAvatarsCard(ref enabled);
-    //
-    //     theme.SpacerY(1f);
-    //
-    //     ImGui.Separator();
-    //     theme.SpacerY(2f);
-    //
-    //     DrawChatMappingsCard(textChannels, forumChannels, ref enabled);
-    //
-    //
-    //     if (extraChatService.IsExtraChatInstalled())
-    //     {
-    //
-    //         theme.SpacerY(2f);
-    //         ImGui.Separator();
-    //         theme.SpacerY(2f);
-    //
-    //         DrawExtraChatMappingsCard(textChannels, ref enabled, extraChatService);
-    //     }
-    // }
-
     private void RefreshThreadCache()
     {
         cachedAvailableThreads.Clear();
         var tellMap = plugin.Config.Chat.Mappings.FirstOrDefault(m => m.GameChatType == XivChatType.TellIncoming);
         if (tellMap != null && ulong.TryParse(tellMap.DiscordChannelId, out var forumId))
         {
-            cachedAvailableThreads = plugin.ChannelCache.GetThreadsForForum(forumId);
+            cachedAvailableThreads = new Dictionary<ulong, string>(plugin.Channels.GetThreadsForForum(forumId));
         }
     }
 
@@ -152,7 +107,6 @@ public class ChatsTab : ConfigTabBase
                         {
                             plugin.Config.Discord.DefaultChannelId = newId;
                             plugin.Config.Save();
-                            plugin.ChannelCache.Invalidate();
                         },
                         defaultLabel: "Select a Channel..."
                     );
@@ -462,7 +416,6 @@ public class ChatsTab : ConfigTabBase
                                        }
                                    }
                                    plugin.Config.Save();
-                                   plugin.ChannelCache.Invalidate();
                                },
                                showLabel: false
                            );
@@ -608,7 +561,7 @@ public class ChatsTab : ConfigTabBase
         {
             if (ulong.TryParse(value, out var cid))
             {
-                var name = plugin.ChannelCache.GetThreadName(cid);
+                var name = plugin.Channels.GetThreadName(cid);
                 if (ulong.TryParse(name, out _)) return value; // It's still just the ID
                 return $"#{name}";
             }
@@ -622,7 +575,7 @@ public class ChatsTab : ConfigTabBase
                 string preview = currentValue;
                 if (ulong.TryParse(currentValue, out var cid))
                 {
-                    var name = plugin.ChannelCache.GetThreadName(cid);
+                    var name = plugin.Channels.GetThreadName(cid);
                     if (!ulong.TryParse(name, out _)) preview = $"#{name}";
                 }
 
@@ -633,7 +586,7 @@ public class ChatsTab : ConfigTabBase
                     {
                         if (ulong.TryParse(currentValue, out var selectedId) && !availableThreads.ContainsKey(selectedId))
                         {
-                            var name = plugin.ChannelCache.GetThreadName(selectedId);
+                            var name = plugin.Channels.GetThreadName(selectedId);
                             if (ImGui.Selectable($"#{name}##{selectedId}", true)) { }
                             ImGui.Separator();
                         }
