@@ -70,19 +70,12 @@ public static class VisibilityBridge
 
     private static Assembly? _visibilityAssembly;
     private static Type? _pluginType;
-    private static Type? _voidItemType;
 
     private static object? GetMemberValue(object? obj, MemberInfo? member)
     {
         if (member is PropertyInfo prop) return prop.GetValue(obj);
         if (member is FieldInfo field) return field.GetValue(obj);
         return null;
-    }
-
-    private static void SetMemberValue(object? obj, MemberInfo? member, object? value)
-    {
-        if (member is PropertyInfo prop) prop.SetValue(obj, value);
-        else if (member is FieldInfo field) field.SetValue(obj, value);
     }
 
     private static MemberInfo? GetFieldOrProperty(Type type, string name)
@@ -415,7 +408,6 @@ public static class VisibilityBridge
     private static void ResetReflectionCaches()
     {
         _configMember = null;
-        _voidItemType = null;
         _enabledMember = null;
         _currentConfigMember = null;
         _hidePlayerMember = null;

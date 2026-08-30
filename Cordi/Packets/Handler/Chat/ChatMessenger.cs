@@ -188,9 +188,4 @@ public class ChatMessenger : IAsyncDisposable
         const string ell = "…";
         return s[..Math.Max(0, max - ell.Length)] + ell;
     }
-    private static string QuoteNameIfNeeded(string? target)
-    {
-        if (string.IsNullOrWhiteSpace(target)) return "\"\"";
-        return target.Any(char.IsWhiteSpace) ? $"\"{target}\"" : target;
-    }
 }

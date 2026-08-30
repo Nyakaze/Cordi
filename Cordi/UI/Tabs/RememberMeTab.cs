@@ -17,9 +17,6 @@ public class RememberMeTab : ConfigTabBase
     private string newPlayerNotes = string.Empty;
     private bool showAddNew = false;
 
-    private string editingPlayerKey = string.Empty;
-    private string editingNotes = string.Empty;
-
     private bool showRememberedPlayers = true;
 
     public override string Label => "Remember Me";

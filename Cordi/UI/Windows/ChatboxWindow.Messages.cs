@@ -294,56 +294,6 @@ public sealed partial class ChatboxWindow
         }
     }
 
-    private void DrawItemTooltip(ContentSegment segment)
-    {
-        var itemSheet = Service.DataManager.GetExcelSheet<Lumina.Excel.Sheets.Item>();
-        var item = itemSheet?.GetRowOrDefault(segment.ItemId);
-        if (item == null)
-        {
-            if (!string.IsNullOrEmpty(segment.TooltipText)) ImGui.SetTooltip(segment.TooltipText);
-            return;
-        }
-
-        using (ImRaii.Tooltip())
-        {
-            var itemName = item.Value.Name.ExtractText();
-            var isHq = segment.IsHq;
-            var iLvl = item.Value.LevelItem.Value.RowId;
-            var category = item.Value.ItemUICategory.Value.Name.ExtractText();
-            var desc = item.Value.Description.ExtractText();
-
-            if (segment.IconId > 0)
-            {
-                var iconWrap = Service.TextureProvider.GetFromGameIcon(new Dalamud.Interface.Textures.GameIconLookup(segment.IconId)).GetWrapOrDefault();
-                if (iconWrap != null)
-                {
-                    ImGui.Image(iconWrap.Handle, new Vector2(32f * ImGuiHelpers.GlobalScale, 32f * ImGuiHelpers.GlobalScale));
-                    ImGui.SameLine(0, 8f);
-                }
-            }
-
-            ImGui.BeginGroup();
-            ImGui.TextColored(new Vector4(0.85f, 0.95f, 1f, 1f), $"{itemName}{(isHq ? "  (HQ)" : "")}");
-            if (!string.IsNullOrEmpty(category) || iLvl > 0)
-            {
-                var meta = string.IsNullOrEmpty(category) ? $"iLvl {iLvl}" : $"{category}  •  iLvl {iLvl}";
-                ImGui.TextColored(new Vector4(0.7f, 0.7f, 0.7f, 1f), meta);
-            }
-            ImGui.EndGroup();
-
-            if (!string.IsNullOrWhiteSpace(desc))
-            {
-                ImGui.Separator();
-                ImGui.PushTextWrapPos(340f * ImGuiHelpers.GlobalScale);
-                ImGui.TextColored(new Vector4(0.85f, 0.85f, 0.85f, 1f), desc);
-                ImGui.PopTextWrapPos();
-            }
-
-            ImGui.Spacing();
-            ImGui.TextDisabled("Right-click to link in chat input");
-        }
-    }
-
     private void DrawStatusSegment(ContentSegment segment)
     {
         var color = new Vector4(0.50f, 0.95f, 0.65f, 1f);

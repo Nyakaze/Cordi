@@ -19,7 +19,6 @@ namespace Cordi.Services.Chatbox;
 
 public sealed partial class ChatboxService
 {
-    private static readonly Regex ShortcodeRegex = new(@":([A-Za-z0-9_+-]{2,32}):", RegexOptions.Compiled);
     private static readonly Regex EmoteTokenRegex = new(
         @"<(?<a>a?):(?<name>[A-Za-z0-9_~]{2,32}):(?<id>\d{5,25})>",
         RegexOptions.Compiled);

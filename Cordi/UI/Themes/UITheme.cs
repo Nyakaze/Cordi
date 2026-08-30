@@ -127,8 +127,6 @@ public sealed class UiTheme
     }
 
 
-    private const int WindowColorCount = 4;
-    private const int WindowVarCount = 3;
 
     private IDisposable? _activeWindowColorScope;
     private IDisposable? _activeWindowStyleScope;

@@ -488,12 +488,18 @@ public class CordiPlugin : IDalamudPlugin
         Service.PluginInterface.UiBuilder.OpenConfigUi -= this.ToggleConfigUI;
         Service.PluginInterface.UiBuilder.OpenMainUi -= this.ToggleConfigUI;
 
-        // Unregister framework/chat event handlers
         Service.Chat.ChatMessage -= ChatOnChatMessage;
         Service.ClientState.Login -= OnLoginEvent;
         Service.ClientState.Logout -= OnLogoutEvent;
 
-        this.Config?.Save();
+        try
+        {
+            this.Config?.Save();
+        }
+        catch (Exception ex)
+        {
+            LogService?.Error("Plugin", "Failed to save configuration during shutdown", ex);
+        }
 
         Service.PluginInterface.UiBuilder.Draw -= configWindow.Draw;
 
@@ -508,7 +514,5 @@ public class CordiPlugin : IDalamudPlugin
     }
     #endregion
 }
-
-internal interface IPacketHandlerAsync<T> { }
 
 

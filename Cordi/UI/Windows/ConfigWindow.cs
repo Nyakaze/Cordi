@@ -28,16 +28,12 @@ public sealed class ConfigWindow : Window, IDisposable
 
 
 
-    private GeneralTab generalTab;
     private ChatsTab chatsTab;
-    private CordiPeepTab cordiPeepTab;
 #if DEBUG
     private DebugTab debugTab;
 #endif
-    private EmoteLogTab emoteLogTab;
     private DiscordActivityTab discordActivityTab;
     private PartyAndPlayersTab partyAndPlayersTab;
-    private CombinedWindowTab combinedWindowTab;
     private SettingsTab settingsTab;
     private TrackerTab trackerTab;
     private SlashCommandsTab slashCommandsTab;
@@ -54,23 +50,18 @@ public sealed class ConfigWindow : Window, IDisposable
         this.plugin = plugin;
 
 
-        this.generalTab = new GeneralTab(plugin, theme);
         this.chatsTab = new ChatsTab(plugin, theme);
-        this.cordiPeepTab = new CordiPeepTab(plugin, theme);
-        this.emoteLogTab = new EmoteLogTab(plugin, theme);
         this.discordActivityTab = new DiscordActivityTab(plugin, theme);
 #if DEBUG
         this.debugTab = new DebugTab(plugin, theme);
 #endif
         this.partyAndPlayersTab = new PartyAndPlayersTab(plugin, theme);
-        this.combinedWindowTab = new CombinedWindowTab(plugin, theme);
         this.settingsTab = new SettingsTab(plugin, theme);
         this.trackerTab = new TrackerTab(plugin, theme);
         this.slashCommandsTab = new SlashCommandsTab(plugin, theme);
         this.chatboxTab = new ChatboxTab(plugin, theme);
         this.logsTab = new LogsTab(plugin, theme);
 
-        // Apply saved font settings
         UiTheme.GlobalFontScale = plugin.Config.Font.GlobalScale;
         UiTheme.GlobalFontBold = plugin.Config.Font.Bold;
 
@@ -152,13 +143,9 @@ public sealed class ConfigWindow : Window, IDisposable
                 }
 
                 theme.SpacerY(1f);
-                // DrawSidebarButton("General", 0);
                 DrawSidebarButton("Chats", 1, true);
                 DrawSidebarButton("Chatbox", 16);
                 DrawSidebarButton("Trackers", 8);
-                // DrawSidebarButton("Emote Log", 4);
-                // DrawSidebarButton("Peepers", 2);
-                // DrawSidebarButton("Combined", 9);
                 DrawSidebarButton("Activity", 5);
                 DrawSidebarButton("Party & Players", 6);
                 DrawSidebarButton("Slash Commands", 13);
@@ -181,16 +168,8 @@ public sealed class ConfigWindow : Window, IDisposable
 
             switch (selectedTab)
             {
-                case 0:
-                    generalTab.Draw();
-                    break;
-
                 case 1:
                     chatsTab.Draw();
-                    break;
-
-                case 2:
-                    cordiPeepTab.Draw();
                     break;
 
 #if DEBUG
@@ -198,9 +177,6 @@ public sealed class ConfigWindow : Window, IDisposable
                     debugTab.Draw();
                     break;
 #endif
-                case 4:
-                    emoteLogTab.Draw();
-                    break;
                 case 5:
                     discordActivityTab.Draw();
                     break;
@@ -211,10 +187,6 @@ public sealed class ConfigWindow : Window, IDisposable
 
                 case 8:
                     trackerTab.Draw();
-                    break;
-
-                case 9:
-                    combinedWindowTab.Draw();
                     break;
 
                 case 12:
@@ -245,7 +217,6 @@ public sealed class ConfigWindow : Window, IDisposable
 
         if (!showMessages && !showPeeps && !showEmotes) return;
 
-        // Calculate total width first
         float totalWidth = 0f;
         float spacing = 15f;
         string msgText = $"Msgs: {stats.TotalMessages}";
@@ -256,22 +227,17 @@ public sealed class ConfigWindow : Window, IDisposable
         if (showPeeps) totalWidth += (totalWidth > 0 ? spacing : 0) + ImGui.CalcTextSize(peepText).X;
         if (showEmotes) totalWidth += (totalWidth > 0 ? spacing : 0) + ImGui.CalcTextSize(emoteText).X;
 
-        // Get the badge rect (last item) for vertical alignment
         var min = ImGui.GetItemRectMin();
         var max = ImGui.GetItemRectMax();
 
-        // Calculate start X position (Right aligned)
-        // GetWindowContentRegionMax is relative to WindowPos
         float rightEdge = ImGui.GetWindowPos().X + ImGui.GetWindowContentRegionMax().X;
         float startX = rightEdge - totalWidth;
 
-        // Calculate Y position (Vertically centered)
         var centerY = (min.Y + max.Y) * 0.5f;
         var textY = centerY - ImGui.GetTextLineHeight() * 0.5f;
 
         ImGui.SetCursorScreenPos(new Vector2(startX, textY));
 
-        // Helper to draw a single stat
         void DrawStat(string label, long value, string tooltip)
         {
             ImGui.TextColored(theme.MutedText, $"{label}: {value}");

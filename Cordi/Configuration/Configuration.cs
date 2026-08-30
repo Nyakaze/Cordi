@@ -6,6 +6,7 @@ using Newtonsoft.Json.Linq;
 using System.Collections.Generic;
 using Dalamud.Game.Text;
 using System.IO;
+using System.Threading;
 
 namespace Cordi.Configuration;
 
@@ -32,6 +33,10 @@ public class Configuration : IPluginConfiguration
     public bool LogsTabVisible { get; set; }
 
 
+    private const int SaveRetryAttempts = 5;
+    private const int SaveRetryDelayMs = 25;
+
+    [JsonIgnore] private static readonly object SaveGate = new();
     [JsonIgnore] private IDalamudPluginInterface pluginInterface;
     [JsonIgnore] public string ConfigFilePath => Path.Combine(pluginInterface.ConfigDirectory.FullName, "Config.json");
     [JsonExtensionData] private IDictionary<string, JToken> _additionalData;
@@ -273,8 +278,32 @@ public class Configuration : IPluginConfiguration
 
     public void Save()
     {
-        BuildCache();
-        var json = JsonConvert.SerializeObject(this, Formatting.Indented);
-        File.WriteAllText(ConfigFilePath, json);
+        lock (SaveGate)
+        {
+            BuildCache();
+
+            var json = JsonConvert.SerializeObject(this, Formatting.Indented);
+            var path = ConfigFilePath;
+            var tempPath = path + ".tmp";
+
+            for (var attempt = 1; ; attempt++)
+            {
+                try
+                {
+                    File.WriteAllText(tempPath, json);
+
+                    if (File.Exists(path))
+                        File.Replace(tempPath, path, null);
+                    else
+                        File.Move(tempPath, path);
+
+                    return;
+                }
+                catch (IOException) when (attempt < SaveRetryAttempts)
+                {
+                    Thread.Sleep(SaveRetryDelayMs);
+                }
+            }
+        }
     }
 }

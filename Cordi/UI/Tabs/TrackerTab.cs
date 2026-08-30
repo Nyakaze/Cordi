@@ -1078,24 +1078,6 @@ public class TrackerTab : ConfigTabBase
     
     #region Combined Window
 
-    private void DrawCombinedGeneralCard(ref bool enabled)
-    {
-        theme.DrawPluginCardAuto(
-            id: "cordi-combinedwindow-general",
-            title: "General",
-            enabled: ref enabled,
-            drawContent: (avail) =>
-            {
-                bool cEnabled = plugin.Config.CombinedWindow.Enabled;
-                if (theme.ConfigCheckbox("Enable CombinedWindow Detection", ref cEnabled, () =>
-                {
-                    plugin.Config.CombinedWindow.Enabled = cEnabled;
-                    plugin.Config.Save();
-                })) { }
-            }
-        );
-    }
-
     private void DrawCombinedOverlayCard(ref bool enabled)
     {
         theme.DrawPluginCardAuto(
