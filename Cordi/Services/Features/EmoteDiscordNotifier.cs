@@ -4,11 +4,11 @@ using System.Linq;
 using System.Threading.Tasks;
 using Cordi.Core;
 using Cordi.Core.Caching;
+using Cordi.Domain;
 using Cordi.Services.Discord;
 using Dalamud.Plugin.Services;
-using DSharpPlus;
-using DSharpPlus.Entities;
 using Crovus.Events;
+using Crovus.Models;
 
 namespace Cordi.Services.Features;
 
@@ -37,15 +37,15 @@ public class EmoteDiscordNotifier
         _emoteBackAction = emoteBackAction;
     }
 
-    public async Task ProcessDiscordEmote(string name, string world, ulong gameObjectId, string emoteName, string command, int uiCount)
+    public async Task ProcessDiscordEmote(Player player, string emoteName, string command, int uiCount)
     {
         if (!_plugin.Config.EmoteLog.DiscordEnabled) return;
 
         if (string.IsNullOrEmpty(_plugin.Config.EmoteLog.ChannelId)) return;
         if (!ulong.TryParse(_plugin.Config.EmoteLog.ChannelId, out var channelId)) return;
-        if (_plugin.Discord?.Client == null) return;
+        if (_plugin.DiscordConnection.Context is null) return;
 
-        string key = $"{name}@{world}-{emoteName}";
+        string key = $"{player.FullName}-{emoteName}";
 
         bool updateExisting = false;
         EmoteLogService.DiscordEmoteState state = null;
@@ -69,23 +69,23 @@ public class EmoteDiscordNotifier
         {
             state = new EmoteLogService.DiscordEmoteState
             {
-                User = name,
-                World = world,
+                User = player.Name,
+                World = player.World,
                 EmoteName = emoteName,
                 Command = command,
                 Count = 1,
                 LastUpdate = DateTime.Now,
                 FirstSeen = DateTime.Now,
                 EmotedBack = false,
-                GameObjectId = gameObjectId
+                GameObjectId = player.GameObjectId ?? 0
             };
             _activeDiscordEmotes[key] = state;
         }
 
         try
         {
-            var avatarUrl = await _plugin.Lodestone.GetAvatarUrlAsync(name, world);
-            var lodestoneId = await _plugin.Lodestone.ResolveLodestoneIdAsync(name, world);
+            var avatarUrl = await _plugin.Lodestone.GetAvatarUrlAsync(player);
+            var lodestoneId = await _plugin.Lodestone.ResolveLodestoneIdAsync(player);
             var embed = BuildEmoteEmbed(state, lodestoneId, avatarUrl);
 
             if (updateExisting && state.MessageId != 0)
@@ -94,12 +94,12 @@ public class EmoteDiscordNotifier
             }
             else
             {
-                state.MessageId = await _plugin.Discord.SendWebhookMessage(channelId, embed, name, world);
+                state.MessageId = await _plugin.Discord.SendWebhookMessage(channelId, embed, player);
 
                 if (state.MessageId != 0)
                 {
                     _messageIdCache.Set(state.MessageId, state);
-                    await _plugin.Discord.AddReaction(channelId, state.MessageId, DiscordEmoji.FromUnicode("🔙"));
+                    await _plugin.Discord.AddReaction(channelId, state.MessageId, "🔙");
                 }
             }
         }
@@ -115,7 +115,7 @@ public class EmoteDiscordNotifier
             ? $"[{state.User}@{state.World}](https://na.finalfantasyxiv.com/lodestone/character/{lodestoneId}/)"
             : $"{state.User}@{state.World}";
 
-        var color = state.EmotedBack ? new DiscordColor(0x2ECC71) : new DiscordColor(0x5865F2);
+        var color = state.EmotedBack ? 0x2ECC71 : 0x5865F2;
         var title = "Emote Detected";
         var description = $"**{nameLink}** used **{state.EmoteName}** on you!";
         var footerText = state.EmotedBack ? "Interaction Complete" : "React with 🔙 to emote back";
@@ -165,12 +165,13 @@ public class EmoteDiscordNotifier
         {
             try
             {
-                var avatarUrl = await _plugin.Lodestone.GetAvatarUrlAsync(state.User, state.World);
-                var lodestoneId = await _plugin.Lodestone.ResolveLodestoneIdAsync(state.User, state.World);
+                var player = Player.FromNameWorld(state.User, state.World, state.GameObjectId);
+                var avatarUrl = await _plugin.Lodestone.GetAvatarUrlAsync(player);
+                var lodestoneId = await _plugin.Lodestone.ResolveLodestoneIdAsync(player);
                 var embed = BuildEmoteEmbed(state, lodestoneId, avatarUrl);
 
                 await _plugin.Discord.EditWebhookMessage(channelId, state.MessageId, embed);
-                await _plugin.Discord.RemoveReaction(channelId, state.MessageId, DiscordEmoji.FromUnicode("🔙"));
+                await _plugin.Discord.RemoveReaction(channelId, state.MessageId, "🔙");
             }
             catch (Exception ex) { _logger.Error(ex, "Failed to update embed after reaction."); }
         }

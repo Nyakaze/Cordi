@@ -1,9 +1,10 @@
-using System.Linq;
+﻿using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Cordi.Packets.Attributes;
 using Cordi.Services.Discord;
 using Cordi.Core;
+using Cordi.Domain;
 using Dalamud.Game.Text;
 using Dalamud.Game.Text.SeStringHandling;
 using Dalamud.Game.Text.SeStringHandling.Payloads;
@@ -88,8 +89,10 @@ public class DebugPacketHandler : IChatHandler
             {
                 try
                 {
-                    var channel = await discord.Client.GetChannelAsync(channelId);
-                    await discord.SendMessage(channel, content, name, world, XivChatType.Debug, avatarUrl: avatarUrl);
+                    var sender = Player.FromNameWorld(name, world);
+                    sender.AvatarUrl = avatarUrl;
+
+                    await discord.SendMessage(channelId, content, sender, XivChatType.Debug, avatarUrl: avatarUrl);
                 }
                 catch (System.Exception ex)
                 {

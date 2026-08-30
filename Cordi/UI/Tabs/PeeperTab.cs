@@ -5,8 +5,6 @@ using System.Numerics;
 using Cordi.Services;
 using Dalamud.Interface;
 using Dalamud.Interface.Utility;
-using DSharpPlus;
-using DSharpPlus.Entities;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Interface.Utility.Raii;
 

@@ -1,16 +1,17 @@
-using System;
+﻿using System;
 using Cordi.Extensions;
 using Dalamud.Game.ClientState.Objects.SubKinds;
 
 namespace Cordi.Domain;
 
-public sealed class Player : IEquatable<Player>
+public class Player : IEquatable<Player>
 {
     public string Name { get; }
     public string World { get; }
     public string FullName => $"{Name}@{World}";
 
     public string? LodestoneId { get; set; }
+    public string? AvatarUrl { get; set; }
     public ulong? GameObjectId { get; private set; }
     public ulong? ContentId { get; private set; }
 
@@ -19,7 +20,7 @@ public sealed class Player : IEquatable<Player>
     public byte? Gender { get; private set; }
     public string? FreeCompanyTag { get; private set; }
 
-    private Player(string name, string world, ulong? gameObjectId = null, string? lodestoneId = null)
+    protected Player(string name, string world, ulong? gameObjectId = null, string? lodestoneId = null)
     {
         Name = name ?? string.Empty;
         World = world ?? string.Empty;
@@ -27,8 +28,8 @@ public sealed class Player : IEquatable<Player>
         LodestoneId = lodestoneId;
     }
 
-    public static Player FromNameWorld(string name, string world)
-        => new(name, world);
+    public static Player FromNameWorld(string name, string world, ulong? gameObjectId = null)
+        => new(name, world, gameObjectId);
 
     public static Player FromGameObject(IPlayerCharacter pc)
     {
@@ -49,7 +50,7 @@ public sealed class Player : IEquatable<Player>
         return player;
     }
 
-    private unsafe void PopulateContentIdAndCustomize(IPlayerCharacter pc)
+    protected unsafe void PopulateContentIdAndCustomize(IPlayerCharacter pc)
     {
         try
         {
@@ -69,7 +70,7 @@ public sealed class Player : IEquatable<Player>
         }
     }
 
-    private void PopulateCompanyTag(IPlayerCharacter pc)
+    protected void PopulateCompanyTag(IPlayerCharacter pc)
     {
         try
         {

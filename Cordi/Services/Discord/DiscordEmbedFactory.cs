@@ -1,7 +1,8 @@
 using System;
 using System.Threading.Tasks;
+using Cordi.Domain;
 using Cordi.Services.Features;
-using DSharpPlus.Entities;
+using Crovus.Factory;
 
 namespace Cordi.Services.Discord;
 
@@ -14,23 +15,22 @@ public class DiscordEmbedFactory
         _lodestone = lodestone;
     }
 
-    public async Task<DiscordEmbedBuilder> CreatePlayerEmbedBuilderAsync(
+    public async Task<EmbedFactory> CreatePlayerEmbedBuilderAsync(
         string title,
         string description,
-        DiscordColor color,
-        string? playerName = null,
-        string? playerWorld = null,
+        int color,
+        Player? player = null,
         string? footer = null)
     {
-        var builder = new DiscordEmbedBuilder()
+        var builder = EmbedFactory.Create()
             .WithTitle(title)
             .WithDescription(description)
             .WithColor(color)
-            .WithTimestamp(DateTime.Now);
+            .WithTimestamp(DateTimeOffset.Now);
 
-        if (!string.IsNullOrEmpty(playerName) && !string.IsNullOrEmpty(playerWorld))
+        if (player is not null)
         {
-            var avatarUrl = await _lodestone.GetAvatarUrlAsync(playerName, playerWorld);
+            var avatarUrl = await _lodestone.GetAvatarUrlAsync(player);
             if (!string.IsNullOrEmpty(avatarUrl))
                 builder.WithThumbnail(avatarUrl);
         }
@@ -41,18 +41,18 @@ public class DiscordEmbedFactory
         return builder;
     }
 
-    public DiscordEmbedBuilder CreateEmbedBuilder(
+    public EmbedFactory CreateEmbedBuilder(
         string title,
         string description,
-        DiscordColor color,
+        int color,
         string? thumbnailUrl = null,
         string? footer = null)
     {
-        var builder = new DiscordEmbedBuilder()
+        var builder = EmbedFactory.Create()
             .WithTitle(title)
             .WithDescription(description)
             .WithColor(color)
-            .WithTimestamp(DateTime.Now);
+            .WithTimestamp(DateTimeOffset.Now);
 
         if (!string.IsNullOrEmpty(thumbnailUrl))
             builder.WithThumbnail(thumbnailUrl);

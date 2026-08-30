@@ -306,7 +306,6 @@ public partial class ChatboxTab : ConfigTabBase
         {
             Check("Enable Replies", () => Cfg.EnableReplies, v => Cfg.EnableReplies = v);
             Check("Show Reply Preview above Message", () => Cfg.ShowReplyPreview, v => Cfg.ShowReplyPreview = v);
-            Check("Ping the Author on Discord Replies", () => Cfg.PingOnDiscordReply, v => Cfg.PingOnDiscordReply = v);
             SliderInt("Reply Excerpt Length", () => Cfg.ReplyExcerptLength, v => Cfg.ReplyExcerptLength = v, 16, 200);
             TextField("Game Reply Format", () => Cfg.GameReplyFormat, v => Cfg.GameReplyFormat = v, 128);
             ImGui.TextDisabled("Tokens: {name}, {excerpt}, {message}");

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using Dalamud.Plugin.Services;
 
 namespace Cordi.Domain;
@@ -7,9 +7,9 @@ public class LocalPlayerProvider : IDisposable
 {
     private bool _disposed;
 
-    public Player? Current { get; private set; }
+    public LocalPlayer? Current { get; private set; }
 
-    public event Action<Player>? OnLogin;
+    public event Action<LocalPlayer>? OnLogin;
     public event Action? OnLogout;
 
     public LocalPlayerProvider()
@@ -35,9 +35,12 @@ public class LocalPlayerProvider : IDisposable
 
         if (Current == null || Current.GameObjectId != lp.GameObjectId)
         {
-            Current = Player.FromGameObject(lp);
+            Current = LocalPlayer.From(lp);
             OnLogin?.Invoke(Current);
+            return;
         }
+
+        Current.Refresh(lp);
     }
 
     private void HandleLogout(int type, int code)

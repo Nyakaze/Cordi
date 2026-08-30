@@ -6,8 +6,6 @@ using System.Numerics;
 using System;
 using System.Linq;
 using System.Collections.Generic;
-using DSharpPlus;
-using DSharpPlus.Entities;
 using Dalamud.Interface.Utility.Raii;
 using ECommons.ImGuiMethods;
 

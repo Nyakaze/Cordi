@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using Cordi.Services;
 using Cordi.Services.Discord;
 using Cordi.Core;
+using Cordi.Domain;
 using Dalamud.Game.Text;
 using Dalamud.Game.Text.SeStringHandling;
 using Dalamud.Game.Text.SeStringHandling.Payloads;
@@ -28,8 +29,7 @@ public abstract class ChatHandlerBase : IChatHandler
                 await discord.SendMessage(
                     null,
                     msg.Message,
-                    CordiPlugin.Plugin.cachedLocalPlayer.Name.TextValue,
-                    CordiPlugin.Plugin.cachedLocalPlayer.HomeWorld.Value.Name.ExtractText(),
+                    CordiPlugin.Plugin.LocalPlayer.Current ?? Player.FromGameObject(CordiPlugin.Plugin.cachedLocalPlayer),
                     ChatType
                 );
                 return Task.CompletedTask;
@@ -44,8 +44,7 @@ public abstract class ChatHandlerBase : IChatHandler
             await discord.SendMessage(
                 null,
                 msg.Message,
-                playerLink.PlayerName,
-                playerLink.World.Value.Name.ExtractText(),
+                Player.FromNameWorld(playerLink.PlayerName, playerLink.World.Value.Name.ExtractText()),
                 ChatType
             );
         }

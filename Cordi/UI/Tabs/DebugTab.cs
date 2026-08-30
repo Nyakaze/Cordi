@@ -14,6 +14,7 @@ using Dalamud.Bindings.ImGui;
 using System.Collections.Generic;
 
 using Cordi.Core;
+using Cordi.Domain;
 using Cordi.UI.Themes;
 using Cordi.Configuration;
 
@@ -502,7 +503,7 @@ public class DebugTab : ConfigTabBase
                     var parts = sendUser.Split('@');
                     var name = parts[0];
                     var world = parts.Length > 1 ? parts[1] : "Unknown";
-                    _ = plugin.Discord.SendMessage(null, sendTestMessage, name, world, selectedChatType);
+                    _ = plugin.Discord.SendMessage(null, sendTestMessage, Player.FromNameWorld(name, world), selectedChatType);
                 }
                 theme.HoverHandIfItem();
                 if (ImGui.IsItemHovered()) ImGui.SetTooltip("Triggers the 'SendMessage' method as if caught from game chat.");

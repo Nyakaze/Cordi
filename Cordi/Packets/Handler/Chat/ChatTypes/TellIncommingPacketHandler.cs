@@ -48,17 +48,17 @@ public class TellIncommingPacketHandler : IChatHandler
 
         if (playerLink != null && !string.IsNullOrEmpty(correspondent))
         {
-            var senderName = playerLink.PlayerName ?? string.Empty;
-            var senderWorld = playerLink.World.Value.Name.ExtractText();
+            var sender = Player.FromNameWorld(playerLink.PlayerName ?? string.Empty,
+                playerLink.World.Value.Name.ExtractText());
 
             _ = CordiPlugin.Plugin.PlayerObservations.FireAsync(new PlayerObservation(
-                Player.FromNameWorld(senderName, senderWorld),
+                sender,
                 new ObservationContext(
                     Source: ObservationSource.Tell,
                     TerritoryId: (uint)Service.ClientState.TerritoryType,
                     At: System.DateTime.UtcNow)));
 
-            await discord.SendMessage(null, msg.Message, senderName, senderWorld, ChatType, correspondent);
+            await discord.SendMessage(null, msg.Message, sender, ChatType, correspondent);
 
             var now = System.DateTime.UtcNow;
             bool shouldNotify = false;
@@ -83,7 +83,7 @@ public class TellIncommingPacketHandler : IChatHandler
 
                 string notifMsg = $"U got a Tell from {correspondent} {link}";
                 Logger.Info($"Sending Tell Notification to {notifChannelId}: {notifMsg} | correspondent: {correspondent} | link: {link}");
-                _ = discord.SendWebhookMessage(notifChannelId, notifMsg, senderName, senderWorld);
+                _ = discord.SendWebhookMessage(notifChannelId, notifMsg, sender);
             }
         }
 

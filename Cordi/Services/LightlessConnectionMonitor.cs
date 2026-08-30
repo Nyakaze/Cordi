@@ -1,10 +1,11 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Cordi.Core;
-using DSharpPlus.Entities;
+using Crovus.Factory;
+using Crovus.Models;
 
 namespace Cordi.Services;
 
@@ -296,13 +297,13 @@ public class LightlessConnectionMonitor : IDisposable
             ? "\n*Auto-reconnect is active and will attempt to restore connection shortly.*"
             : $"\nReact with {ReconnectEmoji} to manually attempt a reconnect.";
 
-        var embed = new DiscordEmbedBuilder()
+        var embed = EmbedFactory.Create()
             .WithTitle("Lightless Sync Disconnected")
             .WithDescription($"### Connection Drop Detected\n" +
                              $"**State:** `{raw}`\n" +
                              $"{autoReconnectStatus}\n\n" +
                              $"*This notification will be automatically deleted once the bridge goes back online.*")
-            .WithColor(new DiscordColor(0xF23F43))
+            .WithColor(0xF23F43)
             .WithFooter("Cordi Alert System")
             .WithTimestamp(DateTimeOffset.UtcNow)
             .Build();
@@ -320,7 +321,7 @@ public class LightlessConnectionMonitor : IDisposable
 
         try
         {
-            await _plugin.Discord.AddReaction(channelId, msgId, DiscordEmoji.FromUnicode(ReconnectEmoji))
+            await _plugin.Discord.AddReaction(channelId, msgId, ReconnectEmoji)
                                  .ConfigureAwait(false);
         }
         catch (Exception ex)
@@ -333,13 +334,13 @@ public class LightlessConnectionMonitor : IDisposable
     {
         var (color, dot, headline) = cls switch
         {
-            StateClass.Connected    => (new DiscordColor(0x23A55A), "🟢", "Online"),
-            StateClass.Transient    => (new DiscordColor(0xF0B232), "🟡", "Reconnecting"),
-            StateClass.Disconnected => (new DiscordColor(0xF23F43), "🔴", "Offline"),
-            _                        => (new DiscordColor(0x747F8D), "⚪", "Unknown"),
+            StateClass.Connected    => (0x23A55A, "🟢", "Online"),
+            StateClass.Transient    => (0xF0B232, "🟡", "Reconnecting"),
+            StateClass.Disconnected => (0xF23F43, "🔴", "Offline"),
+            _                        => (0x747F8D, "⚪", "Unknown"),
         };
 
-        var builder = new DiscordEmbedBuilder()
+        var builder = EmbedFactory.Create()
             .WithTitle("Lightless Sync Bridge")
             .WithColor(color)
             .WithFooter("Cordi Integration • Last updated")
@@ -448,14 +449,14 @@ public class LightlessConnectionMonitor : IDisposable
             ? "Reconnect dispatched — waiting for Lightless to report Connected."
             : "Reconnect failed — deep integration could not invoke Lightless reconnect.";
 
-        var embed = new DiscordEmbedBuilder()
+        var embed = EmbedFactory.Create()
             .WithTitle("Lightless Sync Disconnected")
             .WithDescription($"### Connection Drop Detected\n" +
                              $"**State:** `{stateRaw}`\n\n" +
                              $"**Last Action:**\n" +
                              $"{note} (<t:{DateTimeOffset.UtcNow.ToUnixTimeSeconds()}:R>)\n\n" +
                              $"*This notification will be automatically deleted once the bridge goes back online.*")
-            .WithColor(new DiscordColor(ok ? 0xF0B232 : 0xF23F43))
+            .WithColor(ok ? 0xF0B232 : 0xF23F43)
             .WithFooter("Cordi Alert System")
             .WithTimestamp(DateTimeOffset.UtcNow)
             .Build();

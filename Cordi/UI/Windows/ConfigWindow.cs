@@ -8,8 +8,6 @@ using Dalamud.Interface.Windowing;
 using Dalamud.Interface.Utility.Raii;
 using Dalamud.IoC;
 using Dalamud.Plugin.Services;
-using DSharpPlus;
-using DSharpPlus.Entities;
 using Dalamud.Interface;
 using System.Collections.Generic;
 

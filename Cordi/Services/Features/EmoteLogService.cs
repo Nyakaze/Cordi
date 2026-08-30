@@ -1,12 +1,10 @@
 using Cordi;
+using Cordi.Domain;
 using Cordi.Services.Discord;
 using Dalamud.Game.ClientState.Objects.SubKinds;
 using Dalamud.Game.ClientState.Objects.Types;
 using Dalamud.Hooking;
 using Dalamud.Plugin.Services;
-using DSharpPlus;
-using DSharpPlus.Entities;
-using DSharpPlus.EventArgs;
 using Lumina.Excel.Sheets;
 using System;
 using System.Collections.Concurrent;
@@ -190,7 +188,7 @@ public class EmoteLogService : IDisposable
                     _logger.Info($"[EmoteLog] Collapsed: {existing.User} used {existing.Emote} [{existing.Count}]");
                     Log.Debug(LogSource, $"Collapsed: {existing.User} used {existing.Emote} x{existing.Count}");
 
-                    _ = ProcessDiscordEmote(existing.User, existing.World, existing.GameObjectId, emoteName, emoteCommand, existing.Count);
+                    _ = ProcessDiscordEmote(Player.FromNameWorld(existing.User, existing.World, existing.GameObjectId), emoteName, emoteCommand, existing.Count);
                     return;
                 }
             }
@@ -218,19 +216,19 @@ public class EmoteLogService : IDisposable
             var blacklistEntry = _plugin.Config.EmoteLog.Blacklist.FirstOrDefault(x => x.Name == playerName && x.World == playerWorld);
             if (blacklistEntry?.DisableDiscord == true) return;
 
-            _ = ProcessDiscordEmote(playerName, playerWorld, player.GameObjectId, emoteName, emoteCommand, 1);
+            _ = ProcessDiscordEmote(Player.FromGameObject(player), emoteName, emoteCommand, 1);
         }
     }
 
     public void SimulateEmote(string name, string world, string emoteName, string command)
     {
         ulong fakeId = (ulong)name.GetHashCode();
-        _ = ProcessDiscordEmote(name, world, fakeId, emoteName, command, 1);
+        _ = ProcessDiscordEmote(Player.FromNameWorld(name, world, fakeId), emoteName, command, 1);
     }
 
-    private async Task ProcessDiscordEmote(string name, string world, ulong gameObjectId, string emoteName, string command, int uiCount)
+    private async Task ProcessDiscordEmote(Player player, string emoteName, string command, int uiCount)
     {
-        await _discordNotifier.ProcessDiscordEmote(name, world, gameObjectId, emoteName, command, uiCount);
+        await _discordNotifier.ProcessDiscordEmote(player, emoteName, command, uiCount);
     }
 
     public async Task PerformEmoteBack(string targetName, string targetWorld, string command, ulong targetId = 0, bool keepTarget = false, bool keepRotation = false)

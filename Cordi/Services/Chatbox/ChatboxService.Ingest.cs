@@ -6,6 +6,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Cordi.Configuration;
 using Cordi.Core;
+using Cordi.Domain;
 using Cordi.Packets.Handler.Chat;
 using Cordi.Services.Discord;
 using Dalamud.Game.Text;
@@ -62,7 +63,6 @@ public sealed partial class ChatboxService
             .Where(c => c.Config.GameChatTypes.Contains(message.ChatType))
             .ToList();
 
-        // If not mapped to any custom tab and not a player communication channel (e.g. battle logs, casting, actions, effect gains) -> skip spam
         if (targets.Count == 0 && !IsCommunicationChatType(message.ChatType))
             return;
 
@@ -74,7 +74,7 @@ public sealed partial class ChatboxService
 
         var filtered = !isSelf
                        && targets.Any(FilterAdvertisementsFor)
-                       && _plugin.AdvertisementFilterService.IsAdvertisementPreview(name, world, raw);
+                       && _plugin.AdvertisementFilterService.IsAdvertisementPreview(Player.FromNameWorld(name, world), raw);
 
         ChatboxMessage? combinedEntry = null;
 

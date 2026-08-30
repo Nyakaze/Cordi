@@ -7,8 +7,6 @@ using Cordi.UI.Themes;
 using Dalamud.Interface;
 using Dalamud.Interface.Components;
 using Dalamud.Bindings.ImGui;
-using DSharpPlus.Entities;
-using DSharpPlus;
 using System;
 
 namespace Cordi.UI.Tabs;

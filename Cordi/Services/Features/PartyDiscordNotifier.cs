@@ -1,8 +1,8 @@
-using System;
+﻿using System;
 using System.Threading.Tasks;
 using Cordi.Core;
+using Cordi.Domain;
 using Dalamud.Plugin.Services;
-using DSharpPlus.Entities;
 
 namespace Cordi.Services.Features;
 
@@ -17,7 +17,7 @@ public class PartyDiscordNotifier
         _logger = Service.Log;
     }
 
-    public async Task<ulong> SendNotificationAsync(string title, string description, DiscordColor color, string? characterName = null, string? characterWorld = null)
+    public async Task<ulong> SendNotificationAsync(string title, string description, int color, Player? character = null)
     {
         if (!_plugin.Config.Party.DiscordEnabled) return 0;
 
@@ -25,30 +25,26 @@ public class PartyDiscordNotifier
         if (!ulong.TryParse(channelIdStr, out var channelId)) return 0;
 
         string? avatarUrl = null;
-        if (!string.IsNullOrEmpty(characterName) && !string.IsNullOrEmpty(characterWorld))
+        if (character is not null)
         {
-            avatarUrl = await _plugin.Lodestone.GetAvatarUrlAsync(characterName, characterWorld);
+            avatarUrl = await _plugin.Lodestone.GetAvatarUrlAsync(character);
         }
 
         var embedBuilder = _plugin.EmbedFactory.CreateEmbedBuilder(title, description, color, avatarUrl);
 
-        string username = "Party Notification";
-        if (!string.IsNullOrEmpty(characterName) && !string.IsNullOrEmpty(characterWorld))
-        {
-            username = $"{characterName}@{characterWorld}";
-        }
+        var username = character?.FullName ?? "Party Notification";
 
         return await _plugin.Discord.SendWebhookMessageRaw(channelId, embedBuilder.Build(), username, avatarUrl);
     }
 
-    public async Task UpdateNotificationAsync(ulong msgId, string title, string description, DiscordColor color, string? characterName = null, string? characterWorld = null)
+    public async Task UpdateNotificationAsync(ulong msgId, string title, string description, int color, Player? character = null)
     {
         if (!_plugin.Config.Party.DiscordEnabled) return;
 
         var channelIdStr = _plugin.Config.Party.DiscordChannelId;
         if (!ulong.TryParse(channelIdStr, out var channelId)) return;
 
-        var embedBuilder = await _plugin.EmbedFactory.CreatePlayerEmbedBuilderAsync(title, description, color, characterName, characterWorld);
+        var embedBuilder = await _plugin.EmbedFactory.CreatePlayerEmbedBuilderAsync(title, description, color, character);
 
         await _plugin.Discord.EditWebhookMessage(channelId, msgId, embedBuilder.Build());
     }

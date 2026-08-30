@@ -1,9 +1,9 @@
 ﻿using System;
 using System.Linq;
 using System.Threading.Tasks;
+using Cordi.Domain;
 using Cordi.Services.Discord;
 using Dalamud.Game.Text;
-using DSharpPlus.Entities;
 
 namespace Cordi.Services.Chatbox;
 
@@ -42,7 +42,7 @@ public sealed partial class ChatboxService
             sentToGame = SendToGame(channel, text, useReply ? reply : null);
 
         if (SupportsDiscordSend(channel))
-            SendToDiscord(channel, text, useReply ? reply : null);
+            SendToDiscord(channel, text);
 
         if (!sentToGame)
             EchoLocally(channel, text, useReply ? reply : null);
@@ -100,44 +100,18 @@ public sealed partial class ChatboxService
             .Replace("{message}", text);
     }
 
-    private void SendToDiscord(ChatboxChannelState channel, string text, ChatboxReplyRef? reply)
+    private void SendToDiscord(ChatboxChannelState channel, string text)
     {
         if (!ulong.TryParse(channel.Config.DiscordChannelId, out var discordChannelId)) return;
 
         var content = ConvertShortcodesForDiscord(text);
         var local = _plugin.cachedLocalPlayer;
-        var senderName = local?.Name.TextValue ?? "Cordi";
-        var senderWorld = local?.HomeWorld.Value.Name.ExtractText() ?? string.Empty;
+        var sender = (Player?)_plugin.LocalPlayer.Current
+                     ?? Player.FromNameWorld(
+                         local?.Name.TextValue ?? "Cordi",
+                         local?.HomeWorld.Value.Name.ExtractText() ?? string.Empty);
 
-        if (reply?.DiscordMessageId is > 0)
-        {
-            _ = SendDiscordReplyAsync(discordChannelId, content, reply.DiscordMessageId, senderName, senderWorld);
-            return;
-        }
-
-        _ = _plugin.Discord.SendWebhookMessage(discordChannelId, content, senderName, senderWorld);
-    }
-
-    private async Task SendDiscordReplyAsync(ulong channelId, string content, ulong replyToId, string senderName, string senderWorld)
-    {
-        var client = _plugin.Discord?.Client;
-        if (client == null) return;
-
-        try
-        {
-            var channel = await client.GetChannelAsync(channelId);
-            var prefix = string.IsNullOrEmpty(senderWorld) ? senderName : $"{senderName}@{senderWorld}";
-            var builder = new DiscordMessageBuilder()
-                .WithContent($"**{prefix}**: {content}")
-                .WithReply(replyToId, Config.PingOnDiscordReply);
-
-            await channel.SendMessageAsync(builder);
-        }
-        catch (Exception ex)
-        {
-            Service.Log.Error(ex, "[Chatbox] Failed to send Discord reply");
-            _plugin.LogService.Error("Chatbox", $"Discord reply failed: {ex.Message}");
-        }
+        _ = _plugin.Discord.SendWebhookMessage(discordChannelId, content, sender);
     }
 
     private void EchoLocally(ChatboxChannelState channel, string text, ChatboxReplyRef? reply)

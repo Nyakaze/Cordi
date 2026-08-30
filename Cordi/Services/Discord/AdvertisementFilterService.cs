@@ -4,8 +4,9 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using Cordi.Core;
+using Cordi.Domain;
+using Cordi.Services.Discord.Webhooks;
 using Dalamud.Plugin.Services;
-using DSharpPlus.Entities;
 
 namespace Cordi.Services.Discord;
 
@@ -30,13 +31,12 @@ public class AdvertisementFilterService
         _webhooks = webhooks;
     }
 
-    public bool IsAdvertisementOrPenalized(string senderName, string senderWorld, string sanitizedContent, bool channelFilterEnabled, DiscordChannel channel)
+    public bool IsAdvertisementOrPenalized(Player sender, string sanitizedContent, bool channelFilterEnabled, ulong channelId)
     {
         if (!_plugin.Config.AdvertisementFilter.Enabled || !channelFilterEnabled) return false;
 
-        string senderKey = $"{senderName}@{senderWorld}";
+        string senderKey = sender.FullName;
 
-        // Check Penalty Box
         if (_penaltyBox.TryGetValue(senderKey, out var releaseTime))
         {
             if (DateTime.UtcNow < releaseTime)
@@ -51,8 +51,7 @@ public class AdvertisementFilterService
             }
         }
 
-        // Buffer logic for split messages
-        var cleanupTime = DateTime.UtcNow.AddSeconds(-5); // 5 second buffer window
+        var cleanupTime = DateTime.UtcNow.AddSeconds(-5);
         var userMessages = _messageBuffer.GetOrAdd(senderKey, _ => new List<(string Content, DateTime Timestamp, ulong MessageId)>());
 
         bool isAd = false;
@@ -60,10 +59,8 @@ public class AdvertisementFilterService
 
         lock (userMessages)
         {
-            // Clean up old messages
             userMessages.RemoveAll(x => x.Timestamp < cleanupTime);
 
-            // Construct combined message to check
             var recentContent = userMessages.Select(x => x.Content).ToList();
             recentContent.Add(sanitizedContent);
             combinedMessage = string.Join(" ", recentContent);
@@ -79,7 +76,6 @@ public class AdvertisementFilterService
             filterConfig.MediumScoreKeywords,
             filterConfig.Whitelist);
 
-        // Check individual first (optimization)
         isAd = checkAd(sanitizedContent);
 
         if (!isAd && combinedMessage != sanitizedContent)
@@ -92,17 +88,15 @@ public class AdvertisementFilterService
             Logger.Info($"[AdvertisementFilter] Blocked advertisement: {sanitizedContent.Substring(0, Math.Min(100, sanitizedContent.Length))}...");
             Log.Warning(LogSource, $"Blocked ad from {senderKey}: {sanitizedContent.Substring(0, Math.Min(80, sanitizedContent.Length))}");
 
-            // Add to Penalty Box (10 seconds)
             _penaltyBox.AddOrUpdate(senderKey, DateTime.UtcNow.AddSeconds(10), (_, _) => DateTime.UtcNow.AddSeconds(10));
 
-            // Retroactive Deletion: Delete previous messages
             lock (userMessages)
             {
                 foreach (var (_, _, msgId) in userMessages)
                 {
                     if (msgId != 0)
                     {
-                        Task.Run(() => _webhooks.DeleteWebhookMessageAsync(channel, msgId));
+                        Task.Run(() => _webhooks.DeleteMessageAsync(channelId, msgId));
                         Logger.Info($"[AdvertisementFilter] Retroactively deleted message ID: {msgId}");
                         Log.Info(LogSource, $"Retroactively deleted message {msgId} from {senderKey}");
                     }
@@ -115,12 +109,12 @@ public class AdvertisementFilterService
         return false;
     }
 
-    public bool IsAdvertisementPreview(string senderName, string senderWorld, string content)
+    public bool IsAdvertisementPreview(Player sender, string content)
     {
         if (!_plugin.Config.AdvertisementFilter.Enabled) return false;
         if (string.IsNullOrWhiteSpace(content)) return false;
 
-        var senderKey = $"{senderName}@{senderWorld}";
+        var senderKey = sender.FullName;
         var cleanupTime = DateTime.UtcNow.AddSeconds(-PreviewWindowSeconds);
         var recent = _previewBuffer.GetOrAdd(senderKey, _ => new List<(string Content, DateTime Timestamp)>());
 
@@ -171,11 +165,11 @@ public class AdvertisementFilterService
             filterConfig.Whitelist);
     }
 
-    public void AddMessageToBuffer(string senderName, string senderWorld, string sanitizedContent, ulong sentMessageId, bool channelFilterEnabled)
+    public void AddMessageToBuffer(Player sender, string sanitizedContent, ulong sentMessageId, bool channelFilterEnabled)
     {
         if (!_plugin.Config.AdvertisementFilter.Enabled || !channelFilterEnabled) return;
 
-        string senderKey = $"{senderName}@{senderWorld}";
+        string senderKey = sender.FullName;
         var userMessages = _messageBuffer.GetOrAdd(senderKey, _ => new List<(string Content, DateTime Timestamp, ulong MessageId)>());
 
         lock (userMessages)

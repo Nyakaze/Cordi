@@ -163,7 +163,6 @@ public class ChatboxConfig
     public bool ShowReplyPreview { get; set; } = true;
     public int ReplyExcerptLength { get; set; } = 64;
     public string GameReplyFormat { get; set; } = "@{name} {message}";
-    public bool PingOnDiscordReply { get; set; }
 
     public bool ShowInputBar { get; set; } = true;
     public bool ClearInputAfterSend { get; set; } = true;

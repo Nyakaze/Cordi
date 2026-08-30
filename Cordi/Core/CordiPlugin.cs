@@ -38,6 +38,7 @@ using Cordi.Domain;
 using Cordi.Services.Discord.Dispatch;
 using Cordi.Services.Discord.Presence;
 using Cordi.Services.Discord.Projections;
+using Cordi.Services.Discord.Webhooks;
 using DiscordConnection = Cordi.Services.Discord.Connection.DiscordConnection;
 using Cordi.Services.Discord.Queue;
 using Cordi.Services.Observations;

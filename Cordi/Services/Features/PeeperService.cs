@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
@@ -10,8 +10,7 @@ using Cordi.Services.Discord;
 using Dalamud.Game.ClientState.Objects.SubKinds;
 using Dalamud.Game.ClientState.Objects.Types;
 using Dalamud.Plugin.Services;
-using DSharpPlus;
-using DSharpPlus.Entities;
+using Crovus.Models;
 using Crovus.Events;
 using Lumina.Excel.Sheets;
 using Dalamud.Bindings.ImGui;
@@ -347,7 +346,7 @@ public class CordiPeepService : IDisposable
             ? $"[{state.Name}@{state.World}](https://na.finalfantasyxiv.com/lodestone/character/{lodestoneId}/)"
             : $"{state.Name}@{state.World}";
 
-        var color = state.IsLooking ? new DiscordColor(0xE74C3C) : new DiscordColor(0x2ECC71);
+        var color = state.IsLooking ? 0xE74C3C : 0x2ECC71;
         var title = state.IsLooking ? "Peeper Detected!" : "Peeper Left!";
         var description = state.IsLooking
             ? $"**{nameLink}** is looking at you!"
@@ -438,15 +437,17 @@ public class CordiPeepService : IDisposable
             return;
         if (blacklistEntry?.DisableDiscord == true) return;
 
-        var avatarUrl = await plugin.Lodestone.GetAvatarUrlAsync(state.Name, state.World);
+        var peeper = Player.FromNameWorld(state.Name, state.World, state.GameObjectId);
+
+        var avatarUrl = await plugin.Lodestone.GetAvatarUrlAsync(peeper);
         state.AvatarUrl = avatarUrl;
 
-        var lodestoneId = await plugin.Lodestone.ResolveLodestoneIdAsync(state.Name, state.World);
+        var lodestoneId = await plugin.Lodestone.ResolveLodestoneIdAsync(peeper);
         var embed = BuildPeeperEmbed(state, myTargetName, lodestoneId);
 
         if (state.DiscordMessageId == 0)
         {
-            state.DiscordMessageId = await plugin.Discord.SendWebhookMessage(channelId, embed, state.Name, state.World);
+            state.DiscordMessageId = await plugin.Discord.SendWebhookMessage(channelId, embed, peeper);
             if (state.DiscordMessageId != 0)
             {
                 _messageIdCache.Set(state.DiscordMessageId, state);
@@ -460,7 +461,7 @@ public class CordiPeepService : IDisposable
 
         if (state.DiscordMessageId != 0)
         {
-            await plugin.Discord.AddReaction(channelId, state.DiscordMessageId, DiscordEmoji.FromUnicode("👀"));
+            await plugin.Discord.AddReaction(channelId, state.DiscordMessageId, "👀");
 
             if (!state.IsLooking)
             {

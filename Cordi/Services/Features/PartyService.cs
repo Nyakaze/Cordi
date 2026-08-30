@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
@@ -11,7 +11,7 @@ using Dalamud.Game.ClientState.Objects.SubKinds;
 using Dalamud.Game.ClientState.Party;
 using Dalamud.Game.ClientState.Objects.Types;
 using Dalamud.Plugin.Services;
-using DSharpPlus.Entities;
+using Crovus.Factory;
 using Lumina.Excel.Sheets;
 using Dalamud.Game.ClientState.Conditions;
 using FFXIVClientStructs.FFXIV.Client.UI.Info;
@@ -208,7 +208,7 @@ public class PartyService : IDisposable
             Log.Info(LogSource, "Party is full (8/8)");
             if (plugin.Config.Party.NotifyFull)
             {
-                _ = SendDiscordNotificationAsync("Party Full", "The party is now full (8/8)!", DiscordColor.Blurple);
+                _ = SendDiscordNotificationAsync("Party Full", "The party is now full (8/8)!", 0x7289DA);
             }
 
             if (plugin.Config.Party.AutoSendSummary)
@@ -259,7 +259,7 @@ public class PartyService : IDisposable
             Log.Info(LogSource, $"Member joined: {name}@{world} [{classJobAbbr}] ({count}/8)");
 
             var message = $"**{name}@{world}** has joined the party. ({count}/8)";
-            var msgId = await SendDiscordNotificationAsync("Party Join", message, DiscordColor.Green, name, world);
+            var msgId = await SendDiscordNotificationAsync("Party Join", message, 0x00FF00, Player.FromNameWorld(name, world));
 
             if (plugin.Config.Party.ShowGearLevel && msgId > 0)
             {
@@ -322,7 +322,7 @@ public class PartyService : IDisposable
                         }
                     }
 
-                    await UpdateDiscordNotificationAsync(msgId, "Party Join", updatedMessage, DiscordColor.Green, name, world);
+                    await UpdateDiscordNotificationAsync(msgId, "Party Join", updatedMessage, 0x00FF00, Player.FromNameWorld(name, world));
                 }
             }
         }
@@ -425,7 +425,7 @@ public class PartyService : IDisposable
 
             var message = $"**{name}@{world}** has left the party. ({count}/8)";
             Log.Info(LogSource, $"Member left: {name}@{world} ({count}/8)");
-            await SendDiscordNotificationAsync("Party Leave", message, DiscordColor.Orange, name, world);
+            await SendDiscordNotificationAsync("Party Leave", message, 0xFFA500, Player.FromNameWorld(name, world));
         }
         catch (Exception ex)
         {
@@ -454,11 +454,11 @@ public class PartyService : IDisposable
                 members = _partyMembers.ToList(); // Refresh list in case it changes
             }
 
-            var embed = new DiscordEmbedBuilder()
+            var embed = EmbedFactory.Create()
                 .WithTitle($"Party Summary ({members.Count}/8)")
                 .WithDescription(members.Count == 8 ? "The party is now full! Here is a summary:" : "Current party summary:")
-                .WithColor(DiscordColor.Blurple)
-                .WithTimestamp(DateTime.Now);
+                .WithColor(0x7289DA)
+                .WithTimestamp(DateTimeOffset.Now);
 
             var classJobSheet = Service.DataManager.GetExcelSheet<Lumina.Excel.Sheets.ClassJob>();
 
@@ -510,14 +510,14 @@ public class PartyService : IDisposable
         }
     }
 
-    private async Task<ulong> SendDiscordNotificationAsync(string title, string description, DiscordColor color, string? characterName = null, string? characterWorld = null)
+    private async Task<ulong> SendDiscordNotificationAsync(string title, string description, int color, Player? character = null)
     {
-        return await _discordNotifier.SendNotificationAsync(title, description, color, characterName, characterWorld);
+        return await _discordNotifier.SendNotificationAsync(title, description, color, character);
     }
 
-    private async Task UpdateDiscordNotificationAsync(ulong msgId, string title, string description, DiscordColor color, string? characterName = null, string? characterWorld = null)
+    private async Task UpdateDiscordNotificationAsync(ulong msgId, string title, string description, int color, Player? character = null)
     {
-        await _discordNotifier.UpdateNotificationAsync(msgId, title, description, color, characterName, characterWorld);
+        await _discordNotifier.UpdateNotificationAsync(msgId, title, description, color, character);
     }
 
     public async void DebugTriggerLeave(string name, string world)

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
@@ -9,6 +9,7 @@ using NetStone.Search.Character;
 using NetStone.Model.Parseables.Search.Character;
 using Cordi.Core;
 using Cordi.Configuration;
+using Cordi.Domain;
 
 namespace Cordi.Services.Features;
 
@@ -55,6 +56,26 @@ public class LodestoneService : IDisposable
         {
             Logger.Error($"Failed to initialize NetStone: {ex.Message}");
         }
+    }
+
+    public async Task<string> GetAvatarUrlAsync(Player player)
+    {
+        if (!string.IsNullOrEmpty(player.AvatarUrl)) return player.AvatarUrl;
+
+        var url = await GetAvatarUrlAsync(player.Name, player.World);
+
+        if (_avatarCache.Contains(player.FullName)) player.AvatarUrl = url;
+
+        return url;
+    }
+
+    public async Task<string?> ResolveLodestoneIdAsync(Player player)
+    {
+        if (!string.IsNullOrEmpty(player.LodestoneId)) return player.LodestoneId;
+
+        player.LodestoneId = await ResolveLodestoneIdAsync(player.Name, player.World);
+
+        return player.LodestoneId;
     }
 
     public async Task<string> GetAvatarUrlAsync(string name, string world)

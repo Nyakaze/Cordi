@@ -42,8 +42,10 @@ public class TellOutgoingPacketHandler : IChatHandler
         }
 
         var correspondent = $"{correspondentName}@{correspondentWorld}";
-        var localName = CordiPlugin.Plugin.cachedLocalPlayer?.Name.TextValue ?? "Unknown";
-        var localWorld = CordiPlugin.Plugin.cachedLocalPlayer?.HomeWorld.Value.Name.ExtractText() ?? "Unknown";
+        var localPlayer = CordiPlugin.Plugin.LocalPlayer.Current
+                          ?? Player.FromNameWorld(
+                              CordiPlugin.Plugin.cachedLocalPlayer?.Name.TextValue ?? "Unknown",
+                              CordiPlugin.Plugin.cachedLocalPlayer?.HomeWorld.Value.Name.ExtractText() ?? "Unknown");
 
         TellIncommingPacketHandler.LastTellActivity[correspondent] = System.DateTime.UtcNow;
 
@@ -57,7 +59,7 @@ public class TellOutgoingPacketHandler : IChatHandler
                     At: System.DateTime.UtcNow)));
         }
 
-        await discord.SendMessage(null, msg.Message, localName, localWorld, ChatType, correspondent);
+        await discord.SendMessage(null, msg.Message, localPlayer, ChatType, correspondent);
 
         return Task.CompletedTask;
 

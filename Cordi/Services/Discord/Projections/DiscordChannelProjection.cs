@@ -57,6 +57,14 @@ public sealed class DiscordChannelProjection : IDisposable
         _connection.Register<ThreadListSyncEvent>(OnThreadListSyncAsync);
     }
 
+    public DiscordChannel? Find(ulong channelId)
+    {
+        if (_channels.TryGetValue(channelId, out var channel)) return channel;
+        if (_threads.TryGetValue(channelId, out var thread)) return thread;
+
+        return null;
+    }
+
     public IReadOnlyDictionary<ulong, string> GetThreadsForForum(ulong forumChannelId) =>
         _threads.Values
             .Where(thread => thread.ParentId?.Value == forumChannelId)
