@@ -23,14 +23,12 @@ public class Configuration : IPluginConfiguration
     public DiscordActivityConfig ActivityConfig { get; set; } = new();
     public PartyConfig Party { get; set; } = new();
     public RememberMeConfig RememberMe { get; set; } = new();
-    public PlayerTrackerConfig PlayerTracker { get; set; } = new();
     public AdvertisementFilterConfig AdvertisementFilter { get; set; } = new();
     public LodestoneConfig Lodestone { get; set; } = new();
     public CombinedWindowConfig CombinedWindow { get; set; } = new();
     public FontConfig Font { get; set; } = new();
     public ThroughputStats Stats { get; set; } = new();
     public SlashCommandConfig SlashCommands { get; set; } = new();
-    public LightlessConfig Lightless { get; set; } = new();
     public bool LogsTabVisible { get; set; }
 
 

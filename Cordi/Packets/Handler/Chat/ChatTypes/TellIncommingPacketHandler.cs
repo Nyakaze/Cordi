@@ -5,8 +5,6 @@ using Cordi.Packets.Attributes;
 using Cordi.Services.Discord;
 using Cordi.Core;
 using Cordi.Domain;
-using Cordi.Domain.Observations;
-using Cordi.Domain.Tracking;
 using Dalamud.Game.Text;
 using Dalamud.Game.Text.SeStringHandling;
 using Dalamud.Game.Text.SeStringHandling.Payloads;
@@ -50,13 +48,6 @@ public class TellIncommingPacketHandler : IChatHandler
         {
             var sender = Player.FromNameWorld(playerLink.PlayerName ?? string.Empty,
                 playerLink.World.Value.Name.ExtractText());
-
-            _ = CordiPlugin.Plugin.PlayerObservations.FireAsync(new PlayerObservation(
-                sender,
-                new ObservationContext(
-                    Source: ObservationSource.Tell,
-                    TerritoryId: (uint)Service.ClientState.TerritoryType,
-                    At: System.DateTime.UtcNow)));
 
             await discord.SendMessage(null, msg.Message, sender, ChatType, correspondent);
 

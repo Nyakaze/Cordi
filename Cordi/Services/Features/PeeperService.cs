@@ -17,8 +17,6 @@ using Dalamud.Bindings.ImGui;
 using Cordi.Core;
 using Cordi.Configuration;
 using Cordi.Domain;
-using Cordi.Domain.Observations;
-using Cordi.Domain.Tracking;
 using Cordi.Extensions;
 using FFXIVClientStructs.FFXIV.Client.Game.Control;
 using Cordi.Services.Features;
@@ -242,14 +240,6 @@ public class CordiPeepService : IDisposable
         else
         {
             UpdatePeeperState(id, player.Name.ToString(), player.HomeWorld.Value.Name.ToString());
-
-            _ = plugin.PlayerObservations.FireAsync(new PlayerObservation(
-                Player.FromGameObject(player),
-                new ObservationContext(
-                    Source: ObservationSource.Peeper,
-                    TerritoryId: (uint)Service.ClientState.TerritoryType,
-                    Position: player.Position,
-                    At: DateTime.UtcNow)));
         }
     }
 

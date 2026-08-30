@@ -4,8 +4,6 @@ using System.Linq;
 using System.Threading.Tasks;
 using Cordi.Core;
 using Cordi.Domain;
-using Cordi.Domain.Observations;
-using Cordi.Domain.Tracking;
 using Cordi.Services;
 using Dalamud.Game.ClientState.Objects.SubKinds;
 using Dalamud.Game.ClientState.Party;
@@ -189,13 +187,6 @@ public class PartyService : IDisposable
         foreach (var join in joins)
         {
             _ = NotifyJoin(join.Name, join.World, join.JobId, newMembers.Count);
-
-            _ = plugin.PlayerObservations.FireAsync(new PlayerObservation(
-                Player.FromPartyMember(join.Name, join.World, join.Id),
-                new ObservationContext(
-                    Source: ObservationSource.Party,
-                    TerritoryId: (uint)Service.ClientState.TerritoryType,
-                    At: DateTime.UtcNow)));
         }
 
         foreach (var id in leaves)

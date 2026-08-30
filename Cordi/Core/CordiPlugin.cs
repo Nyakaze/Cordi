@@ -37,9 +37,7 @@ using Cordi.Services.Discord.Projections;
 using Cordi.Services.Discord.Webhooks;
 using DiscordConnection = Cordi.Services.Discord.Connection.DiscordConnection;
 using Cordi.Services.Discord.Queue;
-using Cordi.Services.Observations;
 using Cordi.Services.Chatbox;
-using Cordi.Services.Storage;
 using Cordi.UI.Windows;
 using Newtonsoft.Json;
 
@@ -60,8 +58,6 @@ public class CordiPlugin : IDalamudPlugin
     public AdvertisementFilterService AdvertisementFilterService { get; private set; }
     public ActivityManager ActivityManager { get; private set; }
     public HonorificBridge HonorificBridge { get; private set; }
-    public LightlessBridge Lightless { get; private set; }
-    public LightlessConnectionMonitor LightlessMonitor { get; private set; }
     public DiscordSlashCommandService SlashCommandService { get; private set; }
     public ScreenshotService Screenshot { get; private set; }
 
@@ -77,16 +73,12 @@ public class CordiPlugin : IDalamudPlugin
     public CordiLogService LogService { get; private set; }
     public ICacheRegistry CacheRegistry { get; private set; } = null!;
     public LocalPlayerProvider LocalPlayer { get; private set; } = null!;
-    public PlayerTrackingService PlayerTracker { get; private set; } = null!;
-    public PlayerObservationDispatcher PlayerObservations { get; private set; } = null!;
-    public NearbyPlayerScanner NearbyScanner { get; private set; } = null!;
     public DiscordConnection DiscordConnection { get; private set; } = null!;
     public DiscordEventPump DiscordDispatcher { get; private set; } = null!;
     public DiscordPresenceWatcher PresenceWatcher { get; private set; } = null!;
     public DiscordChannelProjection Channels { get; private set; } = null!;
     public DiscordSendQueue DiscordSendQueue { get; private set; } = null!;
     public FrameworkScheduler FrameworkScheduler { get; private set; } = null!;
-    private IPlayerTrackingStorage _playerTrackingStorage = null!;
     public bool IsLogsTabVisible
     {
         get => Config?.LogsTabVisible ?? false;
@@ -118,7 +110,6 @@ public class CordiPlugin : IDalamudPlugin
     public ChatMessenger _chat = null!;
     public CordiPeepService CordiPeep { get; private set; }
     public CordiPeepWindow CordiPeepWindow { get; private set; }
-    public PlayerDetailWindow PlayerDetailWindow { get; private set; } = null!;
     public EmoteLogService EmoteLog { get; private set; }
     public EmoteLogWindow EmoteLogWindow { get; private set; }
     public CombinedWindow CombinedWindow { get; private set; }
@@ -138,14 +129,6 @@ public class CordiPlugin : IDalamudPlugin
         CacheRegistry = new CacheRegistry();
         LocalPlayer = new LocalPlayerProvider();
 
-        var trackerDbPath = Path.Combine(PluginInterface.ConfigDirectory.FullName, "tracked-players.db");
-        _playerTrackingStorage = new LitePlayerTrackingStorage(trackerDbPath);
-        PlayerTracker = new PlayerTrackingService(this, _playerTrackingStorage, CacheRegistry);
-        PlayerTracker.MigrateFromRememberedPlayers(Config.RememberMe.RememberedPlayers);
-
-        PlayerObservations = new PlayerObservationDispatcher(this);
-        NearbyScanner = new NearbyPlayerScanner(this);
-
         PluginInterface.UiBuilder.OpenConfigUi += ToggleConfigUI;
         PluginInterface.UiBuilder.OpenMainUi += ToggleConfigUI;
         Lodestone = new LodestoneService(this);
@@ -164,9 +147,6 @@ public class CordiPlugin : IDalamudPlugin
         EmoteLog = new EmoteLogService(this);
         CordiPeep = new CordiPeepService(this);
         HonorificBridge = new HonorificBridge(PluginInterface);
-        Lightless = new LightlessBridge(PluginInterface);
-        LightlessMonitor = new LightlessConnectionMonitor(this);
-        LightlessMonitor.Start();
         PartyService = new PartyService(this, NotificationManager);
         RememberMe = new RememberMeService(this);
         ActivityManager = new ActivityManager(this, HonorificBridge);
@@ -183,7 +163,6 @@ public class CordiPlugin : IDalamudPlugin
         DiscordSendQueue.Start();
 
         FrameworkScheduler = new FrameworkScheduler(this);
-        FrameworkScheduler.Bind();
 
         Chatbox = new ChatboxService(this);
 
@@ -192,14 +171,12 @@ public class CordiPlugin : IDalamudPlugin
         CordiPeepWindow = new CordiPeepWindow(this);
         this.EmoteLogWindow = new EmoteLogWindow(this);
         CombinedWindow = new CombinedWindow(this);
-        PlayerDetailWindow = new PlayerDetailWindow(this);
         ChatboxWindow = new ChatboxWindow(this);
 
         windowSystem.AddWindow(discordWindow);
         windowSystem.AddWindow(configWindow);
         windowSystem.AddWindow(CordiPeepWindow);
         windowSystem.AddWindow(this.EmoteLogWindow);
-        windowSystem.AddWindow(PlayerDetailWindow);
         windowSystem.AddWindow(CombinedWindow);
         windowSystem.AddWindow(ChatboxWindow);
 
@@ -249,6 +226,8 @@ public class CordiPlugin : IDalamudPlugin
 
 
         UpdateCommandVisibility();
+
+        FrameworkScheduler.Bind();
     }
 
     private void InitializeConfig()
@@ -494,22 +473,17 @@ public class CordiPlugin : IDalamudPlugin
         this.EmoteLog?.Dispose();
         this.ActivityManager?.Dispose();
         this.HonorificBridge?.Dispose();
-        this.LightlessMonitor?.Dispose();
-        this.Lightless?.Dispose();
         this.Lodestone?.Dispose();
         this.Tomestone?.Dispose();
         this.PartyService?.Dispose();
         this.RememberMe?.Dispose();
         this.FrameworkScheduler?.Dispose();
-        this.NearbyScanner?.Dispose();
         this.PresenceWatcher?.Dispose();
         this.Channels?.Dispose();
         this.DiscordDispatcher?.Dispose();
         this.DiscordConnection?.DisposeAsync().AsTask().GetAwaiter().GetResult();
         this.DiscordSendQueue?.Dispose();
         this.LocalPlayer?.Dispose();
-        this.PlayerTracker?.Dispose();
-        this._playerTrackingStorage?.Dispose();
 
         Service.PluginInterface.UiBuilder.OpenConfigUi -= this.ToggleConfigUI;
         Service.PluginInterface.UiBuilder.OpenMainUi -= this.ToggleConfigUI;

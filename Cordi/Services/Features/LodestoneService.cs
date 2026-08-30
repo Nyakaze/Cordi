@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using Cordi.Core.Caching;
 using Dalamud.Plugin.Services;
@@ -18,6 +19,8 @@ public class LodestoneService : IDisposable
     private static readonly IPluginLog Logger = Service.Log;
     private readonly CordiPlugin _plugin;
     private LodestoneClient? _lodestone;
+    private readonly SemaphoreSlim _initGate = new(1, 1);
+    private readonly object _persistedCacheGate = new();
     private readonly Cache<string, string> _avatarCache;
     private readonly Cache<string, int> _gearLevelCache;
     private readonly Cache<string, string> _characterCache;
@@ -40,21 +43,40 @@ public class LodestoneService : IDisposable
     {
         if (_lodestone != null) return;
 
+        await _initGate.WaitAsync();
+
         try
         {
-            _lodestone = await LodestoneClient.GetClientAsync();
+            if (_lodestone != null) return;
+
+            var client = await LodestoneClient.GetClientAsync();
             Logger.Info("NetStone LodestoneClient initialized.");
 
-            // Load cached character IDs from configuration
-            foreach (var kvp in _plugin.Config.Lodestone.CharacterIdCache)
+            int restored;
+
+            lock (_persistedCacheGate)
             {
-                _characterCache.Set(kvp.Key, kvp.Value);
+                var persisted = _plugin.Config.Lodestone.CharacterIdCache;
+
+                foreach (var kvp in persisted)
+                {
+                    _characterCache.Set(kvp.Key, kvp.Value);
+                }
+
+                restored = persisted.Count;
             }
-            Logger.Info($"Loaded {_plugin.Config.Lodestone.CharacterIdCache.Count} cached character IDs from configuration.");
+
+            _lodestone = client;
+
+            Logger.Info($"Loaded {restored} cached character IDs from configuration.");
         }
         catch (Exception ex)
         {
             Logger.Error($"Failed to initialize NetStone: {ex.Message}");
+        }
+        finally
+        {
+            _initGate.Release();
         }
     }
 
@@ -194,9 +216,13 @@ public class LodestoneService : IDisposable
 
             Logger.Debug($"Found character {name}@{world}, caching ID: {entry.Id}");
 
-            // Cache the character ID for future lookups (in-memory and persistent)
             _characterCache.Set(key, entry.Id);
-            _plugin.Config.Lodestone.CharacterIdCache[key] = entry.Id;
+
+            lock (_persistedCacheGate)
+            {
+                _plugin.Config.Lodestone.CharacterIdCache[key] = entry.Id;
+            }
+
             _plugin.Config.Save();
 
             return await _lodestone.GetCharacter(entry.Id);
@@ -245,7 +271,12 @@ public class LodestoneService : IDisposable
         _avatarCache.Clear();
         _gearLevelCache.Clear();
         _characterCache.Clear();
-        _plugin.Config.Lodestone.CharacterIdCache.Clear();
+
+        lock (_persistedCacheGate)
+        {
+            _plugin.Config.Lodestone.CharacterIdCache.Clear();
+        }
+
         _plugin.Config.Save();
         Logger.Info("Cleared Lodestone cache.");
     }
@@ -268,5 +299,6 @@ public class LodestoneService : IDisposable
 
     public void Dispose()
     {
+        _initGate.Dispose();
     }
 }
