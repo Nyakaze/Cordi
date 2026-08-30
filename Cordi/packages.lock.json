@@ -20,16 +20,6 @@
         "resolved": "2.0.2",
         "contentHash": "VaHoEN6YHp0jXucxm67vfuRy8zo9ufiKSuaZ4ZudRi8xmWcEFMKxfCsg2nvYNvdISFTURDu+IHqADGh53+Bamw=="
       },
-      "DSharpPlus.SlashCommands": {
-        "type": "Direct",
-        "requested": "[4.5.1, )",
-        "resolved": "4.5.1",
-        "contentHash": "e+nqalaoV4zEP6BpaIY1qDGaBAwhnyzskpdt/7ZGG8EjSeMZGgCFNtr8mG3mdhFgMvV0fvNfOL4EIHSKmcZ5HA==",
-        "dependencies": {
-          "DSharpPlus": "4.5.1",
-          "Microsoft.Extensions.DependencyInjection": "5.0.1"
-        }
-      },
       "ECommons": {
         "type": "Direct",
         "requested": "[3.2.0.2, )",
@@ -121,15 +111,6 @@
         "dependencies": {
           "SharpGen.Runtime": "2.4.2-beta",
           "Vortice.DirectX": "3.8.2"
-        }
-      },
-      "DSharpPlus": {
-        "type": "Transitive",
-        "resolved": "4.5.1",
-        "contentHash": "FL6irlExdmEltpdgSpVuD0LiwBwnI8ood/OlGX5yTBQfWejxGkJRNpb2WLocwI5jgGeHklRS9/Rk+Sj1ZCjLCA==",
-        "dependencies": {
-          "Microsoft.Extensions.Logging.Abstractions": "5.0.0",
-          "Newtonsoft.Json": "13.0.2"
         }
       },
       "Karashiiro.HtmlAgilityPack.CssSelectors.NetCoreFork": {

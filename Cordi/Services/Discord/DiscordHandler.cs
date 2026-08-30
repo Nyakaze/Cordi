@@ -3,9 +3,6 @@ using System.Threading.Tasks;
 using Dalamud.Game.Text;
 using Dalamud.Game.Text.SeStringHandling;
 using Dalamud.Plugin.Services;
-using DSharpPlus;
-using DSharpPlus.EventArgs;
-using Microsoft.Extensions.Logging;
 
 using Cordi.Core;
 using Cordi.Domain;
@@ -21,11 +18,7 @@ public class DiscordHandler : IDisposable
     private readonly CordiPlugin _plugin;
     private readonly Guid _instanceId = Guid.NewGuid();
 
-    private DiscordClient _client;
-    private DiscordIntents _intent;
-    public DiscordClient Client => _client;
-
-    public bool IsBusy { get; private set; }
+    public bool IsBusy => _plugin.DiscordConnection.IsBusy;
 
     private readonly DiscordWebhookService _webhooks;
     private readonly DiscordSender _sender;
@@ -42,80 +35,9 @@ public class DiscordHandler : IDisposable
         _webhooks = webhooks;
         _sender = new DiscordSender(plugin, webhooks, adFilter);
         _messageRouter = new DiscordMessageRouter(plugin);
-
-        _intent = DiscordIntents.AllUnprivileged | DiscordIntents.MessageContents | DiscordIntents.Guilds | DiscordIntents.GuildWebhooks | DiscordIntents.GuildMessageReactions | DiscordIntents.GuildMembers;
     }
 
-    public async Task Start()
-    {
-        if (string.IsNullOrEmpty(_plugin.Config.Discord.BotToken))
-
-        {
-            Log.Error(LogSource, "Bot token is empty. Please configure the bot token in the settings.");
-            _plugin.Config.Discord.BotStarted = false;
-            _plugin.Config.Save();
-            return;
-        }
-
-        if (IsBusy) return;
-        IsBusy = true;
-
-        try
-        {
-            if (_plugin.Config.Discord.BotStarted)
-            {
-                Logger.Info("Bot already started... Trying to stop and restart.");
-                await StopInternal();
-            }
-            _client = new DiscordClient(new DiscordConfiguration
-            {
-                Token = this._plugin.Config.Discord.BotToken,
-                TokenType = TokenType.Bot,
-                Intents = _intent,
-                MinimumLogLevel = LogLevel.Debug,
-            });
-
-            _plugin.SlashCommandService.Bind(_client);
-
-            _client.Ready += OnReady;
-            await _client.ConnectAsync();
-            await _plugin.DiscordConnection.StartAsync();
-            await Task.Yield();
-            Logger.Info($"Discord handler started");
-            Log.Info(LogSource, "Bot connected successfully");
-            _plugin.Config.Discord.BotStarted = true;
-        }
-        catch (Exception e)
-        {
-            Logger.Error($"Failed to connect to the bot. {e.StackTrace}");
-            Log.Error(LogSource, $"Bot connection failed: {e.Message}");
-            _plugin.Config.Discord.BotStarted = false;
-        }
-        finally
-        {
-            IsBusy = false;
-        }
-        _plugin.Config.Save();
-    }
-
-    private async Task OnReady(DiscordClient sender, ReadyEventArgs e)
-    {
-        Logger.Info("DiscordHandler READY!!");
-
-        if (_plugin.Config.SlashCommands.Enabled)
-        {
-            try
-            {
-                _plugin.SlashCommandService.PopulateEmoteCommands();
-
-                await _plugin.SlashCommandService.RegisterCommandsAsync();
-            }
-            catch (Exception ex)
-            {
-                Log.Error(LogSource, $"Failed to auto-register slash commands: {ex.Message}");
-            }
-        }
-    }
+    public Task Start() => _plugin.DiscordConnection.StartAsync();
 
     public Task SendMessage(ulong? channelId, SeString message, Player sender,
         XivChatType chatType = XivChatType.None, string? correspondentName = null) =>
@@ -154,34 +76,11 @@ public class DiscordHandler : IDisposable
 
     public async Task Stop()
     {
-        IsBusy = true;
-        try
-        {
-            await StopInternal();
-        }
-        finally
-        {
-            IsBusy = false;
-        }
-    }
-
-    private async Task StopInternal()
-    {
-        if (_client == null) return;
-        Log.Info(LogSource, "Bot disconnecting...");
         Logger.Info($"[{_instanceId}] Disconnecting Discord client...");
-
-        _plugin.SlashCommandService.Unbind();
 
         await _plugin.DiscordConnection.StopAsync();
 
-        await _client.DisconnectAsync();
-        _client.Ready -= OnReady;
-        _client.Dispose();
-        _client = null;
         _webhooks.ClearCache();
-        Logger.Info("Discord client disconnected.");
-        _plugin.Config.Discord.BotStarted = false;
         _plugin.Config.Save();
     }
 

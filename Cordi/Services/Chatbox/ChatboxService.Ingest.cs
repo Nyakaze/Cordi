@@ -572,52 +572,22 @@ public sealed partial class ChatboxService
 
     private string? ResolveDiscordUserName(ulong id)
     {
-        var client = _plugin.Discord?.Client;
-        if (client == null) return null;
+        var member = _plugin.Channels?.FindMember(id);
+        if (member == null) return null;
 
-        foreach (var guild in client.Guilds.Values)
-        {
-            if (guild.Members.TryGetValue(id, out var member))
-                return string.IsNullOrEmpty(member.Nickname) ? member.Username : member.Nickname;
-        }
-
-        return null;
+        return string.IsNullOrEmpty(member.Nickname) ? member.User.DisplayName : member.Nickname;
     }
 
-    private string? ResolveDiscordRoleName(ulong id)
-    {
-        var client = _plugin.Discord?.Client;
-        if (client == null) return null;
+    private string? ResolveDiscordRoleName(ulong id) => _plugin.Channels?.FindRole(id)?.Name;
 
-        foreach (var guild in client.Guilds.Values)
-        {
-            if (guild.Roles.TryGetValue(id, out var role))
-                return role.Name;
-        }
-
-        return null;
-    }
-
-    private string? ResolveDiscordChannelName(ulong id)
-    {
-        var client = _plugin.Discord?.Client;
-        if (client == null) return null;
-
-        foreach (var guild in client.Guilds.Values)
-        {
-            if (guild.Channels.TryGetValue(id, out var channel))
-                return channel.Name;
-        }
-
-        return null;
-    }
+    private string? ResolveDiscordChannelName(ulong id) => _plugin.Channels?.Find(id)?.Name;
 
     private void RefreshGuildEmotes()
     {
         if (DateTime.UtcNow - _guildEmotesRefreshedAt < TimeSpan.FromSeconds(30)) return;
 
-        var client = _plugin.Discord?.Client;
-        if (client == null) return;
+        var guilds = _plugin.Channels?.Guilds;
+        if (guilds == null) return;
 
         lock (_guildEmoteGate)
         {
@@ -625,14 +595,14 @@ public sealed partial class ChatboxService
             _guildEmotes.Clear();
             _guildEmoteIds.Clear();
 
-            foreach (var guild in client.Guilds.Values)
+            foreach (var guild in guilds)
             {
-                foreach (var emoji in guild.Emojis.Values)
+                foreach (var emoji in guild.Emojis)
                 {
                     if (string.IsNullOrEmpty(emoji.Name)) continue;
 
-                    _guildEmotes[emoji.Name] = (emoji.Id, emoji.IsAnimated);
-                    _guildEmoteIds.Add(emoji.Id);
+                    _guildEmotes[emoji.Name] = (emoji.Id.Value, emoji.Animated);
+                    _guildEmoteIds.Add(emoji.Id.Value);
                 }
             }
         }
@@ -652,13 +622,16 @@ public sealed partial class ChatboxService
 
     private string? ResolveEmoteName(ulong id)
     {
-        var client = _plugin.Discord?.Client;
-        if (client != null)
+        var guilds = _plugin.Channels?.Guilds;
+        if (guilds != null)
         {
-            foreach (var guild in client.Guilds.Values)
+            foreach (var guild in guilds)
             {
-                if (guild.Emojis.TryGetValue(id, out var emoji) && !string.IsNullOrEmpty(emoji.Name))
-                    return emoji.Name;
+                foreach (var emoji in guild.Emojis)
+                {
+                    if (emoji.Id.Value == id && !string.IsNullOrEmpty(emoji.Name))
+                        return emoji.Name;
+                }
             }
         }
 

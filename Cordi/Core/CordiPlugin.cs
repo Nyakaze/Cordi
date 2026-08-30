@@ -23,10 +23,6 @@ using Dalamud.Game.Text;
 using Dalamud.Game.Text.SeStringHandling;
 using Dalamud.Game.Text.SeStringHandling.Payloads;
 using Dalamud.Interface;
-using DSharpPlus;
-using DSharpPlus.Entities;
-using DSharpPlus.EventArgs;
-using DSharpPlus.SlashCommands;
 using Lumina.Data.Files;
 using Microsoft.Extensions.DependencyInjection;
 using ECommons;
@@ -181,6 +177,7 @@ public class CordiPlugin : IDalamudPlugin
         PresenceWatcher = new DiscordPresenceWatcher(this, DiscordConnection);
         Channels = new DiscordChannelProjection(this, DiscordConnection);
         Channels.Bind();
+        SlashCommandService.Bind();
 
         DiscordSendQueue = new DiscordSendQueue(this);
         DiscordSendQueue.Start();

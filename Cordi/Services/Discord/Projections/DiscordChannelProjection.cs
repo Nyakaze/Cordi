@@ -18,6 +18,8 @@ public sealed class DiscordChannelProjection : IDisposable
     private readonly CordiPlugin _plugin;
     private readonly DiscordConnection _connection;
 
+    private readonly ConcurrentDictionary<ulong, DiscordGuild> _guilds = new();
+    private readonly ConcurrentDictionary<ulong, DiscordMember> _members = new();
     private readonly ConcurrentDictionary<ulong, DiscordChannel> _channels = new();
     private readonly ConcurrentDictionary<ulong, DiscordChannel> _threads = new();
     private readonly ConcurrentDictionary<ulong, string> _resolvedThreadNames = new();
@@ -39,6 +41,8 @@ public sealed class DiscordChannelProjection : IDisposable
 
     public IReadOnlyList<DiscordChannel> ForumChannels => Volatile.Read(ref _forumChannels);
 
+    public IReadOnlyList<DiscordGuild> Guilds => _guilds.Values.OrderBy(guild => guild.Name).ToArray();
+
     public void Bind()
     {
         if (_bound || _disposed) return;
@@ -55,6 +59,40 @@ public sealed class DiscordChannelProjection : IDisposable
         _connection.Register<ThreadUpdatedEvent>((e, _) => Track(e.Thread, e.GuildId));
         _connection.Register<ThreadDeletedEvent>((e, _) => Forget(e.Thread.Id));
         _connection.Register<ThreadListSyncEvent>(OnThreadListSyncAsync);
+        _connection.Register<GuildEmojisUpdatedEvent>((e, _) =>
+            UpdateGuild(e.GuildId, guild => guild with { Emojis = e.Emojis }));
+        _connection.Register<RoleCreatedEvent>((e, _) => StoreRole(e.GuildId, e.Role));
+        _connection.Register<RoleUpdatedEvent>((e, _) => StoreRole(e.GuildId, e.Role));
+        _connection.Register<RoleDeletedEvent>((e, _) => UpdateGuild(e.GuildId, guild => guild with
+        {
+            Roles = guild.Roles.Where(role => role.Id != e.RoleId).ToArray()
+        }));
+        _connection.Register<MemberJoinedEvent>((e, _) => StoreMember(e.Member));
+        _connection.Register<MemberUpdatedEvent>((e, _) => StoreMember(e.Member));
+        _connection.Register<MemberLeftEvent>((e, ct) =>
+        {
+            _members.TryRemove(e.UserId.Value, out _);
+
+            return Task.CompletedTask;
+        });
+        _connection.Register<GuildMembersChunkEvent>((e, _) =>
+        {
+            foreach (var member in e.Members) _members[member.User.Id.Value] = member;
+
+            return Task.CompletedTask;
+        });
+    }
+
+    public DiscordMember? FindMember(ulong userId) =>
+        _members.TryGetValue(userId, out var member) ? member : null;
+
+    public DiscordRole? FindRole(ulong roleId)
+    {
+        foreach (var guild in _guilds.Values)
+            if (guild.Role(roleId) is { } role)
+                return role;
+
+        return null;
     }
 
     public DiscordChannel? Find(ulong channelId)
@@ -98,6 +136,9 @@ public sealed class DiscordChannelProjection : IDisposable
 
     private Task OnGuildAvailableAsync(GuildAvailableEvent e, CancellationToken ct)
     {
+        _guilds[e.GuildId.Value] = e.Guild;
+
+        foreach (var member in e.Members) _members[member.User.Id.Value] = member;
         foreach (var channel in e.Channels) Store(channel, e.GuildId);
         foreach (var thread in e.Threads) Store(thread, e.GuildId);
 
@@ -112,6 +153,11 @@ public sealed class DiscordChannelProjection : IDisposable
     private Task OnGuildUnavailableAsync(GuildUnavailableEvent e, CancellationToken ct)
     {
         var guildId = e.GuildId.Value;
+
+        _guilds.TryRemove(guildId, out _);
+
+        foreach (var member in _members.Values.Where(m => m.GuildId?.Value == guildId))
+            _members.TryRemove(member.User.Id.Value, out _);
 
         foreach (var channel in _channels.Values.Where(c => c.GuildId?.Value == guildId))
             _channels.TryRemove(channel.Id.Value, out _);
@@ -131,6 +177,27 @@ public sealed class DiscordChannelProjection : IDisposable
         foreach (var thread in e.Threads) Store(thread, e.GuildId);
 
         Rebuild();
+
+        return Task.CompletedTask;
+    }
+
+    private Task StoreMember(DiscordMember member)
+    {
+        _members[member.User.Id.Value] = member;
+
+        return Task.CompletedTask;
+    }
+
+    private Task StoreRole(Snowflake guildId, DiscordRole role) =>
+        UpdateGuild(guildId, guild => guild with
+        {
+            Roles = guild.Roles.Where(existing => existing.Id != role.Id).Append(role).ToArray()
+        });
+
+    private Task UpdateGuild(Snowflake guildId, Func<DiscordGuild, DiscordGuild> update)
+    {
+        if (_guilds.TryGetValue(guildId.Value, out var guild))
+            _guilds[guildId.Value] = update(guild);
 
         return Task.CompletedTask;
     }
@@ -179,6 +246,8 @@ public sealed class DiscordChannelProjection : IDisposable
 
     private void Clear()
     {
+        _guilds.Clear();
+        _members.Clear();
         _channels.Clear();
         _threads.Clear();
         _resolvedThreadNames.Clear();

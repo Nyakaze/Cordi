@@ -339,27 +339,27 @@ public sealed class ChatboxEmojiPicker
 
         _guildEmotesRefreshedAt = DateTime.UtcNow;
 
-        var client = _plugin.Discord?.Client;
-        if (client == null) return;
+        var guilds = _plugin.Channels?.Guilds;
+        if (guilds == null) return;
 
         _guildEmotes.Clear();
         _guildEmoteIds.Clear();
 
-        foreach (var guild in client.Guilds.Values)
+        foreach (var guild in guilds)
         {
             var group = new GuildEmoteGroup { Name = guild.Name ?? "Server" };
 
-            foreach (var emoji in guild.Emojis.Values)
+            foreach (var emoji in guild.Emojis)
             {
                 if (string.IsNullOrEmpty(emoji.Name)) continue;
 
                 group.Emotes.Add(new GuildEmote
                 {
                     Name = emoji.Name,
-                    Token = $"<{(emoji.IsAnimated ? "a" : string.Empty)}:{emoji.Name}:{emoji.Id}>",
+                    Token = $"<{(emoji.Animated ? "a" : string.Empty)}:{emoji.Name}:{emoji.Id.Value}>",
                 });
 
-                _guildEmoteIds.Add(emoji.Id);
+                _guildEmoteIds.Add(emoji.Id.Value);
             }
 
             if (group.Emotes.Count > 0) _guildEmotes.Add(group);

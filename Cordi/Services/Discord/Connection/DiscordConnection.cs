@@ -104,6 +104,7 @@ public sealed class DiscordConnection : IAsyncDisposable
                 Token = token,
                 Intents = RequiredIntents,
                 EnableCache = true,
+                EnableRestLogging = false,
                 ResolveEntities = true,
                 SequentialDispatch = true,
                 MinimumLogLevel = LogLevel.Information,

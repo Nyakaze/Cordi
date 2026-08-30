@@ -8,8 +8,7 @@ using Dalamud.Interface;
 using Dalamud.Interface.Colors;
 using Dalamud.Interface.Utility;
 using Dalamud.Interface.Utility.Raii;
-using DSharpPlus;
-using DSharpPlus.Entities;
+using Crovus.Models;
 using Dalamud.Bindings.ImGui;
 using System.Collections.Generic;
 
@@ -383,8 +382,10 @@ public class DebugTab : ConfigTabBase
             title: "System Status",
             drawContent: (avail) =>
             {
-                var client = plugin.Discord.Client;
-                bool isConnected = client != null && botStarted;
+                var connection = plugin.DiscordConnection;
+                var context = connection.Context;
+                var gateway = context?.Gateway;
+                bool isConnected = connection.IsConnected && botStarted;
 
 
                 using (var group1 = ImRaii.Group())
@@ -394,9 +395,9 @@ public class DebugTab : ConfigTabBase
                     {
                         if (isConnected)
                         {
-                            ImGui.TextColored(UiTheme.ColorSuccessText, "Connected (Ping: "); ImGui.SameLine(0, 0); ImGui.TextColored(UiTheme.ColorSuccessText, (client?.Ping ?? 0).ToString()); ImGui.SameLine(0, 0); ImGui.TextColored(UiTheme.ColorSuccessText, "ms)");
+                            ImGui.TextColored(UiTheme.ColorSuccessText, "Connected (Ping: "); ImGui.SameLine(0, 0); ImGui.TextColored(UiTheme.ColorSuccessText, ((int)(gateway?.Latency?.TotalMilliseconds ?? 0)).ToString()); ImGui.SameLine(0, 0); ImGui.TextColored(UiTheme.ColorSuccessText, "ms)");
                             ImGui.SameLine();
-                            ImGui.TextColored(theme.MutedText, "| Gateway: v"); ImGui.SameLine(0, 0); ImGui.TextColored(theme.MutedText, (client?.GatewayVersion ?? 0).ToString());
+                            ImGui.TextColored(theme.MutedText, "| Gateway: "); ImGui.SameLine(0, 0); ImGui.TextColored(theme.MutedText, (gateway?.State)?.ToString() ?? "Unknown");
                         }
                         else
                         {
@@ -414,10 +415,10 @@ public class DebugTab : ConfigTabBase
                 using (var group2 = ImRaii.Group())
                 {
                     ImGui.TextColored(theme.MutedText, "Current User");
-                    if (isConnected && client?.CurrentUser != null)
+                    if (isConnected && context?.CurrentUser is { } currentUser)
                     {
-                        ImGui.TextUnformatted(client.CurrentUser.Username); ImGui.SameLine(0, 0); ImGui.TextUnformatted("#"); ImGui.SameLine(0, 0); ImGui.TextUnformatted(client.CurrentUser.Discriminator ?? "0000");
-                        ImGui.TextColored(theme.MutedText, "ID: "); ImGui.SameLine(0, 0); ImGui.TextColored(theme.MutedText, client.CurrentUser.Id.ToString());
+                        ImGui.TextUnformatted(currentUser.Username); ImGui.SameLine(0, 0); ImGui.TextUnformatted("#"); ImGui.SameLine(0, 0); ImGui.TextUnformatted(currentUser.Discriminator ?? "0000");
+                        ImGui.TextColored(theme.MutedText, "ID: "); ImGui.SameLine(0, 0); ImGui.TextColored(theme.MutedText, currentUser.Id.ToString());
                     }
                     else
                     {
@@ -438,9 +439,13 @@ public class DebugTab : ConfigTabBase
 
                 if (ImGui.Button("Force Reconnect", new Vector2(150, 0)))
                 {
-                    if (isConnected && client != null)
+                    if (isConnected)
                     {
-                        _ = client.ReconnectAsync();
+                        _ = Task.Run(async () =>
+                        {
+                            await plugin.Discord.Stop();
+                            await plugin.Discord.Start();
+                        });
                     }
                 }
                 if (ImGui.IsItemHovered()) ImGui.SetTooltip("Attempt to reconnect the gateway socket.");
@@ -956,21 +961,14 @@ public class DebugTab : ConfigTabBase
                         if (DateTime.Now - _lastGuildFetch > _cacheInterval || _cachedGuilds.Count == 0)
                         {
                             _lastGuildFetch = DateTime.Now;
-                            if (plugin.Discord.Client != null)
-                            {
-                                _cachedGuilds = plugin.Discord.Client.Guilds.Values.ToList();
-                            }
-                            else
-                            {
-                                _cachedGuilds.Clear();
-                            }
+                            _cachedGuilds = plugin.Channels.Guilds.ToList();
                         }
 
-                        if (plugin.Discord.Client != null)
+                        if (plugin.DiscordConnection.IsConnected)
                         {
                             foreach (var guild in _cachedGuilds)
                             {
-                                ImGui.TextUnformatted(guild.Name); ImGui.SameLine(0, 0); ImGui.TextUnformatted(" (ID: "); ImGui.SameLine(0, 0); ImGui.TextUnformatted(guild.Id.ToString()); ImGui.SameLine(0, 0); ImGui.TextUnformatted(") - Members: "); ImGui.SameLine(0, 0); ImGui.TextUnformatted(guild.MemberCount.ToString());
+                                ImGui.TextUnformatted(guild.Name); ImGui.SameLine(0, 0); ImGui.TextUnformatted(" (ID: "); ImGui.SameLine(0, 0); ImGui.TextUnformatted(guild.Id.ToString()); ImGui.SameLine(0, 0); ImGui.TextUnformatted(") - Members: "); ImGui.SameLine(0, 0); ImGui.TextUnformatted((guild.MemberCount ?? guild.ApproximateMemberCount ?? 0).ToString());
                             }
                         }
                         else

@@ -3,41 +3,37 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using Cordi.Configuration;
 using Cordi.Core;
 using Cordi.Services.Features;
-using Dalamud.Plugin.Services;
-using DSharpPlus;
-using DSharpPlus.Entities;
-using DSharpPlus.EventArgs;
+using Crovus.Client;
+using Crovus.Events;
+using Crovus.Models;
 using Lumina.Excel.Sheets;
 
 namespace Cordi.Services.Discord;
 
 public class DiscordSlashCommandService : IDisposable
 {
-    private static readonly IPluginLog Logger = Service.Log;
     private readonly CordiPlugin _plugin;
-    private DiscordClient? _client;
+    private readonly ScreenshotService _screenshotService;
     private bool _bound;
 
     private const int DiscordMaxGuildCommands = 100;
-    // 2 slots reserved: /cordi (management) + /emote (universal emote)
     private const int ReservedSlots = 2;
     private const int MaxUserCommands = DiscordMaxGuildCommands - ReservedSlots;
     private const string ManageCommandName = "cordi";
     private const string EmoteCommandName = "emote";
+    private const int MaxAutocompleteChoices = 25;
 
-    /// <summary>
-    /// In-memory list of all emote commands loaded from game data. Not persisted to config.
-    /// </summary>
     public List<CustomSlashCommand> EmoteCommands { get; } = new();
-
-    private readonly ScreenshotService _screenshotService;
 
     private CordiLogService Log => _plugin.LogService;
     private const string LogSource = "SlashCommands";
+
+    private ICrovusContext? Context => _plugin.DiscordConnection.Context;
 
     public DiscordSlashCommandService(CordiPlugin plugin, ScreenshotService screenshotService)
     {
@@ -45,34 +41,35 @@ public class DiscordSlashCommandService : IDisposable
         _screenshotService = screenshotService;
     }
 
-    public void Bind(DiscordClient client)
+    public void Bind()
     {
-        if (_bound) Unbind();
-        _client = client;
-        _client.InteractionCreated += OnInteractionCreated;
+        if (_bound) return;
         _bound = true;
+
+        _plugin.DiscordConnection.Ready += OnReadyAsync;
+        _plugin.DiscordConnection.Register<InteractionCreatedEvent>(OnInteractionCreatedAsync);
     }
 
-    public void Unbind()
+    private async Task OnReadyAsync(ReadyEvent e)
     {
-        if (_client != null && _bound)
+        if (!_plugin.Config.SlashCommands.Enabled) return;
+
+        try
         {
-            _client.InteractionCreated -= OnInteractionCreated;
+            PopulateEmoteCommands();
+
+            await RegisterCommandsAsync();
         }
-        _bound = false;
-        _client = null;
+        catch (Exception ex)
+        {
+            Log.Error(LogSource, $"Failed to auto-register slash commands: {ex.Message}");
+        }
     }
 
-    /// <summary>
-    /// Populates the in-memory emote list from FFXIV game data.
-    /// Emotes are embedded in the plugin and not persisted to config.
-    /// Also cleans any leftover emote entries from config (migration).
-    /// </summary>
     public void PopulateEmoteCommands()
     {
         var config = _plugin.Config.SlashCommands;
 
-        // Migration: remove any emote commands that were previously stored in config
         int removed = config.Commands.RemoveAll(c => c.IsEmote);
         if (removed > 0)
         {
@@ -109,15 +106,12 @@ public class DiscordSlashCommandService : IDisposable
                 else
                     emoteName = CultureInfo.CurrentCulture.TextInfo.ToTitleCase(emoteName);
 
-                // Register primary command and alias
                 var commandsToAdd = new List<(string name, string gameCmd)>();
 
-                // Primary
                 var primaryName = slashCmd.TrimStart('/').ToLower();
                 if (!string.IsNullOrEmpty(primaryName))
                     commandsToAdd.Add((primaryName, slashCmd));
 
-                // Alias
                 var rawAlias = textCmd.Alias.ToString();
                 if (!string.IsNullOrWhiteSpace(rawAlias))
                 {
@@ -155,87 +149,93 @@ public class DiscordSlashCommandService : IDisposable
         }
     }
 
-    // ─── Command Building ───────────────────────────────────────────────
-
-    /// <summary>
-    /// Builds the built-in /cordi management command with subcommand groups:
-    /// /cordi command enable|disable|list
-    /// /cordi group enable|disable|list
-    /// </summary>
-    private DiscordApplicationCommand BuildManageCommand()
+    private ApplicationCommandRequest BuildManageCommand()
     {
         var nameOption = new DiscordApplicationCommandOption(
-            "name", "The command name", ApplicationCommandOptionType.String, true);
+            ApplicationCommandOptionType.String, "name", "The command name") { Required = true };
+
         var groupNameOption = new DiscordApplicationCommandOption(
-            "name", "The group name", ApplicationCommandOptionType.String, true);
+            ApplicationCommandOptionType.String, "name", "The group name") { Required = true };
 
         var commandGroup = new DiscordApplicationCommandOption(
-            "command", "Manage individual commands", ApplicationCommandOptionType.SubCommandGroup, false, null,
-            new[]
+            ApplicationCommandOptionType.SubCommandGroup, "command", "Manage individual commands")
+        {
+            Options = new[]
             {
-                new DiscordApplicationCommandOption("enable", "Enable a command", ApplicationCommandOptionType.SubCommand, false, null,
-                    new[] { nameOption }),
-                new DiscordApplicationCommandOption("disable", "Disable a command", ApplicationCommandOptionType.SubCommand, false, null,
-                    new[] { nameOption }),
-                new DiscordApplicationCommandOption("list", "List all commands and their status", ApplicationCommandOptionType.SubCommand),
-            });
+                new DiscordApplicationCommandOption(
+                    ApplicationCommandOptionType.SubCommand, "enable", "Enable a command")
+                {
+                    Options = new[] { nameOption }
+                },
+                new DiscordApplicationCommandOption(
+                    ApplicationCommandOptionType.SubCommand, "disable", "Disable a command")
+                {
+                    Options = new[] { nameOption }
+                },
+                new DiscordApplicationCommandOption(
+                    ApplicationCommandOptionType.SubCommand, "list", "List all commands and their status"),
+            }
+        };
 
         var groupGroup = new DiscordApplicationCommandOption(
-            "cmdgroup", "Manage command groups", ApplicationCommandOptionType.SubCommandGroup, false, null,
-            new[]
+            ApplicationCommandOptionType.SubCommandGroup, "cmdgroup", "Manage command groups")
+        {
+            Options = new[]
             {
-                new DiscordApplicationCommandOption("enable", "Enable all commands in a group", ApplicationCommandOptionType.SubCommand, false, null,
-                    new[] { groupNameOption }),
-                new DiscordApplicationCommandOption("disable", "Disable all commands in a group", ApplicationCommandOptionType.SubCommand, false, null,
-                    new[] { groupNameOption }),
-                new DiscordApplicationCommandOption("list", "List all groups and their status", ApplicationCommandOptionType.SubCommand),
-            });
+                new DiscordApplicationCommandOption(
+                    ApplicationCommandOptionType.SubCommand, "enable", "Enable all commands in a group")
+                {
+                    Options = new[] { groupNameOption }
+                },
+                new DiscordApplicationCommandOption(
+                    ApplicationCommandOptionType.SubCommand, "disable", "Disable all commands in a group")
+                {
+                    Options = new[] { groupNameOption }
+                },
+                new DiscordApplicationCommandOption(
+                    ApplicationCommandOptionType.SubCommand, "list", "List all groups and their status"),
+            }
+        };
 
         var screenshotCommand = new DiscordApplicationCommandOption(
-            "screenshot", "Capture and send a screenshot of the current game state",
-            ApplicationCommandOptionType.SubCommand);
+            ApplicationCommandOptionType.SubCommand, "screenshot",
+            "Capture and send a screenshot of the current game state");
 
-        return new DiscordApplicationCommand(ManageCommandName, "Manage Cordi slash commands [Cordi]",
-            new[] { commandGroup, groupGroup, screenshotCommand });
+        return new ApplicationCommandRequest(ManageCommandName, ApplicationCommandType.ChatInput)
+        {
+            Description = "Manage Cordi slash commands [Cordi]",
+            Options = new[] { commandGroup, groupGroup, screenshotCommand }
+        };
     }
 
-    /// <summary>
-    /// Builds the built-in /emote command with autocomplete for emote name.
-    /// </summary>
-    private DiscordApplicationCommand BuildEmoteCommand()
+    private ApplicationCommandRequest BuildEmoteCommand()
     {
         var nameOption = new DiscordApplicationCommandOption(
-            "name", "The emote to perform (e.g. dance, wave, hug)",
-            ApplicationCommandOptionType.String,
-            required: true,
-            choices: null,
-            options: null,
-            channelTypes: null,
-            autocomplete: true
-        );
+            ApplicationCommandOptionType.String, "name", "The emote to perform (e.g. dance, wave, hug)")
+        {
+            Required = true,
+            Autocomplete = true
+        };
 
-        return new DiscordApplicationCommand(EmoteCommandName, "Perform any FFXIV emote [Cordi]",
-            new[] { nameOption });
+        return new ApplicationCommandRequest(EmoteCommandName, ApplicationCommandType.ChatInput)
+        {
+            Description = "Perform any FFXIV emote [Cordi]",
+            Options = new[] { nameOption }
+        };
     }
 
-    /// <summary>
-    /// Builds Discord application command objects for all enabled commands in config,
-    /// plus the built-in /cordi and /emote commands.
-    /// </summary>
-    private List<DiscordApplicationCommand> BuildApplicationCommands(out int skipped)
+    private List<ApplicationCommandRequest> BuildApplicationCommands(out int skipped)
     {
         var config = _plugin.Config.SlashCommands;
-        var result = new List<DiscordApplicationCommand>();
+        var result = new List<ApplicationCommandRequest>();
         var seen = new HashSet<string>();
         skipped = 0;
 
-        // Always include built-in commands first
         result.Add(BuildManageCommand());
         seen.Add(ManageCommandName);
         result.Add(BuildEmoteCommand());
         seen.Add(EmoteCommandName);
 
-        // User commands (enabled)
         foreach (var cmd in config.Commands.Where(c => c.IsEnabled))
         {
             var appCmd = BuildSingleCommand(cmd);
@@ -243,12 +243,11 @@ public class DiscordSlashCommandService : IDisposable
             if (!seen.Add(appCmd.Name)) continue;
             result.Add(appCmd);
         }
-        // Emotes are always available via /emote and not registered individually
 
         return result;
     }
 
-    private DiscordApplicationCommand? BuildSingleCommand(CustomSlashCommand cmd)
+    private ApplicationCommandRequest? BuildSingleCommand(CustomSlashCommand cmd)
     {
         if (string.IsNullOrWhiteSpace(cmd.Name) || string.IsNullOrWhiteSpace(cmd.GameCommand))
             return null;
@@ -272,25 +271,34 @@ public class DiscordSlashCommandService : IDisposable
             {
                 if (string.IsNullOrWhiteSpace(param.Name)) continue;
                 options.Add(new DiscordApplicationCommandOption(
-                    param.Name.ToLower(),
-                    string.IsNullOrWhiteSpace(param.Description) ? param.Name : param.Description,
                     ApplicationCommandOptionType.String,
-                    param.Required
-                ));
+                    param.Name.ToLower(),
+                    string.IsNullOrWhiteSpace(param.Description) ? param.Name : param.Description)
+                {
+                    Required = param.Required
+                });
             }
             if (options.Count == 0) options = null;
         }
 
-        return new DiscordApplicationCommand(cmd.Name.ToLower(), description, options);
+        return new ApplicationCommandRequest(cmd.Name.ToLower(), ApplicationCommandType.ChatInput)
+        {
+            Description = description,
+            Options = options
+        };
     }
-
-    // ─── Registration ───────────────────────────────────────────────────
 
     public async Task RegisterCommandsAsync()
     {
-        if (_client == null)
+        if (Context is not { } context)
         {
             Log.Warning(LogSource, "Cannot register commands: Discord client is null (not connected?).");
+            return;
+        }
+
+        if (context.ApplicationId is not { } applicationId)
+        {
+            Log.Warning(LogSource, "Cannot register commands: application id is unknown.");
             return;
         }
 
@@ -315,7 +323,7 @@ public class DiscordSlashCommandService : IDisposable
             foreach (var ac in appCommands)
                 Log.Debug(LogSource, $"  -> /{ac.Name}: {ac.Description}");
 
-            await _client.BulkOverwriteGuildApplicationCommandsAsync(guildId, appCommands);
+            await context.Services.Commands.DeployAsync(applicationId, appCommands, guildId);
             Log.Info(LogSource, $"Bulk-registered {appCommands.Count} command(s) with Discord.");
 
             if (skipped > 0)
@@ -329,7 +337,9 @@ public class DiscordSlashCommandService : IDisposable
 
     public async Task RegisterSingleCommandAsync(CustomSlashCommand cmd)
     {
-        if (_client == null) return;
+        if (Context is not { } context) return;
+        if (context.ApplicationId is not { } applicationId) return;
+
         var config = _plugin.Config.SlashCommands;
         if (!config.Enabled) return;
 
@@ -342,7 +352,7 @@ public class DiscordSlashCommandService : IDisposable
         try
         {
             var appCommands = BuildApplicationCommands(out _);
-            await _client.BulkOverwriteGuildApplicationCommandsAsync(guildId, appCommands);
+            await context.Services.Commands.DeployAsync(applicationId, appCommands, guildId);
             Log.Info(LogSource, $"Registered /{cmd.Name} (bulk-synced {appCommands.Count} command(s)).");
         }
         catch (Exception ex)
@@ -354,14 +364,16 @@ public class DiscordSlashCommandService : IDisposable
 
     public async Task UnregisterAllCommandsAsync()
     {
-        if (_client == null) return;
+        if (Context is not { } context) return;
+        if (context.ApplicationId is not { } applicationId) return;
+
         var config = _plugin.Config.SlashCommands;
         if (string.IsNullOrEmpty(config.GuildId) || !ulong.TryParse(config.GuildId, out var guildId))
             return;
 
         try
         {
-            await _client.BulkOverwriteGuildApplicationCommandsAsync(guildId, Array.Empty<DiscordApplicationCommand>());
+            await context.Services.Commands.ClearAsync(applicationId, guildId);
             Log.Info(LogSource, "Unregistered all guild commands.");
         }
         catch (Exception ex)
@@ -370,85 +382,74 @@ public class DiscordSlashCommandService : IDisposable
         }
     }
 
-    // ─── Interaction Handling ───────────────────────────────────────────
-
-    private async Task OnInteractionCreated(DiscordClient sender, InteractionCreateEventArgs e)
+    private async Task OnInteractionCreatedAsync(InteractionCreatedEvent e, CancellationToken ct)
     {
         var config = _plugin.Config.SlashCommands;
         if (!config.Enabled) return;
 
-        // Handle autocomplete for /emote
-        if (e.Interaction.Type == InteractionType.AutoComplete)
+        var interaction = e.Interaction;
+
+        if (interaction.Type == InteractionType.ApplicationCommandAutocomplete)
         {
-            await HandleAutocomplete(e.Interaction, config);
+            await HandleAutocomplete(interaction);
             return;
         }
 
-        if (e.Interaction.Type != InteractionType.ApplicationCommand)
+        if (interaction.Type != InteractionType.ApplicationCommand)
             return;
 
-        var commandName = e.Interaction.Data.Name;
+        var commandName = interaction.CommandName;
 
-        // Built-in: /cordi management
         if (string.Equals(commandName, ManageCommandName, StringComparison.OrdinalIgnoreCase))
         {
-            await HandleManageCommand(e.Interaction, config);
+            await HandleManageCommand(interaction, config);
             return;
         }
 
-        // Built-in: /emote <name>
         if (string.Equals(commandName, EmoteCommandName, StringComparison.OrdinalIgnoreCase))
         {
-            await HandleEmoteCommand(e.Interaction, config);
+            await HandleEmoteCommand(interaction);
             return;
         }
 
-        // Channel restriction (does not apply to /cordi or /emote)
         if (!string.IsNullOrEmpty(config.CommandChannelId) &&
-            e.Interaction.ChannelId.ToString() != config.CommandChannelId)
+            interaction.ChannelId?.ToString() != config.CommandChannelId)
         {
-            await RespondAsync(e.Interaction, "This command can only be used in the designated command channel.", true);
+            await RespondAsync(interaction, "This command can only be used in the designated command channel.", true);
             return;
         }
 
-        // Custom commands
         var customCommand = config.Commands.FirstOrDefault(c =>
             string.Equals(c.Name, commandName, StringComparison.OrdinalIgnoreCase));
 
         if (customCommand == null || !customCommand.IsEnabled)
             return;
 
-        Log.Info(LogSource, $"Slash command invoked: /{commandName} by {e.Interaction.User.Username}");
-        await ExecuteGameCommand(e.Interaction, customCommand);
+        Log.Info(LogSource, $"Slash command invoked: /{commandName} by {Describe(interaction)}");
+        await ExecuteGameCommand(interaction, customCommand);
     }
 
-    // ─── /emote Command ─────────────────────────────────────────────────
-
-    private async Task HandleAutocomplete(DiscordInteraction interaction, SlashCommandConfig config)
+    private async Task HandleAutocomplete(DiscordInteraction interaction)
     {
-        if (!string.Equals(interaction.Data.Name, EmoteCommandName, StringComparison.OrdinalIgnoreCase))
+        if (!string.Equals(interaction.CommandName, EmoteCommandName, StringComparison.OrdinalIgnoreCase))
             return;
 
-        var focusedOption = interaction.Data.Options?.FirstOrDefault(o => o.Name == "name");
-        var typed = focusedOption?.Value?.ToString()?.ToLower() ?? "";
+        if (Context is not { } context) return;
 
-        // Search emotes matching what the user typed
+        var focusedOption = interaction.FocusedOption ?? interaction.Option("name");
+        var typed = focusedOption?.AsString.ToLower() ?? "";
+
         var matches = EmoteCommands
             .Where(c =>
                 c.Name.Contains(typed, StringComparison.OrdinalIgnoreCase) ||
                 (c.Description ?? "").Contains(typed, StringComparison.OrdinalIgnoreCase))
-            .Take(25) // Discord allows max 25 autocomplete choices
-            .Select(c => new DiscordAutoCompleteChoice(
-                $"/{c.Name} — {(c.Description ?? "").Replace(" [Cordi]", "").Replace("Perform the ", "")}".Length > 100
-                    ? $"/{c.Name}"
-                    : $"/{c.Name} — {(c.Description ?? "").Replace(" [Cordi]", "").Replace("Perform the ", "")}",
-                c.Name))
+            .Take(MaxAutocompleteChoices)
+            .Select(c => DiscordApplicationCommandChoice.Text(BuildChoiceLabel(c), c.Name))
             .ToList();
 
         try
         {
-            await interaction.CreateResponseAsync(InteractionResponseType.AutoCompleteResult,
-                new DiscordInteractionResponseBuilder().AddAutoCompleteChoices(matches));
+            await context.Services.Interactions.AutocompleteAsync(interaction, matches);
         }
         catch (Exception ex)
         {
@@ -456,10 +457,17 @@ public class DiscordSlashCommandService : IDisposable
         }
     }
 
-    private async Task HandleEmoteCommand(DiscordInteraction interaction, SlashCommandConfig config)
+    private static string BuildChoiceLabel(CustomSlashCommand command)
     {
-        var nameOption = interaction.Data.Options?.FirstOrDefault(o => o.Name == "name");
-        var emoteName = nameOption?.Value?.ToString()?.ToLower()?.Trim();
+        var description = (command.Description ?? "").Replace(" [Cordi]", "").Replace("Perform the ", "");
+        var label = $"/{command.Name} — {description}";
+
+        return label.Length > 100 ? $"/{command.Name}" : label;
+    }
+
+    private async Task HandleEmoteCommand(DiscordInteraction interaction)
+    {
+        var emoteName = interaction.Option("name")?.AsString.ToLower().Trim();
 
         if (string.IsNullOrEmpty(emoteName))
         {
@@ -467,7 +475,6 @@ public class DiscordSlashCommandService : IDisposable
             return;
         }
 
-        // Look up the emote in the in-memory list
         var emoteCmd = EmoteCommands.FirstOrDefault(c =>
             string.Equals(c.Name, emoteName, StringComparison.OrdinalIgnoreCase));
 
@@ -477,11 +484,9 @@ public class DiscordSlashCommandService : IDisposable
             return;
         }
 
-        Log.Info(LogSource, $"/emote {emoteName} invoked by {interaction.User.Username}");
+        Log.Info(LogSource, $"/emote {emoteName} invoked by {Describe(interaction)}");
         await ExecuteGameCommand(interaction, emoteCmd);
     }
-
-    // ─── Game Command Execution ─────────────────────────────────────────
 
     private async Task ExecuteGameCommand(DiscordInteraction interaction, CustomSlashCommand command)
     {
@@ -489,16 +494,12 @@ public class DiscordSlashCommandService : IDisposable
         {
             var gameCommand = command.GameCommand;
 
-            if (interaction.Data.Options != null && !command.IsEmote)
+            if (!command.IsEmote)
             {
-                foreach (var option in interaction.Data.Options)
+                foreach (var option in interaction.Arguments)
                 {
-                    // Skip the "name" option from /emote
-                    if (string.Equals(interaction.Data.Name, EmoteCommandName, StringComparison.OrdinalIgnoreCase))
-                        continue;
-
                     var placeholder = $"{{{option.Name}}}";
-                    gameCommand = gameCommand.Replace(placeholder, option.Value?.ToString() ?? "");
+                    gameCommand = gameCommand.Replace(placeholder, option.HasValue ? option.AsString : "");
                 }
             }
 
@@ -556,83 +557,77 @@ public class DiscordSlashCommandService : IDisposable
         }
     }
 
-    // ─── /cordi Management Command ──────────────────────────────────────
-
     private async Task HandleManageCommand(DiscordInteraction interaction, SlashCommandConfig config)
     {
-        // First level: subcommand group ("command" or "cmdgroup") or subcommand ("screenshot")
-        var subGroup = interaction.Data.Options?.FirstOrDefault();
-        if (subGroup == null)
-        {
-            await RespondAsync(interaction, "Unknown subcommand.", true);
-            return;
-        }
+        var subGroup = interaction.SubCommandGroup;
+        var subCommand = interaction.SubCommand;
 
-        // Handle top-level subcommands (not in a group)
-        if (subGroup.Name == "screenshot")
-        {
-            Log.Info(LogSource, $"/cordi screenshot invoked by {interaction.User.Username}");
-            await HandleScreenshotCommand(interaction);
-            return;
-        }
-
-        // Second level: subcommand ("enable", "disable", "list")
-        var subCommand = subGroup.Options?.FirstOrDefault();
         if (subCommand == null)
         {
             await RespondAsync(interaction, "Unknown subcommand.", true);
             return;
         }
 
-        Log.Info(LogSource, $"/cordi {subGroup.Name} {subCommand.Name} invoked by {interaction.User.Username}");
+        if (subGroup == null)
+        {
+            if (subCommand == "screenshot")
+            {
+                Log.Info(LogSource, $"/cordi screenshot invoked by {Describe(interaction)}");
+                await HandleScreenshotCommand(interaction);
+                return;
+            }
 
-        switch (subGroup.Name)
+            await RespondAsync(interaction, $"Unknown subcommand: `{subCommand}`", true);
+            return;
+        }
+
+        Log.Info(LogSource, $"/cordi {subGroup} {subCommand} invoked by {Describe(interaction)}");
+
+        switch (subGroup)
         {
             case "command":
-                switch (subCommand.Name)
+                switch (subCommand)
                 {
                     case "enable":
-                        await HandleEnableDisable(interaction, config, subCommand, true);
+                        await HandleEnableDisable(interaction, config, true);
                         break;
                     case "disable":
-                        await HandleEnableDisable(interaction, config, subCommand, false);
+                        await HandleEnableDisable(interaction, config, false);
                         break;
                     case "list":
                         await HandleListCommands(interaction, config);
                         break;
                     default:
-                        await RespondAsync(interaction, $"Unknown subcommand: `{subCommand.Name}`", true);
+                        await RespondAsync(interaction, $"Unknown subcommand: `{subCommand}`", true);
                         break;
                 }
                 break;
             case "cmdgroup":
-                switch (subCommand.Name)
+                switch (subCommand)
                 {
                     case "enable":
-                        await HandleGroupEnableDisable(interaction, config, subCommand, true);
+                        await HandleGroupEnableDisable(interaction, config, true);
                         break;
                     case "disable":
-                        await HandleGroupEnableDisable(interaction, config, subCommand, false);
+                        await HandleGroupEnableDisable(interaction, config, false);
                         break;
                     case "list":
                         await HandleListGroups(interaction, config);
                         break;
                     default:
-                        await RespondAsync(interaction, $"Unknown subcommand: `{subCommand.Name}`", true);
+                        await RespondAsync(interaction, $"Unknown subcommand: `{subCommand}`", true);
                         break;
                 }
                 break;
             default:
-                await RespondAsync(interaction, $"Unknown subcommand group: `{subGroup.Name}`", true);
+                await RespondAsync(interaction, $"Unknown subcommand group: `{subGroup}`", true);
                 break;
         }
     }
 
-    private async Task HandleEnableDisable(DiscordInteraction interaction, SlashCommandConfig config,
-        DiscordInteractionDataOption subcommand, bool enable)
+    private async Task HandleEnableDisable(DiscordInteraction interaction, SlashCommandConfig config, bool enable)
     {
-        var cmdNameOption = subcommand.Options?.FirstOrDefault(o => o.Name == "name");
-        var cmdName = cmdNameOption?.Value?.ToString()?.ToLower()?.Trim();
+        var cmdName = interaction.Option("name")?.AsString.ToLower().Trim();
 
         if (string.IsNullOrEmpty(cmdName))
         {
@@ -683,11 +678,9 @@ public class DiscordSlashCommandService : IDisposable
         }
     }
 
-    private async Task HandleGroupEnableDisable(DiscordInteraction interaction, SlashCommandConfig config,
-        DiscordInteractionDataOption subcommand, bool enable)
+    private async Task HandleGroupEnableDisable(DiscordInteraction interaction, SlashCommandConfig config, bool enable)
     {
-        var groupOption = subcommand.Options?.FirstOrDefault(o => o.Name == "name");
-        var groupName = groupOption?.Value?.ToString()?.Trim();
+        var groupName = interaction.Option("name")?.AsString.Trim();
 
         if (string.IsNullOrEmpty(groupName))
         {
@@ -799,25 +792,24 @@ public class DiscordSlashCommandService : IDisposable
         await RespondAsync(interaction, string.Join("\n", lines), true);
     }
 
-    // ─── /cordi screenshot ────────────────────────────────────────────
-
     private async Task HandleScreenshotCommand(DiscordInteraction interaction)
     {
+        if (Context is not { } context) return;
+
+        var interactions = context.Services.Interactions;
+
         try
         {
-            // Defer the response since screenshot capture may take a moment
-            await interaction.CreateResponseAsync(InteractionResponseType.DeferredChannelMessageWithSource);
+            await interactions.DeferAsync(interaction);
 
-            // Verify the player is logged in
             bool isLoggedIn = await CordiPlugin.Framework.RunOnFrameworkThread(() => Service.ClientState.IsLoggedIn);
             if (!isLoggedIn)
             {
-                await interaction.EditOriginalResponseAsync(
-                    new DiscordWebhookBuilder().WithContent("Cannot capture screenshot: no game is currently active (not logged in)."));
+                await interactions.EditResponseAsync(interaction,
+                    "Cannot capture screenshot: no game is currently active (not logged in).");
                 return;
             }
 
-            // Capture on the framework thread to ensure the game window is accessible
             MemoryStream? screenshotStream = null;
             await CordiPlugin.Framework.RunOnFrameworkThread(() =>
             {
@@ -826,8 +818,8 @@ public class DiscordSlashCommandService : IDisposable
 
             if (screenshotStream == null)
             {
-                await interaction.EditOriginalResponseAsync(
-                    new DiscordWebhookBuilder().WithContent("Screenshot capture failed. The game window may be minimized or unavailable."));
+                await interactions.EditResponseAsync(interaction,
+                    "Screenshot capture failed. The game window may be minimized or unavailable.");
                 return;
             }
 
@@ -835,11 +827,11 @@ public class DiscordSlashCommandService : IDisposable
             {
                 var timestamp = DateTime.Now.ToString("yyyy-MM-dd_HH-mm-ss");
                 var fileName = $"ffxiv_screenshot_{timestamp}.png";
+                var bytes = screenshotStream.ToArray();
 
-                await interaction.EditOriginalResponseAsync(
-                    new DiscordWebhookBuilder()
-                        .WithContent($"Screenshot captured at {DateTime.Now:HH:mm:ss}")
-                        .AddFile(fileName, screenshotStream));
+                await interactions.EditResponseAsync(interaction, response => response
+                    .WithContent($"Screenshot captured at {DateTime.Now:HH:mm:ss}")
+                    .AddFile(fileName, bytes));
             }
 
             Log.Info(LogSource, "Screenshot sent successfully.");
@@ -849,32 +841,30 @@ public class DiscordSlashCommandService : IDisposable
             Log.Error(LogSource, $"Screenshot command failed: {ex.Message}");
             try
             {
-                await interaction.EditOriginalResponseAsync(
-                    new DiscordWebhookBuilder().WithContent($"Screenshot failed: {ex.Message}"));
+                await interactions.EditResponseAsync(interaction, $"Screenshot failed: {ex.Message}");
             }
             catch
             {
-                // If we couldn't even defer, try a direct response
             }
         }
     }
 
-    // ─── Helpers ────────────────────────────────────────────────────────
-
     private async Task RespondAsync(DiscordInteraction interaction, string message, bool ephemeral)
     {
+        if (Context is not { } context) return;
+
         try
         {
-            await interaction.CreateResponseAsync(InteractionResponseType.ChannelMessageWithSource,
-                new DiscordInteractionResponseBuilder()
-                    .WithContent(message)
-                    .AsEphemeral(ephemeral));
+            await context.Services.Interactions.RespondAsync(interaction, message, ephemeral);
         }
         catch (Exception ex)
         {
             Log.Error(LogSource, $"Failed to respond to interaction: {ex.Message}");
         }
     }
+
+    private static string Describe(DiscordInteraction interaction) =>
+        interaction.Invoker?.Username ?? "unknown";
 
     public int GetEnabledCommandCount()
     {
@@ -888,6 +878,9 @@ public class DiscordSlashCommandService : IDisposable
 
     public void Dispose()
     {
-        Unbind();
+        if (!_bound) return;
+        _bound = false;
+
+        _plugin.DiscordConnection.Ready -= OnReadyAsync;
     }
 }
