@@ -4,6 +4,13 @@ using Dalamud.Game.Text;
 
 namespace Cordi.Configuration;
 
+public enum ConversationSort
+{
+    Name,
+    World,
+    MessageCount,
+}
+
 [Serializable]
 public class ChatConfig
 {
@@ -15,6 +22,7 @@ public class ChatConfig
     public bool EnableTellNotification { get; set; } = false;
     public string TellNotificationChannelId { get; set; } = "";
     public int TellNotificationCooldownSeconds { get; set; } = 300;
+    public ConversationSort ConversationSort { get; set; } = ConversationSort.Name;
 }
 
 [Serializable]

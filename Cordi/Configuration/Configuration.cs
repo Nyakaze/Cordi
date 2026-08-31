@@ -28,6 +28,7 @@ public class Configuration : IPluginConfiguration
     public LodestoneConfig Lodestone { get; set; } = new();
     public CombinedWindowConfig CombinedWindow { get; set; } = new();
     public FontConfig Font { get; set; } = new();
+    public AppearanceConfig Appearance { get; set; } = new();
     public ThroughputStats Stats { get; set; } = new();
     public SlashCommandConfig SlashCommands { get; set; } = new();
     public bool LogsTabVisible { get; set; }

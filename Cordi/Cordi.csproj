@@ -8,6 +8,11 @@
     <IsPackable>false</IsPackable>
     <UseWindowsForms>true</UseWindowsForms>
     <DalamudApiLevel>15</DalamudApiLevel>
+    <Configurations>Debug;Release;3.0</Configurations>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)' == '3.0'">
+    <DefineConstants>$(DefineConstants);CORDI_DEV</DefineConstants>
   </PropertyGroup>
 
   <ItemGroup>

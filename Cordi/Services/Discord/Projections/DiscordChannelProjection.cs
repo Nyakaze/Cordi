@@ -2,14 +2,23 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net;
 using System.Threading;
 using System.Threading.Tasks;
 using Cordi.Core;
 using Cordi.Services.Discord.Connection;
 using Crovus.Events;
 using Crovus.Models;
+using Crovus.Rest;
 
 namespace Cordi.Services.Discord.Projections;
+
+public enum ThreadStatus
+{
+    Known,
+    Pending,
+    Missing,
+}
 
 public sealed class DiscordChannelProjection : IDisposable
 {
@@ -24,6 +33,9 @@ public sealed class DiscordChannelProjection : IDisposable
     private readonly ConcurrentDictionary<ulong, DiscordChannel> _threads = new();
     private readonly ConcurrentDictionary<ulong, string> _resolvedThreadNames = new();
     private readonly ConcurrentDictionary<ulong, byte> _pendingThreadFetches = new();
+    private readonly ConcurrentDictionary<ulong, byte> _missingThreads = new();
+    private readonly ConcurrentDictionary<ulong, byte> _loadedForums = new();
+    private readonly ConcurrentDictionary<ulong, DateTime> _threadRetryAt = new();
 
     private IReadOnlyList<DiscordChannel> _textChannels = [];
     private IReadOnlyList<DiscordChannel> _forumChannels = [];
@@ -110,12 +122,57 @@ public sealed class DiscordChannelProjection : IDisposable
 
     public string GetThreadName(ulong threadId)
     {
-        if (_threads.TryGetValue(threadId, out var thread)) return thread.Name;
-        if (_resolvedThreadNames.TryGetValue(threadId, out var resolved)) return resolved;
+        ResolveThread(threadId, out var name);
+
+        return name;
+    }
+
+    public ThreadStatus ResolveThread(ulong threadId, out string name)
+    {
+        if (_threads.TryGetValue(threadId, out var thread))
+        {
+            name = thread.Name;
+            return ThreadStatus.Known;
+        }
+
+        if (_resolvedThreadNames.TryGetValue(threadId, out var resolved))
+        {
+            name = resolved;
+            return ThreadStatus.Known;
+        }
+
+        name = threadId.ToString();
+
+        if (_missingThreads.ContainsKey(threadId)) return ThreadStatus.Missing;
 
         ResolveThreadName(threadId);
 
-        return threadId.ToString();
+        return ThreadStatus.Pending;
+    }
+
+    public void EnsureForumThreadsLoaded(ulong forumChannelId)
+    {
+        if (_connection.Context is not { } context) return;
+        if (Find(forumChannelId)?.GuildId is not { } guildId) return;
+        if (!_loadedForums.TryAdd(forumChannelId, 0)) return;
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                var posts = await context.Services.Threads.GetPostsAsync(guildId, forumChannelId, archivedLimit: 100);
+
+                foreach (var post in posts) Store(post, guildId);
+
+                Log.Debug(LogSource, $"Loaded {posts.Count} post(s) from forum {forumChannelId}");
+            }
+            catch (Exception ex)
+            {
+                _loadedForums.TryRemove(forumChannelId, out _);
+
+                Log.Warning(LogSource, $"Failed to load posts from forum {forumChannelId}: {ex.Message}");
+            }
+        });
     }
 
     public void Dispose()
@@ -252,6 +309,9 @@ public sealed class DiscordChannelProjection : IDisposable
         _threads.Clear();
         _resolvedThreadNames.Clear();
         _pendingThreadFetches.Clear();
+        _missingThreads.Clear();
+        _loadedForums.Clear();
+        _threadRetryAt.Clear();
 
         Rebuild();
     }
@@ -259,6 +319,7 @@ public sealed class DiscordChannelProjection : IDisposable
     private void ResolveThreadName(ulong threadId)
     {
         if (_connection.Context is not { } context) return;
+        if (_threadRetryAt.TryGetValue(threadId, out var retryAt) && DateTime.UtcNow < retryAt) return;
         if (!_pendingThreadFetches.TryAdd(threadId, 0)) return;
 
         _ = Task.Run(async () =>
@@ -267,13 +328,20 @@ public sealed class DiscordChannelProjection : IDisposable
             {
                 var thread = await context.Services.Channels.GetAsync(threadId);
 
+                Store(thread, thread.GuildId);
                 _resolvedThreadNames[threadId] = thread.Name;
 
                 Log.Debug(LogSource, $"Resolved thread {threadId}: {thread.Name}");
             }
+            catch (DiscordRestException ex) when (ex.StatusCode is HttpStatusCode.NotFound || ex.ErrorCode == 10003)
+            {
+                _missingThreads[threadId] = 0;
+
+                Log.Debug(LogSource, $"Thread {threadId} no longer exists");
+            }
             catch (Exception ex)
             {
-                _resolvedThreadNames[threadId] = $"[Unknown Thread {threadId}]";
+                _threadRetryAt[threadId] = DateTime.UtcNow.AddMinutes(5);
 
                 Log.Warning(LogSource, $"Failed to resolve thread {threadId}: {ex.Message}");
             }

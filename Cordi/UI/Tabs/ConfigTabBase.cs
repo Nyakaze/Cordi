@@ -26,6 +26,27 @@ public abstract class ConfigTabBase
 
     protected virtual IReadOnlyList<(string Label, Action Draw)>? GetSubTabs() => null;
 
+    public IReadOnlyList<(string Label, Action Draw)>? SubTabs => GetSubTabs();
+
+    public void SelectSubTab(string? label)
+    {
+        if (string.IsNullOrEmpty(label))
+            return;
+
+        var subTabs = GetSubTabs();
+        if (subTabs == null)
+            return;
+
+        for (int i = 0; i < subTabs.Count; i++)
+        {
+            if (string.Equals(subTabs[i].Label, label, StringComparison.OrdinalIgnoreCase))
+            {
+                selectedSubTab = i;
+                return;
+            }
+        }
+    }
+
     public virtual void Draw()
     {
         var subTabs = GetSubTabs();

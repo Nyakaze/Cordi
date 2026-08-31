@@ -166,6 +166,8 @@ public class CordiPlugin : IDalamudPlugin
 
         Chatbox = new ChatboxService(this);
 
+        Cordi.UI.Themes.UiTheme.GlobalAccent = Cordi.UI.Themes.UiTheme.ParseAccent(Config.Appearance.AccentColor);
+
         configWindow = new ConfigWindow(this);
         discordWindow = new DiscordWindow(this);
         CordiPeepWindow = new CordiPeepWindow(this);

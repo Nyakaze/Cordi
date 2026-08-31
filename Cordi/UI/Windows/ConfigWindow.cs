@@ -1,35 +1,30 @@
-﻿using System;
-using System.Linq;
+using System;
 using System.Numerics;
-using Cordi.Packets.Handler.Chat;
 using Dalamud.Bindings.ImGui;
-using Dalamud.Game.Text;
 using Dalamud.Interface.Windowing;
 using Dalamud.Interface.Utility.Raii;
-using Dalamud.IoC;
-using Dalamud.Plugin.Services;
-using Dalamud.Interface;
-using System.Collections.Generic;
 
-using Cordi.Configuration;
 using Cordi.Core;
-
+using Cordi.UI.Components;
+using Cordi.UI.Search;
 using Cordi.UI.Tabs;
 using Cordi.UI.Themes;
 
 namespace Cordi.UI.Windows;
 
-public sealed class ConfigWindow : Window, IDisposable
+public sealed partial class ConfigWindow : Window, IDisposable
 {
-
-    static readonly IPluginLog Logger = Service.Log;
     private readonly CordiPlugin plugin;
     private readonly UiTheme theme = new UiTheme();
 
-
+    private readonly SidebarNav sidebar;
+    private readonly StatChips statChips;
+    private readonly PageHeader pageHeader;
+    private readonly SettingsSearchIndex searchIndex = new();
+    private readonly SearchBox searchBox;
 
     private ChatsTab chatsTab;
-#if DEBUG
+#if DEBUG || CORDI_DEV
     private DebugTab debugTab;
 #endif
     private DiscordActivityTab discordActivityTab;
@@ -38,41 +33,43 @@ public sealed class ConfigWindow : Window, IDisposable
     private TrackerTab trackerTab;
     private SlashCommandsTab slashCommandsTab;
     private ChatboxTab chatboxTab;
-
-
     private LogsTab logsTab;
 
-    private int selectedTab = 1;
+    private string selectedPageId = PageIds.ChannelMappings;
 
     public ConfigWindow(CordiPlugin plugin)
         : base("Cordi", ImGuiWindowFlags.None)
     {
         this.plugin = plugin;
 
-
-        this.chatsTab = new ChatsTab(plugin, theme);
-        this.discordActivityTab = new DiscordActivityTab(plugin, theme);
-#if DEBUG
-        this.debugTab = new DebugTab(plugin, theme);
+        chatsTab = new ChatsTab(plugin, theme);
+        discordActivityTab = new DiscordActivityTab(plugin, theme);
+#if DEBUG || CORDI_DEV
+        debugTab = new DebugTab(plugin, theme);
 #endif
-        this.partyAndPlayersTab = new PartyAndPlayersTab(plugin, theme);
-        this.settingsTab = new SettingsTab(plugin, theme);
-        this.trackerTab = new TrackerTab(plugin, theme);
-        this.slashCommandsTab = new SlashCommandsTab(plugin, theme);
-        this.chatboxTab = new ChatboxTab(plugin, theme);
-        this.logsTab = new LogsTab(plugin, theme);
+        partyAndPlayersTab = new PartyAndPlayersTab(plugin, theme);
+        settingsTab = new SettingsTab(plugin, theme);
+        trackerTab = new TrackerTab(plugin, theme);
+        slashCommandsTab = new SlashCommandsTab(plugin, theme);
+        chatboxTab = new ChatboxTab(plugin, theme);
+        logsTab = new LogsTab(plugin, theme);
+
+        sidebar = new SidebarNav(theme);
+        statChips = new StatChips(theme);
+        pageHeader = new PageHeader(theme);
+        searchBox = new SearchBox(theme, searchIndex);
+        SettingsCatalog.Register(searchIndex);
 
         UiTheme.GlobalFontScale = plugin.Config.Font.GlobalScale;
         UiTheme.GlobalFontBold = plugin.Config.Font.Bold;
 
         SizeConstraints = new WindowSizeConstraints
         {
-            MinimumSize = new Vector2(560, 360),
+            MinimumSize = new Vector2(880, 520),
             MaximumSize = new Vector2(float.MaxValue, float.MaxValue),
         };
         RespectCloseHotkey = true;
     }
-
 
     public Vector2 LastPos { get; private set; }
     public Vector2 LastSize { get; private set; }
@@ -80,194 +77,64 @@ public sealed class ConfigWindow : Window, IDisposable
     public override void PreDraw() => theme.PushWindow();
     public override void PostDraw() => theme.PopWindow();
 
-    public async override void Draw()
+    public override void Draw()
     {
         LastPos = ImGui.GetWindowPos();
         LastSize = ImGui.GetWindowSize();
 
         theme.ApplyFontScale();
 
-        bool botStarted = plugin.Config.Discord.BotStarted;
+        var sections = BuildNavSections();
+        searchIndex.Rebuild(sections);
 
-        using (ImRaii.Disabled(plugin.Discord.IsBusy))
+        var page = ResolvePage(sections, selectedPageId);
+
+        using (ImRaii.PushStyle(ImGuiStyleVar.ItemSpacing, new Vector2(theme.Gap(), theme.Gap(0.6f))))
         {
-            var botStatus = theme.BadgeToggle(
-                id: "##botStatus",
-                ref botStarted,
-                label: "Discord Bot",
-                height: 25f,
-                iconOnRight: false,
-                bgOn: UiTheme.ColorSuccess,
-                bgOff: UiTheme.ColorDanger
-                );
-            if (botStatus.StateChanged)
+            var navigated = sidebar.Draw(sections, selectedPageId, BuildFooterState());
+            if (navigated != null)
+                selectedPageId = navigated;
+
+            ImGui.SameLine();
+
+            using var right = ImRaii.Child("##cordi-main", new Vector2(0, 0), false);
+            if (!right)
+                return;
+
+            DrawTopBar();
+
+            using var content = ImRaii.Child("##cordi-content", new Vector2(0, 0), false);
+            if (!content)
+                return;
+
+            theme.ApplyFontScale();
+
+            if (searchBox.HasQuery)
             {
-                if (botStarted)
-                    plugin.Discord.Start();
-                else
-                    plugin.Discord.Stop();
-            }
-        }
-        theme.HoverHandIfItem();
-
-        DrawStats();
-        theme.SpacerY(1f);
-        ImGui.Separator();
-
-
-
-
-        float fontScale = UiTheme.GlobalFontScale;
-        using (ImRaii.Child("##sidebar", new Vector2(150 * fontScale, 0), false))
-        {
-            theme.ApplyFontScale(1.1f);
-
-            using (ImRaii.PushStyle(ImGuiStyleVar.FrameRounding, 12f))
-            using (ImRaii.PushStyle(ImGuiStyleVar.ButtonTextAlign, new Vector2(0.5f, 0.5f)))
-            {
-                float itemHeight = 40f * fontScale;
-                Vector2 buttonSize = new Vector2(-1, itemHeight);
-
-                void DrawSidebarButton(string label, int tabIndex, bool isFirst = false)
+                var target = searchBox.DrawResults();
+                if (target != null)
                 {
-                    if (!isFirst)
-                        theme.SpacerY();
-                    using (ImRaii.PushColor(ImGuiCol.Button, selectedTab == tabIndex ? theme.Accent : new Vector4(0, 0, 0, 0)))
-                    using (ImRaii.PushColor(ImGuiCol.ButtonHovered, selectedTab == tabIndex ? theme.Accent : theme.TabHovered))
-                    using (ImRaii.PushColor(ImGuiCol.ButtonActive, selectedTab == tabIndex ? theme.Accent : theme.TabActive))
-                    {
-                        if (ImGui.Button(label, buttonSize)) selectedTab = tabIndex;
-                        theme.HoverHandIfItem();
-                    }
-                    ImGui.Spacing();
+                    selectedPageId = target.PageId;
+                    ResolveTab(target.PageId)?.SelectSubTab(target.SubTab);
                 }
 
-                theme.SpacerY(1f);
-                DrawSidebarButton("Chats", 1, true);
-                DrawSidebarButton("Chatbox", 16);
-                DrawSidebarButton("Trackers", 8);
-                DrawSidebarButton("Activity", 5);
-                DrawSidebarButton("Party & Players", 6);
-                DrawSidebarButton("Slash Commands", 13);
-                DrawSidebarButton("Settings", 12);
-
-#if DEBUG
-                DrawSidebarButton("Debug", 3);
-#endif
-
-                if (plugin.IsLogsTabVisible)
-                    DrawSidebarButton("Logs", 99);
+                return;
             }
-            theme.ApplyFontScale();
-        }
-        ImGui.SameLine();
 
-        using (ImRaii.Child("##content", new Vector2(0, 0), false))
-        {
-            theme.ApplyFontScale();
-
-            switch (selectedTab)
+            if (page == null)
             {
-                case 1:
-                    chatsTab.Draw();
-                    break;
-
-#if DEBUG
-                case 3:
-                    debugTab.Draw();
-                    break;
-#endif
-                case 5:
-                    discordActivityTab.Draw();
-                    break;
-
-                case 6:
-                    partyAndPlayersTab.Draw();
-                    break;
-
-                case 8:
-                    trackerTab.Draw();
-                    break;
-
-                case 12:
-                    settingsTab.Draw();
-                    break;
-
-                case 13:
-                    slashCommandsTab.Draw();
-                    break;
-
-                case 16:
-                    chatboxTab.Draw();
-                    break;
-
-                case 99:
-                    logsTab.Draw();
-                    break;
+                ImGui.TextDisabled("This page is not available right now.");
+                return;
             }
+
+            if (!page.OwnHeader)
+                pageHeader.Draw(page.HeaderTitle, page.Subtitle);
+
+            page.Draw();
         }
     }
 
-    private void DrawStats()
-    {
-        var stats = plugin.Config.Stats;
-        bool showMessages = plugin.Config.Chat.Mappings.Count > 0;
-        bool showPeeps = plugin.Config.CordiPeep.Enabled;
-        bool showEmotes = plugin.Config.EmoteLog.Enabled;
-
-        if (!showMessages && !showPeeps && !showEmotes) return;
-
-        float totalWidth = 0f;
-        float spacing = 15f;
-        string msgText = $"Msgs: {stats.TotalMessages}";
-        string peepText = $"Peeps: {stats.TotalPeepsTracked}";
-        string emoteText = $"Emotes: {stats.TotalEmotesTracked}";
-
-        if (showMessages) totalWidth += ImGui.CalcTextSize(msgText).X;
-        if (showPeeps) totalWidth += (totalWidth > 0 ? spacing : 0) + ImGui.CalcTextSize(peepText).X;
-        if (showEmotes) totalWidth += (totalWidth > 0 ? spacing : 0) + ImGui.CalcTextSize(emoteText).X;
-
-        var min = ImGui.GetItemRectMin();
-        var max = ImGui.GetItemRectMax();
-
-        float rightEdge = ImGui.GetWindowPos().X + ImGui.GetWindowContentRegionMax().X;
-        float startX = rightEdge - totalWidth;
-
-        var centerY = (min.Y + max.Y) * 0.5f;
-        var textY = centerY - ImGui.GetTextLineHeight() * 0.5f;
-
-        ImGui.SetCursorScreenPos(new Vector2(startX, textY));
-
-        void DrawStat(string label, long value, string tooltip)
-        {
-            ImGui.TextColored(theme.MutedText, $"{label}: {value}");
-            if (ImGui.IsItemHovered())
-            {
-                ImGui.SetTooltip(tooltip);
-            }
-        }
-
-        bool first = true;
-
-        if (showMessages)
-        {
-            DrawStat("Msgs", stats.TotalMessages, "Total messages processed");
-            first = false;
-        }
-
-        if (showPeeps)
-        {
-            if (!first) ImGui.SameLine(0, spacing);
-            DrawStat("Peeps", stats.TotalPeepsTracked, "Total players tracked");
-            first = false;
-        }
-
-        if (showEmotes)
-        {
-            if (!first) ImGui.SameLine(0, spacing);
-            DrawStat("Emotes", stats.TotalEmotesTracked, "Total emotes tracked");
-        }
-    }
+    public void Navigate(string pageId) => selectedPageId = pageId;
 
     public void Dispose() { }
 }

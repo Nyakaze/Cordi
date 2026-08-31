@@ -14,12 +14,17 @@ public class SettingsTab : ConfigTabBase
     private string _botToken = string.Empty;
     private bool _botTokenInputActive = false;
     private float? _tempFontScale = null;
+    private Vector3 _accentEdit;
+    private bool _accentDirty;
 
     public override string Label => "Settings";
 
     public SettingsTab(CordiPlugin plugin, UiTheme theme) : base(plugin, theme)
     {
         _botToken = plugin.Config.Discord.BotToken ?? string.Empty;
+
+        var accent = UiTheme.ParseAccent(plugin.Config.Appearance.AccentColor);
+        _accentEdit = new Vector3(accent.X, accent.Y, accent.Z);
     }
 
     protected override IReadOnlyList<(string Label, Action Draw)> GetSubTabs()
@@ -27,9 +32,103 @@ public class SettingsTab : ConfigTabBase
         return new (string, Action)[]
         {
             ("Discord", DrawDiscord),
+            ("Appearance", DrawAppearance),
             ("Font", DrawFont),
         };
     }
+
+    private void DrawAppearance()
+    {
+        bool dummyEnabled = true;
+        theme.DrawPluginCardAuto(
+            id: "accent-settings",
+            enabled: ref dummyEnabled,
+            showCheckbox: false,
+            title: "Accent Color",
+            drawContent: (avail) =>
+            {
+                ImGui.TextDisabled("Choose the accent color used across all Cordi windows.");
+                theme.SpacerY(0.75f);
+
+                var draw = ImGui.GetWindowDrawList();
+                var origin = ImGui.GetCursorScreenPos();
+                float swatch = theme.Scaled(30f);
+                float step = swatch + theme.Gap(1.2f);
+
+                for (int i = 0; i < UiTheme.AccentPresets.Length; i++)
+                {
+                    var (name, color) = UiTheme.AccentPresets[i];
+                    var pos = new Vector2(origin.X + step * i, origin.Y);
+
+                    ImGui.SetCursorScreenPos(pos);
+                    if (ImGui.InvisibleButton($"##accent-{name}", new Vector2(swatch, swatch)))
+                        ApplyAccent(color, true);
+
+                    bool hovered = ImGui.IsItemHovered();
+                    if (hovered)
+                    {
+                        ImGui.SetMouseCursor(ImGuiMouseCursor.Hand);
+                        ImGui.SetTooltip(name);
+                    }
+
+                    bool selected = IsSameAccent(color, UiTheme.GlobalAccent);
+                    draw.AddRectFilled(pos, pos + new Vector2(swatch, swatch), ImGui.GetColorU32(color), theme.Radius(0.9f));
+
+                    if (selected || hovered)
+                    {
+                        float ring = theme.Scaled(3f);
+                        draw.AddRect(
+                            pos - new Vector2(ring, ring),
+                            pos + new Vector2(swatch + ring, swatch + ring),
+                            ImGui.GetColorU32(selected ? theme.Text : theme.MutedText),
+                            theme.Radius(1.1f),
+                            ImDrawFlags.None,
+                            theme.Scaled(2f));
+                    }
+                }
+
+                ImGui.SetCursorScreenPos(new Vector2(origin.X, origin.Y + swatch + theme.Gap(1.5f)));
+
+                ImGui.TextColored(theme.Text, "Custom");
+                theme.SpacerY(0.25f);
+
+                if (ImGui.ColorEdit3("##accent-custom", ref _accentEdit, ImGuiColorEditFlags.NoInputs | ImGuiColorEditFlags.DisplayHex))
+                {
+                    ApplyAccent(new Vector4(_accentEdit.X, _accentEdit.Y, _accentEdit.Z, 1f), false);
+                    _accentDirty = true;
+                }
+
+                if (_accentDirty && !ImGui.IsMouseDown(ImGuiMouseButton.Left))
+                {
+                    plugin.Config.Appearance.AccentColor = UiTheme.ToAccentHex(UiTheme.GlobalAccent);
+                    plugin.Config.Save();
+                    _accentDirty = false;
+                }
+
+                ImGui.SameLine();
+
+                if (theme.SecondaryButton("Reset", new Vector2(80, 0)))
+                    ApplyAccent(UiTheme.DefaultAccent, true);
+                theme.HoverHandIfItem();
+            }
+        );
+    }
+
+    private void ApplyAccent(Vector4 color, bool save)
+    {
+        UiTheme.GlobalAccent = new Vector4(color.X, color.Y, color.Z, 1f);
+        _accentEdit = new Vector3(color.X, color.Y, color.Z);
+
+        if (!save)
+            return;
+
+        plugin.Config.Appearance.AccentColor = UiTheme.ToAccentHex(UiTheme.GlobalAccent);
+        plugin.Config.Save();
+        _accentDirty = false;
+    }
+
+    private static bool IsSameAccent(Vector4 a, Vector4 b)
+        => MathF.Abs(a.X - b.X) < 0.004f && MathF.Abs(a.Y - b.Y) < 0.004f && MathF.Abs(a.Z - b.Z) < 0.004f;
 
     private void DrawDiscord()
     {
