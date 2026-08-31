@@ -145,12 +145,11 @@ public sealed class SettingsRow
 
         if (toggleValue.HasValue)
         {
-            float toggleWidth = theme.Scaled(38f);
-            float toggleHeight = theme.Scaled(20f);
-            var togglePos = new Vector2(cursorRight - toggleWidth, min.Y + (height - toggleHeight) * 0.5f);
+            var toggleSize = theme.ToggleSize();
+            var togglePos = new Vector2(cursorRight - toggleSize.X, min.Y + (height - toggleSize.Y) * 0.5f);
 
             bool value = toggleValue.Value;
-            bool toggled = DrawToggle($"##row-toggle-{id}", togglePos, toggleWidth, toggleHeight, ref value, toggleEnabled);
+            bool toggled = theme.ToggleSwitch($"##row-toggle-{id}", togglePos, ref value, toggleEnabled);
 
             string tooltip = toggleEnabled ? toggleTooltip : toggleDisabledTooltip;
             if (!string.IsNullOrEmpty(tooltip) && ImGui.IsItemHovered())
@@ -168,7 +167,7 @@ public sealed class SettingsRow
         if (drawControl != null)
         {
             float actualWidth = controlWidth > 0 ? theme.Scaled(controlWidth) : theme.Scaled(180f);
-            float controlHeight = ImGui.GetFrameHeight();
+            float controlHeight = theme.Scaled(UiTheme.ControlHeight);
             var controlPos = new Vector2(cursorRight - actualWidth, min.Y + (height - controlHeight) * 0.5f);
             ImGui.SetCursorScreenPos(controlPos);
             drawControl(controlPos, actualWidth);
@@ -184,40 +183,4 @@ public sealed class SettingsRow
         };
     }
 
-    public bool DrawToggle(string id, Vector2 pos, float width, float height, ref bool value, bool enabled = true)
-    {
-        var draw = ImGui.GetWindowDrawList();
-
-        ImGui.SetCursorScreenPos(pos);
-        bool clicked = ImGui.InvisibleButton(id, new Vector2(width, height)) && enabled;
-        bool hovered = ImGui.IsItemHovered() && enabled;
-        if (hovered)
-            ImGui.SetMouseCursor(ImGuiMouseCursor.Hand);
-
-        if (clicked)
-            value = !value;
-
-        float radius = height * 0.5f;
-        float alpha = enabled ? 1f : 0.4f;
-        var max = pos + new Vector2(width, height);
-
-        var track = value
-            ? new Vector4(theme.Accent.X, theme.Accent.Y, theme.Accent.Z, hovered ? 0.32f : 0.22f)
-            : hovered ? theme.FrameBgHover : theme.FrameBg;
-
-        var border = value ? theme.Accent : theme.Border;
-        var knob = value ? theme.Accent : theme.MutedText;
-
-        draw.AddRectFilled(pos, max, Faded(track, alpha), radius);
-        draw.AddRect(pos, max, Faded(border, alpha), radius);
-
-        float knobRadius = radius - theme.Scaled(4f);
-        float knobX = value ? max.X - radius : pos.X + radius;
-        draw.AddCircleFilled(new Vector2(knobX, pos.Y + radius), knobRadius, Faded(knob, alpha));
-
-        return clicked;
-    }
-
-    private static uint Faded(Vector4 color, float alpha) =>
-        ImGui.GetColorU32(new Vector4(color.X, color.Y, color.Z, color.W * alpha));
 }

@@ -157,41 +157,51 @@ public sealed partial class UiTheme
     }
 
 
-    public bool ToggleSwitch(string id, ref bool value, float widthMul = 2.2f)
+    public Vector2 ToggleSize() => new(Scaled(ToggleWidth), Scaled(ToggleHeight));
+
+    public bool ToggleSwitch(string id, ref bool value, bool enabled = true) =>
+        ToggleSwitch(id, ImGui.GetCursorScreenPos(), ref value, enabled);
+
+    public bool ToggleSwitch(string id, Vector2 pos, ref bool value, bool enabled = true)
     {
-        var h = ImGui.GetFrameHeight();
-        var w = MathF.Max(h * widthMul, h * 1.8f);
-        var r = h * 0.5f;
+        var draw = ImGui.GetWindowDrawList();
+        var size = ToggleSize();
 
-        var p = ImGui.GetCursorScreenPos();
-        var dl = ImGui.GetWindowDrawList();
+        ImGui.SetCursorScreenPos(pos);
+        bool clicked = ImGui.InvisibleButton(id, size) && enabled;
+        bool hovered = ImGui.IsItemHovered() && enabled;
+        if (hovered)
+            ImGui.SetMouseCursor(ImGuiMouseCursor.Hand);
 
-        var bgOn = Accent;
-        var bgOff = FrameBg;
-        var colTrack = ImGui.GetColorU32(value ? bgOn : bgOff);
-        dl.AddRectFilled(p, p + new Vector2(w, h), colTrack, r);
-
-        var thumbCenterX = value ? (p.X + w - r) : (p.X + r);
-        var thumbCol = ImGui.GetColorU32(new Vector4(1, 1, 1, 1));
-        dl.AddCircleFilled(new Vector2(thumbCenterX, p.Y + r), r - 3f * ImGuiHelpers.GlobalScale, thumbCol);
-
-        ImGui.InvisibleButton(id, new Vector2(w, h));
-        if (ImGui.IsItemHovered()) ImGui.SetMouseCursor(ImGuiMouseCursor.Hand);
-        var changed = false;
-        if (ImGui.IsItemClicked())
-        {
+        if (clicked)
             value = !value;
-            changed = true;
-        }
 
-        if (ImGui.IsItemFocused() && ImGui.IsKeyPressed(ImGuiKey.Space))
-        {
-            value = !value;
-            changed = true;
-        }
+        float alpha = enabled ? 1f : 0.4f;
+        float rounding = Radius(0.7f);
+        var max = pos + size;
 
-        return changed;
+        var track = value
+            ? hovered ? AccentHover : Accent
+            : hovered ? FrameBgHover : FrameBg;
+
+        var border = value ? Accent : Border;
+        var knob = value ? AccentText : MutedText;
+
+        draw.AddRectFilled(pos, max, Faded(track, alpha), rounding);
+        draw.AddRect(pos, max, Faded(border, alpha), rounding);
+
+        float inset = Scaled(3f);
+        float knobSize = size.Y - inset * 2f;
+        float knobX = value ? max.X - inset - knobSize : pos.X + inset;
+        var knobMin = new Vector2(knobX, pos.Y + inset);
+
+        draw.AddRectFilled(knobMin, knobMin + new Vector2(knobSize, knobSize), Faded(knob, alpha), Radius(0.42f));
+
+        return clicked;
     }
+
+    private static uint Faded(Vector4 color, float alpha) =>
+        ImGui.GetColorU32(new Vector4(color.X, color.Y, color.Z, color.W * alpha));
 
     private Vector4 CardBgOr(Vector4? fallback = null) => CardBg != default ? CardBg : (fallback ?? new Vector4(0.11f, 0.12f, 0.14f, 1f));
 

@@ -127,7 +127,7 @@ public partial class ChatsTab
                 }
             },
             rowWidth: rowWidth,
-            rowHeight: 76f);
+            rowHeight: 84f);
     }
 
     private void DrawMappingRow(

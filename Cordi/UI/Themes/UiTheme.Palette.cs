@@ -117,6 +117,9 @@ public sealed partial class UiTheme
     public const float SettingsRowHeight = 56f;
     public const float IconTileSize = 34f;
     public const float StatChipHeight = 56f;
+    public const float ControlHeight = 34f;
+    public const float ToggleWidth = 42f;
+    public const float ToggleHeight = 22f;
 
     public float Radius(float mul = 1f) => RadiusBase * ImGuiHelpers.GlobalScale * mul;
     public float PadX(float mul = 1f) => PadBase * ImGuiHelpers.GlobalScale * mul;

@@ -122,7 +122,7 @@ public partial class ChatsTab
             drawControl: (pos, width) =>
             {
                 float buttonHeight = theme.Scaled(32f);
-                ImGui.SetCursorScreenPos(new Vector2(pos.X, pos.Y + (ImGui.GetFrameHeight() - buttonHeight) * 0.5f));
+                ImGui.SetCursorScreenPos(new Vector2(pos.X, pos.Y + (theme.Scaled(UiTheme.ControlHeight) - buttonHeight) * 0.5f));
 
                 if (theme.SecondaryButton("Open Channel Mappings", new Vector2(width, buttonHeight)))
                     plugin.MainConfigWindow.Navigate(PageIds.ChannelMappings);
@@ -152,7 +152,7 @@ public partial class ChatsTab
                 float gap = theme.Gap(1.6f);
                 float deleteWidth = theme.Scaled(30f);
                 float pickerWidth = width - deleteWidth - gap;
-                float frameOffset = (theme.Scaled(34f) - ImGui.GetFrameHeight()) * 0.5f;
+                float frameOffset = (theme.Scaled(UiTheme.ControlHeight) - ImGui.GetFrameHeight()) * 0.5f;
 
                 ImGui.SetCursorScreenPos(pos);
                 theme.ThreadPicker(
@@ -216,7 +216,7 @@ public partial class ChatsTab
         float filterWidth = theme.Scaled(190f);
         float sortWidth = theme.Scaled(160f);
         float gap = theme.Gap();
-        float height = theme.Scaled(34f);
+        float height = theme.Scaled(UiTheme.ControlHeight);
         float total = filterWidth + sortWidth + gap;
         var min = new Vector2(rightAnchor.X - total, rightAnchor.Y - theme.Scaled(8f));
 

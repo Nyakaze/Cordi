@@ -81,7 +81,7 @@ public partial class ChatsTab
                 float deleteWidth = theme.Scaled(30f);
                 float pickerWidth = width - numWidth - deleteWidth - gap * 2f;
                 float frameHeight = ImGui.GetFrameHeight();
-                float dropdownHeight = theme.Scaled(34f);
+                float dropdownHeight = theme.Scaled(UiTheme.ControlHeight);
                 float frameOffset = (dropdownHeight - frameHeight) * 0.5f;
 
                 ImGui.SetCursorScreenPos(new Vector2(pos.X, pos.Y + frameOffset));

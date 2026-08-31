@@ -34,7 +34,7 @@ public sealed class Dropdown
     {
         string popupId = $"##dropdown-popup-{id}";
         var draw = ImGui.GetWindowDrawList();
-        float height = theme.Scaled(34f);
+        float height = theme.Scaled(UiTheme.ControlHeight);
         var min = ImGui.GetCursorScreenPos();
         var max = min + new Vector2(width, height);
 
