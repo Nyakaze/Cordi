@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
@@ -11,6 +11,7 @@ public static class PageIds
 {
     public const string ChannelMappings = "chats/Channel Mappings";
     public const string ActiveConversations = "chats/Active Conversations";
+    public const string AdvertisementFilter = "chats/Advertisement Filter";
     public const string Chatbox = "chatbox";
     public const string Trackers = "trackers";
     public const string Activity = "activity";
@@ -31,6 +32,7 @@ public sealed partial class ConfigWindow
     {
         PageIds.ChannelMappings,
         PageIds.ActiveConversations,
+        PageIds.AdvertisementFilter,
     };
 
     private static readonly Dictionary<string, FontAwesomeIcon> SubTabIcons = new()

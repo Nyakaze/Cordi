@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Numerics;
 using Cordi.Extensions;
 using Dalamud.Bindings.ImGui;
@@ -156,6 +156,161 @@ public sealed partial class UiTheme
         };
     }
 
+
+    public bool TextInput(string id, Vector2 pos, float width, ref string value, int maxLength, string hint = "")
+    {
+        float height = Scaled(ControlHeight);
+        float padY = MathF.Max(0f, (height - ImGui.GetTextLineHeight()) * 0.5f);
+
+        ImGui.SetCursorScreenPos(pos);
+        ImGui.SetNextItemWidth(width);
+
+        using var style = ImRaii.PushStyle(ImGuiStyleVar.FramePadding, new Vector2(PadX(0.8f), padY))
+            .Push(ImGuiStyleVar.FrameRounding, Radius())
+            .Push(ImGuiStyleVar.FrameBorderSize, 1f);
+        using var color = ImRaii.PushColor(ImGuiCol.FrameBg, FrameBg)
+            .Push(ImGuiCol.FrameBgHovered, FrameBgHover)
+            .Push(ImGuiCol.FrameBgActive, FrameBgActive)
+            .Push(ImGuiCol.Border, Border);
+
+        return string.IsNullOrEmpty(hint)
+            ? ImGui.InputText(id, ref value, maxLength)
+            : ImGui.InputTextWithHint(id, hint, ref value, maxLength);
+    }
+
+    public bool NumberInput(string id, Vector2 pos, float width, ref int value, int min = int.MinValue, int max = int.MaxValue)
+    {
+        float height = Scaled(ControlHeight);
+        float padY = MathF.Max(0f, (height - ImGui.GetTextLineHeight()) * 0.5f);
+
+        ImGui.SetCursorScreenPos(pos);
+        ImGui.SetNextItemWidth(width);
+
+        using var style = ImRaii.PushStyle(ImGuiStyleVar.FramePadding, new Vector2(PadX(0.8f), padY))
+            .Push(ImGuiStyleVar.FrameRounding, Radius())
+            .Push(ImGuiStyleVar.FrameBorderSize, 1f);
+        using var color = ImRaii.PushColor(ImGuiCol.FrameBg, FrameBg)
+            .Push(ImGuiCol.FrameBgHovered, FrameBgHover)
+            .Push(ImGuiCol.FrameBgActive, FrameBgActive)
+            .Push(ImGuiCol.Border, Border);
+
+        if (!ImGui.InputInt(id, ref value, 0, 0))
+            return false;
+
+        value = Math.Clamp(value, min, max);
+        return true;
+    }
+
+    public void HelpPill(string id, Vector2 rightAnchor, string tooltip, string label = "Quick Help")
+    {
+        var draw = ImGui.GetWindowDrawList();
+
+        ApplyFontScale(0.86f);
+        var textSize = ImGui.CalcTextSize(label);
+        ApplyFontScale();
+
+        float iconSize = Scaled(14f);
+        float height = Scaled(28f);
+        float width = textSize.X + iconSize + PadX(1.4f);
+        var min = new Vector2(rightAnchor.X - width, rightAnchor.Y - Scaled(5f));
+
+        ImGui.SetCursorScreenPos(min);
+        ImGui.InvisibleButton($"##help-pill-{id}", new Vector2(width, height));
+        bool hovered = ImGui.IsItemHovered();
+        if (hovered)
+            ImGui.SetMouseCursor(ImGuiMouseCursor.Hand);
+
+        draw.AddRectFilled(min, min + new Vector2(width, height), ImGui.GetColorU32(hovered ? RowHover : CardBg), height * 0.5f);
+        draw.AddRect(min, min + new Vector2(width, height), ImGui.GetColorU32(Border), height * 0.5f);
+
+        using (ImRaii.PushFont(UiBuilder.IconFont))
+        using (ImRaii.PushColor(ImGuiCol.Text, hovered ? Text : FaintText))
+        {
+            var glyph = FontAwesomeIcon.QuestionCircle.ToIconString();
+            var size = ImGui.CalcTextSize(glyph);
+            ImGui.SetCursorScreenPos(new Vector2(min.X + PadX(0.5f), min.Y + (height - size.Y) * 0.5f));
+            ImGui.TextUnformatted(glyph);
+        }
+
+        ApplyFontScale(0.86f);
+        using (ImRaii.PushColor(ImGuiCol.Text, hovered ? Text : MutedText))
+        {
+            ImGui.SetCursorScreenPos(new Vector2(min.X + PadX(0.5f) + iconSize + Gap(0.5f), min.Y + (height - textSize.Y) * 0.5f));
+            ImGui.TextUnformatted(label);
+        }
+        ApplyFontScale();
+
+        if (hovered)
+            ImGui.SetTooltip(tooltip);
+
+        ImGui.SetCursorScreenPos(min);
+        ImGui.Dummy(new Vector2(width, height));
+    }
+
+    public Vector2 ChipSize(ReadOnlySpan<char> text, float fontScale = 0.78f)
+    {
+        ApplyFontScale(fontScale);
+        var textSize = ImGui.CalcTextSize(text.ToString());
+        ApplyFontScale();
+
+        return new Vector2(textSize.X + PadX(0.7f) * 2f, textSize.Y + PadY(0.35f) * 2f);
+    }
+
+    public void ChipAt(Vector2 pos, ReadOnlySpan<char> text, Vector4? color = null, float fontScale = 0.78f)
+    {
+        var tint = color ?? Accent;
+        var size = ChipSize(text, fontScale);
+        var draw = ImGui.GetWindowDrawList();
+
+        draw.AddRectFilled(pos, pos + size, ImGui.GetColorU32(new Vector4(tint.X, tint.Y, tint.Z, 0.16f)), Radius(0.6f));
+
+        ApplyFontScale(fontScale);
+        using (ImRaii.PushColor(ImGuiCol.Text, tint))
+        {
+            ImGui.SetCursorScreenPos(pos + new Vector2(PadX(0.7f), PadY(0.35f)));
+            ImGui.TextUnformatted(text.ToString());
+        }
+        ApplyFontScale();
+    }
+
+    public bool ScoreSlider(string id, Vector2 pos, float width, ref int value, int min, int max)
+    {
+        var draw = ImGui.GetWindowDrawList();
+        float height = Scaled(ControlHeight);
+        float trackHeight = Scaled(8f);
+        var knobSize = new Vector2(Scaled(12f), Scaled(20f));
+
+        ImGui.SetCursorScreenPos(pos);
+        ImGui.InvisibleButton(id, new Vector2(width, height));
+        bool hovered = ImGui.IsItemHovered();
+        bool active = ImGui.IsItemActive();
+        if (hovered || active)
+            ImGui.SetMouseCursor(ImGuiMouseCursor.Hand);
+
+        float usable = width - knobSize.X;
+        int previous = value;
+
+        if (active)
+        {
+            float t = Math.Clamp((ImGui.GetIO().MousePos.X - pos.X - knobSize.X * 0.5f) / usable, 0f, 1f);
+            value = min + (int)MathF.Round(t * (max - min));
+        }
+
+        float progress = max > min ? (value - min) / (float)(max - min) : 0f;
+        var trackMin = new Vector2(pos.X, pos.Y + (height - trackHeight) * 0.5f);
+        var trackMax = new Vector2(pos.X + width, trackMin.Y + trackHeight);
+        float fillEnd = pos.X + knobSize.X * 0.5f + usable * progress;
+
+        draw.AddRectFilled(trackMin, trackMax, ImGui.GetColorU32(FrameBg), Radius(0.5f));
+        draw.AddRectFilled(trackMin, new Vector2(fillEnd, trackMax.Y), ImGui.GetColorU32(Accent), Radius(0.5f));
+        draw.AddRect(trackMin, trackMax, ImGui.GetColorU32(Border), Radius(0.5f));
+
+        var knobMin = new Vector2(pos.X + usable * progress, pos.Y + (height - knobSize.Y) * 0.5f);
+        draw.AddRectFilled(knobMin, knobMin + knobSize, ImGui.GetColorU32(hovered || active ? AccentHover : Accent), Radius(0.42f));
+        draw.AddRect(knobMin, knobMin + knobSize, ImGui.GetColorU32(Border), Radius(0.42f));
+
+        return value != previous;
+    }
 
     public Vector2 ToggleSize() => new(Scaled(ToggleWidth), Scaled(ToggleHeight));
 

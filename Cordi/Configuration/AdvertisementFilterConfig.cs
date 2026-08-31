@@ -3,31 +3,49 @@ using System.Collections.Generic;
 
 namespace Cordi.Configuration;
 
+public enum FilterPatternKind
+{
+    Keyword,
+    Regex,
+}
+
+public enum FilterPatternWeight
+{
+    Medium = 1,
+    High = 2,
+}
+
+[Serializable]
+public class FilterPattern
+{
+    public string Value { get; set; } = string.Empty;
+    public FilterPatternKind Kind { get; set; } = FilterPatternKind.Keyword;
+    public FilterPatternWeight Weight { get; set; } = FilterPatternWeight.Medium;
+}
+
 [Serializable]
 public class AdvertisementFilterConfig
 {
-    public bool Enabled { get; set; } = true;
     public int ScoreThreshold { get; set; } = 3;
 
-    // High-score patterns (2 points each)
+    public List<FilterPattern> Patterns { get; set; } = new();
+    public List<string> Whitelist { get; set; } = new();
+
     public List<string> HighScoreRegexPatterns { get; set; } = new();
     public List<string> HighScoreKeywords { get; set; } = new();
-
-    // Medium-score patterns (1 point each)
     public List<string> MediumScoreRegexPatterns { get; set; } = new();
     public List<string> MediumScoreKeywords { get; set; } = new();
 
-    // Whitelist - messages containing these will never be blocked
-    public List<string> Whitelist { get; set; } = new();
-
-    // Track if defaults have been initialized
     public bool DefaultsInitialized { get; set; } = false;
+    public bool PatternsMigrated { get; set; } = false;
 
     public void InitializeDefaults()
     {
+        MigrateLegacyPatterns();
+
         if (DefaultsInitialized) return;
 
-        HighScoreRegexPatterns.AddRange(new[]
+        Add(FilterPatternKind.Regex, FilterPatternWeight.High, new[]
         {
             @"discord\.gg/\w+",
             @"https?://discord\.gg/\w+",
@@ -35,25 +53,53 @@ public class AdvertisementFilterConfig
             @"\bw\d+\s*p\d+\b"
         });
 
-        HighScoreKeywords.AddRange(new[]
+        Add(FilterPatternKind.Keyword, FilterPatternWeight.High, new[]
         {
             "dj", "venue", "giveaway", "gamba", "bingo", "raffle",
             "contest", "photography", "photographer", "bar", "vip",
             "dancers", "glam contest"
         });
 
-        MediumScoreRegexPatterns.AddRange(new[]
+        Add(FilterPatternKind.Regex, FilterPatternWeight.Medium, new[]
         {
             @"\d+\s*(pm|am)\s*st\b",
             @"\b(light|alpha|raiden|odin|phoenix|shiva|goblet|mist|lavender\s*beds?|empyreum|shirogane)\b"
         });
 
-        MediumScoreKeywords.AddRange(new[]
+        Add(FilterPatternKind.Keyword, FilterPatternWeight.Medium, new[]
         {
             "tonight", "today", "event", "party", "club", "open now",
             "join us", "tune in", "celebrate"
         });
 
         DefaultsInitialized = true;
+    }
+
+    private void MigrateLegacyPatterns()
+    {
+        if (PatternsMigrated) return;
+
+        Add(FilterPatternKind.Regex, FilterPatternWeight.High, HighScoreRegexPatterns);
+        Add(FilterPatternKind.Keyword, FilterPatternWeight.High, HighScoreKeywords);
+        Add(FilterPatternKind.Regex, FilterPatternWeight.Medium, MediumScoreRegexPatterns);
+        Add(FilterPatternKind.Keyword, FilterPatternWeight.Medium, MediumScoreKeywords);
+
+        HighScoreRegexPatterns.Clear();
+        HighScoreKeywords.Clear();
+        MediumScoreRegexPatterns.Clear();
+        MediumScoreKeywords.Clear();
+
+        PatternsMigrated = true;
+    }
+
+    private void Add(FilterPatternKind kind, FilterPatternWeight weight, IEnumerable<string> values)
+    {
+        foreach (var value in values)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+                continue;
+
+            Patterns.Add(new FilterPattern { Value = value, Kind = kind, Weight = weight });
+        }
     }
 }

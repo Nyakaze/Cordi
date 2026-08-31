@@ -2,132 +2,167 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.RegularExpressions;
+using Cordi.Configuration;
 
 namespace Cordi.Services.Discord;
 
+public readonly struct FilterEvaluation
+{
+    public int Score { get; init; }
+    public int Threshold { get; init; }
+    public bool Whitelisted { get; init; }
+    public IReadOnlyList<string> Matches { get; init; }
+
+    public bool Blocked => !Whitelisted && Score >= Threshold;
+}
+
 public static class AdvertisementFilter
 {
-    public static bool IsAdvertisement(
-        string message,
-        int scoreThreshold,
-        List<string> highScoreRegexPatterns,
-        List<string> highScoreKeywords,
-        List<string> mediumScoreRegexPatterns,
-        List<string> mediumScoreKeywords,
-        List<string> whitelist)
+    private const int HighKeywordsNeeded = 3;
+    private const int MediumKeywordsNeeded = 2;
+    private const int UppercaseWordsNeeded = 5;
+
+    public static bool IsAdvertisement(string message, AdvertisementFilterConfig config) =>
+        Evaluate(message, config).Blocked;
+
+    public static FilterEvaluation Evaluate(string message, AdvertisementFilterConfig config)
     {
+        var matches = new List<string>();
+
         if (string.IsNullOrWhiteSpace(message))
-            return false;
+            return new FilterEvaluation { Threshold = config.ScoreThreshold, Matches = matches };
 
         var lowerMessage = message.ToLowerInvariant();
 
-        // Check whitelist first
-        foreach (var phrase in whitelist)
+        foreach (var phrase in config.Whitelist)
         {
-            if (!string.IsNullOrWhiteSpace(phrase) &&
-                lowerMessage.Contains(phrase.ToLowerInvariant()))
+            if (string.IsNullOrWhiteSpace(phrase) || !lowerMessage.Contains(phrase.ToLowerInvariant()))
+                continue;
+
+            return new FilterEvaluation
             {
-                return false;
-            }
+                Threshold = config.ScoreThreshold,
+                Whitelisted = true,
+                Matches = new List<string> { $"Whitelisted by \"{phrase}\"" },
+            };
         }
 
         int score = 0;
 
-        // High-score regex patterns (2 points each)
-        foreach (var pattern in highScoreRegexPatterns)
+        foreach (var pattern in config.Patterns)
         {
-            if (string.IsNullOrWhiteSpace(pattern)) continue;
+            if (pattern.Kind != FilterPatternKind.Regex || string.IsNullOrWhiteSpace(pattern.Value))
+                continue;
 
-            try
-            {
-                if (Regex.IsMatch(message, pattern, RegexOptions.IgnoreCase))
-                {
-                    score += 2;
-                }
-            }
-            catch (Exception)
-            {
-                // Invalid regex, skip
-            }
+            if (!MatchesRegex(message, pattern.Value))
+                continue;
+
+            int points = (int)pattern.Weight;
+            score += points;
+            matches.Add($"Regex \"{pattern.Value}\" +{points}");
         }
 
-        // High-score keywords (2 points for 3+ matches)
-        int highKeywordMatches = 0;
-        foreach (var keyword in highScoreKeywords)
-        {
-            if (!string.IsNullOrWhiteSpace(keyword) &&
-                lowerMessage.Contains(keyword.ToLowerInvariant()))
-            {
-                highKeywordMatches++;
-            }
-        }
-        if (highKeywordMatches >= 3)
-        {
-            score += 2;
-        }
+        score += ScoreKeywords(config, lowerMessage, FilterPatternWeight.High, HighKeywordsNeeded, matches);
+        score += ScoreKeywords(config, lowerMessage, FilterPatternWeight.Medium, MediumKeywordsNeeded, matches);
 
-        // Medium-score regex patterns (1 point each)
-        foreach (var pattern in mediumScoreRegexPatterns)
-        {
-            if (string.IsNullOrWhiteSpace(pattern)) continue;
-
-            try
-            {
-                if (Regex.IsMatch(message, pattern, RegexOptions.IgnoreCase))
-                {
-                    score += 1;
-                }
-            }
-            catch (Exception)
-            {
-                // Invalid regex, skip
-            }
-        }
-
-        // Medium-score keywords (1 point for 2+ matches)
-        int mediumKeywordMatches = 0;
-        foreach (var keyword in mediumScoreKeywords)
-        {
-            if (!string.IsNullOrWhiteSpace(keyword) &&
-                lowerMessage.Contains(keyword.ToLowerInvariant()))
-            {
-                mediumKeywordMatches++;
-            }
-        }
-        if (mediumKeywordMatches >= 2)
+        if (CountConsecutiveUppercase(message) >= UppercaseWordsNeeded)
         {
             score += 1;
+            matches.Add("Shouting +1");
         }
 
-        // Check for excessive uppercase (5+ consecutive uppercase words)
+        if (Regex.IsMatch(message, @"[♪♥♦◆→←]{3,}"))
+        {
+            score += 1;
+            matches.Add("Symbol spam +1");
+        }
+
+        return new FilterEvaluation
+        {
+            Score = score,
+            Threshold = config.ScoreThreshold,
+            Matches = matches,
+        };
+    }
+
+    public static bool IsValidRegex(string pattern)
+    {
+        if (string.IsNullOrWhiteSpace(pattern))
+            return false;
+
+        try
+        {
+            _ = Regex.Match(string.Empty, pattern);
+            return true;
+        }
+        catch (ArgumentException)
+        {
+            return false;
+        }
+    }
+
+    private static int ScoreKeywords(
+        AdvertisementFilterConfig config,
+        string lowerMessage,
+        FilterPatternWeight weight,
+        int needed,
+        List<string> matches)
+    {
+        var hits = config.Patterns
+            .Where(pattern => pattern.Kind == FilterPatternKind.Keyword
+                              && pattern.Weight == weight
+                              && !string.IsNullOrWhiteSpace(pattern.Value)
+                              && lowerMessage.Contains(pattern.Value.ToLowerInvariant()))
+            .Select(pattern => pattern.Value)
+            .ToList();
+
+        if (hits.Count == 0)
+            return 0;
+
+        string label = weight.ToString().ToLowerInvariant();
+        string list = string.Join(", ", hits);
+
+        if (hits.Count < needed)
+        {
+            matches.Add($"{hits.Count}/{needed} {label} keywords, no points ({list})");
+            return 0;
+        }
+
+        int points = (int)weight;
+        matches.Add($"{hits.Count} {label} keywords +{points} ({list})");
+        return points;
+    }
+
+    private static bool MatchesRegex(string message, string pattern)
+    {
+        try
+        {
+            return Regex.IsMatch(message, pattern, RegexOptions.IgnoreCase);
+        }
+        catch (ArgumentException)
+        {
+            return false;
+        }
+    }
+
+    private static int CountConsecutiveUppercase(string message)
+    {
         var words = message.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-        int consecutiveUppercase = 0;
-        int maxConsecutiveUppercase = 0;
+        int consecutive = 0;
+        int longest = 0;
 
         foreach (var word in words)
         {
             if (word.Length > 1 && word.All(c => !char.IsLetter(c) || char.IsUpper(c)))
             {
-                consecutiveUppercase++;
-                maxConsecutiveUppercase = Math.Max(maxConsecutiveUppercase, consecutiveUppercase);
+                consecutive++;
+                longest = Math.Max(longest, consecutive);
+                continue;
             }
-            else
-            {
-                consecutiveUppercase = 0;
-            }
+
+            consecutive = 0;
         }
 
-        if (maxConsecutiveUppercase >= 5)
-        {
-            score += 1;
-        }
-
-        // Check for excessive special characters (3+ in a row)
-        if (Regex.IsMatch(message, @"[♪♥♦◆→←]{3,}"))
-        {
-            score += 1;
-        }
-
-        return score >= scoreThreshold;
+        return longest;
     }
 }

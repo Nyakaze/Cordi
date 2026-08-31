@@ -11,6 +11,7 @@ using Dalamud.Bindings.ImGui;
 using Cordi.Services;
 using Cordi.Services.Discord.Projections;
 using Cordi.Core;
+using Cordi.UI.Components;
 using Cordi.UI.Themes;
 using Cordi.Configuration;
 
@@ -20,14 +21,17 @@ public partial class ChatsTab : ConfigTabBase
 {
     private bool extraChatExpanded = false;
     private bool existingAvatarsExpanded = false;
-    private bool highScoreRegexExpanded;
-    private bool highScoreKeywordsExpanded;
-    private bool mediumScoreRegexExpanded;
-    private bool mediumScoreKeywordsExpanded;
-    private bool whitelistExpanded;
     private (string Key, ExtraChatConnection Value)? extraChatAddState = null;
     private Dictionary<ulong, string> cachedAvailableThreads = new();
     private readonly Services.Features.ExtraChatService extraChatService;
+
+    private SettingsRow? rowRenderer;
+    private PageHeader? layoutRenderer;
+    private Panel? panelRenderer;
+
+    private SettingsRow Row => rowRenderer ??= new SettingsRow(theme);
+    private PageHeader Layout => layoutRenderer ??= new PageHeader(theme);
+    private Panel Card => panelRenderer ??= new Panel(theme);
 
     public override string Label => "Chats";
 
@@ -47,7 +51,7 @@ public partial class ChatsTab : ConfigTabBase
             ("Custom Avatars", () => DrawExistingAvatarsCard(ref existingAvatarsExpanded))
         };
 
-        tabs.Add(("Advertisement Filter", () => DrawAdvertisementFilter(plugin.Config.AdvertisementFilter)));
+        tabs.Add(("Advertisement Filter", () => DrawAdvertisementFilterPage(plugin.Config.AdvertisementFilter)));
 
         return tabs;
     }
@@ -87,64 +91,6 @@ public partial class ChatsTab : ConfigTabBase
 
             conversationThreadStates[pair.Key] = status;
         }
-    }
-
-    private void DrawAdvertisementFilter(AdvertisementFilterConfig config)
-    {
-        bool filterEnabled = config.Enabled;
-
-        theme.DrawPluginCardAuto(
-            id: "ad-filter",
-            enabled: ref filterEnabled,
-            showCheckbox: true,
-            title: "Advertisement Filter",
-            drawContent: (avail) =>
-            {
-                if (filterEnabled)
-                {
-                    ImGui.TextDisabled("Filters messages containing Discord links, venue locations, and spam keywords.");
-                    theme.SpacerY(0.5f);
-
-                    theme.SpacerY(1f);
-
-                    ImGui.TextColored(theme.Text, "Detection Threshold");
-                    int threshold = config.ScoreThreshold;
-                    using (ImRaii.ItemWidth(200))
-                    {
-                        if (ImGui.SliderInt("##threshold", ref threshold, 1, 10))
-                        {
-                            config.ScoreThreshold = threshold;
-                            plugin.Config.Save();
-                        }
-                    }
-                    if (ImGui.IsItemHovered())
-                    {
-                        ImGui.SetTooltip("Lower = more strict filtering. Default: 3");
-                    }
-
-                    ImGui.TextColored(theme.MutedText, "Customize detection patterns below. Patterns are scored: High (2 pts) and Medium (1 pt).");
-                }
-            }
-        );
-
-        theme.SpacerY(1f);
-
-        Action save = () => plugin.Config.Save();
-
-        theme.DrawStringTable("hsregex", "High-Score Regex Patterns ", ref highScoreRegexExpanded,
-            config.HighScoreRegexPatterns, save, itemName: "Pattern");
-
-        theme.DrawStringTable("hskw", "High-Score Keywords", ref highScoreKeywordsExpanded,
-            config.HighScoreKeywords, save, itemName: "Pattern");
-
-        theme.DrawStringTable("msregex", "Medium-Score Regex Patterns", ref mediumScoreRegexExpanded,
-            config.MediumScoreRegexPatterns, save, itemName: "Pattern");
-
-        theme.DrawStringTable("mskw", "Medium-Score Keywords", ref mediumScoreKeywordsExpanded,
-            config.MediumScoreKeywords, save, itemName: "Pattern");
-
-        theme.DrawStringTable("wl", "Whitelist", ref whitelistExpanded,
-            config.Whitelist, save, itemName: "Pattern");
     }
 
     private void DrawExistingAvatarsCard(ref bool enabled)

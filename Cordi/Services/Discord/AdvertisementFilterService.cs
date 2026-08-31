@@ -33,7 +33,7 @@ public class AdvertisementFilterService
 
     public bool IsAdvertisementOrPenalized(Player sender, string sanitizedContent, bool channelFilterEnabled, ulong channelId)
     {
-        if (!_plugin.Config.AdvertisementFilter.Enabled || !channelFilterEnabled) return false;
+        if (!channelFilterEnabled) return false;
 
         string senderKey = sender.FullName;
 
@@ -66,15 +66,7 @@ public class AdvertisementFilterService
             combinedMessage = string.Join(" ", recentContent);
         }
 
-        var filterConfig = _plugin.Config.AdvertisementFilter;
-        bool checkAd(string content) => AdvertisementFilter.IsAdvertisement(
-            content,
-            filterConfig.ScoreThreshold,
-            filterConfig.HighScoreRegexPatterns,
-            filterConfig.HighScoreKeywords,
-            filterConfig.MediumScoreRegexPatterns,
-            filterConfig.MediumScoreKeywords,
-            filterConfig.Whitelist);
+        bool checkAd(string content) => AdvertisementFilter.IsAdvertisement(content, _plugin.Config.AdvertisementFilter);
 
         isAd = checkAd(sanitizedContent);
 
@@ -111,7 +103,6 @@ public class AdvertisementFilterService
 
     public bool IsAdvertisementPreview(Player sender, string content)
     {
-        if (!_plugin.Config.AdvertisementFilter.Enabled) return false;
         if (string.IsNullOrWhiteSpace(content)) return false;
 
         var senderKey = sender.FullName;
@@ -152,22 +143,15 @@ public class AdvertisementFilterService
         }
     }
 
-    private bool Score(string content)
-    {
-        var filterConfig = _plugin.Config.AdvertisementFilter;
-        return AdvertisementFilter.IsAdvertisement(
-            content,
-            filterConfig.ScoreThreshold,
-            filterConfig.HighScoreRegexPatterns,
-            filterConfig.HighScoreKeywords,
-            filterConfig.MediumScoreRegexPatterns,
-            filterConfig.MediumScoreKeywords,
-            filterConfig.Whitelist);
-    }
+    private bool Score(string content) =>
+        AdvertisementFilter.IsAdvertisement(content, _plugin.Config.AdvertisementFilter);
+
+    public FilterEvaluation Evaluate(string content) =>
+        AdvertisementFilter.Evaluate(content, _plugin.Config.AdvertisementFilter);
 
     public void AddMessageToBuffer(Player sender, string sanitizedContent, ulong sentMessageId, bool channelFilterEnabled)
     {
-        if (!_plugin.Config.AdvertisementFilter.Enabled || !channelFilterEnabled) return;
+        if (!channelFilterEnabled) return;
 
         string senderKey = sender.FullName;
         var userMessages = _messageBuffer.GetOrAdd(senderKey, _ => new List<(string Content, DateTime Timestamp, ulong MessageId)>());

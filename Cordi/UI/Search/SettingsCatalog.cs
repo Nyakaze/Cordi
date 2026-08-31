@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Linq;
 using Cordi.UI.Windows;
 using Dalamud.Interface;
@@ -69,12 +69,12 @@ public static class SettingsCatalog
         Page(index, "chats/Custom Avatars", "Custom Avatars", FontAwesomeIcon.UserCircle,
             ("", "Character Avatars", "avatar portrait webhook image"));
 
-        Page(index, "chats/Advertisement Filter", "Advertisement Filter", FontAwesomeIcon.Filter,
-            ("", "Detection Threshold", "score advertisement spam"),
-            ("", "High-Score Keywords", "advertisement keyword"),
-            ("", "High-Score Regex Patterns", "advertisement regex"),
-            ("", "Medium-Score Keywords", "advertisement keyword"),
-            ("", "Medium-Score Regex Patterns", "advertisement regex"));
+        Page(index, PageIds.AdvertisementFilter, "Advertisement Filter", FontAwesomeIcon.Filter,
+            ("", "Filtered chat types", "advertisement scope channel mapping"),
+            ("Detection", "Detection threshold", "score advertisement spam strict"),
+            ("Patterns", "Patterns", "keyword regex weight high medium points"),
+            ("Whitelist", "Whitelist", "never filter allow phrase"),
+            ("Test a message", "Test a message", "score preview evaluate advertisement"));
     }
 
     private static void RegisterChatbox(SettingsSearchIndex index)

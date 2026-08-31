@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
@@ -47,15 +47,8 @@ public partial class ChatsTab
         XivChatType.CrossLinkShell5, XivChatType.CrossLinkShell6, XivChatType.CrossLinkShell7, XivChatType.CrossLinkShell8,
     };
 
-    private SettingsRow? rowRenderer;
-    private PageHeader? layoutRenderer;
-    private Panel? panelRenderer;
     private bool linkshellExpanded;
     private bool crossWorldExpanded;
-
-    private SettingsRow Row => rowRenderer ??= new SettingsRow(theme);
-    private PageHeader Layout => layoutRenderer ??= new PageHeader(theme);
-    private Panel Card => panelRenderer ??= new Panel(theme);
 
     private void DrawChatMappingsPage(IReadOnlyList<DiscordChannel>? textChannels, IReadOnlyList<DiscordChannel>? forumChannels)
     {
@@ -72,7 +65,12 @@ public partial class ChatsTab
                     DrawMappingRow(row.Type, row.Label, string.Empty, row.Icon, row.Color, textChannels, forumChannels, innerWidth);
             },
             label: "Chat Mappings",
-            drawTrailing: DrawQuickHelpPill);
+            drawTrailing: anchor => theme.HelpPill(
+                "quick-help",
+                anchor,
+                "Every chat type can be mapped to a Discord channel.\n" +
+                "The toggle enables the advertisement filter for that chat type.\n" +
+                "Tell needs to be mapped to a forum channel to be relayed."));
 
         DrawLinkshellCards(textChannels, forumChannels);
         DrawTellNotificationSection(textChannels);
@@ -118,8 +116,7 @@ public partial class ChatsTab
                 }
                 else
                 {
-                    ImGui.SetNextItemWidth(width);
-                    if (ImGui.InputText("##dsc-default-channel-id", ref defaultChannelId, 32))
+                    if (theme.TextInput("##dsc-default-channel-id", pos, width, ref defaultChannelId, 32))
                     {
                         plugin.Config.Discord.DefaultChannelId = defaultChannelId;
                         plugin.Config.Save();
@@ -344,72 +341,17 @@ public partial class ChatsTab
                     title: "Conversation cooldown",
                     subtitle: "Seconds before the same conversation notifies again",
                     controlWidth: 120f,
-                    drawControl: (_, width) =>
+                    drawControl: (pos, width) =>
                     {
                         int cooldown = plugin.Config.Chat.TellNotificationCooldownSeconds;
-                        ImGui.SetNextItemWidth(width);
-                        if (ImGui.InputInt("##tell-cooldown", ref cooldown))
+                        if (theme.NumberInput("##tell-cooldown", pos, width, ref cooldown, 0))
                         {
-                            plugin.Config.Chat.TellNotificationCooldownSeconds = Math.Max(0, cooldown);
+                            plugin.Config.Chat.TellNotificationCooldownSeconds = cooldown;
                             plugin.Config.Save();
                         }
                     },
                     rowWidth: innerWidth);
             },
             label: "Tell Notifications");
-    }
-
-    private void DrawQuickHelpPill(Vector2 rightAnchor) => DrawHelpPill(
-        "quick-help",
-        rightAnchor,
-        "Every chat type can be mapped to a Discord channel.\n" +
-        "The toggle enables the advertisement filter for that chat type.\n" +
-        "Tell needs to be mapped to a forum channel to be relayed.");
-
-    private void DrawHelpPill(string id, Vector2 rightAnchor, string tooltip)
-    {
-        var draw = ImGui.GetWindowDrawList();
-        const string text = "Quick Help";
-
-        theme.ApplyFontScale(0.86f);
-        var textSize = ImGui.CalcTextSize(text);
-        theme.ApplyFontScale();
-
-        float iconSize = theme.Scaled(14f);
-        float height = theme.Scaled(28f);
-        float width = textSize.X + iconSize + theme.PadX(1.4f);
-        var min = new Vector2(rightAnchor.X - width, rightAnchor.Y - theme.Scaled(5f));
-
-        ImGui.SetCursorScreenPos(min);
-        ImGui.InvisibleButton($"##help-pill-{id}", new Vector2(width, height));
-        bool hovered = ImGui.IsItemHovered();
-        if (hovered)
-            ImGui.SetMouseCursor(ImGuiMouseCursor.Hand);
-
-        draw.AddRectFilled(min, min + new Vector2(width, height), ImGui.GetColorU32(hovered ? theme.RowHover : theme.CardBg), height * 0.5f);
-        draw.AddRect(min, min + new Vector2(width, height), ImGui.GetColorU32(theme.Border), height * 0.5f);
-
-        using (ImRaii.PushFont(UiBuilder.IconFont))
-        using (ImRaii.PushColor(ImGuiCol.Text, hovered ? theme.Text : theme.FaintText))
-        {
-            var glyph = FontAwesomeIcon.QuestionCircle.ToIconString();
-            var size = ImGui.CalcTextSize(glyph);
-            ImGui.SetCursorScreenPos(new Vector2(min.X + theme.PadX(0.5f), min.Y + (height - size.Y) * 0.5f));
-            ImGui.TextUnformatted(glyph);
-        }
-
-        theme.ApplyFontScale(0.86f);
-        using (ImRaii.PushColor(ImGuiCol.Text, hovered ? theme.Text : theme.MutedText))
-        {
-            ImGui.SetCursorScreenPos(new Vector2(min.X + theme.PadX(0.5f) + iconSize + theme.Gap(0.5f), min.Y + (height - textSize.Y) * 0.5f));
-            ImGui.TextUnformatted(text);
-        }
-        theme.ApplyFontScale();
-
-        if (hovered)
-            ImGui.SetTooltip(tooltip);
-
-        ImGui.SetCursorScreenPos(min);
-        ImGui.Dummy(new Vector2(width, height));
     }
 }

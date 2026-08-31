@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
@@ -53,7 +53,7 @@ public partial class ChatsTab
                 theme.PopInputScope();
             },
             label: "ExtraChat Mappings",
-            drawTrailing: anchor => DrawHelpPill(
+            drawTrailing: anchor => theme.HelpPill(
                 "extrachat-help",
                 anchor,
                 "Channels are added automatically once a message is sent in them.\n" +

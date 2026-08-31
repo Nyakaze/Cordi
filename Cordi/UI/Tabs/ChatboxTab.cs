@@ -209,9 +209,7 @@ public partial class ChatboxTab : ConfigTabBase
 
             theme.SpacerY(0.5f);
             Check("Hide Advertisements", () => Cfg.FilterAdvertisements, v => Cfg.FilterAdvertisements = v);
-            ImGui.TextDisabled(plugin.Config.AdvertisementFilter.Enabled
-                ? "Uses the Advertisement Filter from the Chats tab. Blocked messages collapse into a placeholder you can click to reveal."
-                : "The Advertisement Filter is disabled in the Chats tab, so nothing is hidden.");
+            ImGui.TextDisabled("Uses the Advertisement Filter from the Chats tab. Blocked messages collapse into a placeholder you can click to reveal.");
         });
 
         Card("chatbox-combined", "Combined Channel", _ =>
