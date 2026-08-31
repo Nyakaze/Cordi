@@ -13,7 +13,9 @@ public static class PageIds
     public const string ActiveConversations = "chats/Active Conversations";
     public const string AdvertisementFilter = "chats/Advertisement Filter";
     public const string Chatbox = "chatbox";
-    public const string Trackers = "trackers";
+    public const string Peeper = "watchers/Peeper";
+    public const string EmoteLog = "watchers/Emote Log";
+    public const string CombinedOverlay = "watchers/Combined Overlay";
     public const string Activity = "activity";
     public const string PartyAndPlayers = "party";
     public const string SlashCommands = "slash";
@@ -33,6 +35,9 @@ public sealed partial class ConfigWindow
         PageIds.ChannelMappings,
         PageIds.ActiveConversations,
         PageIds.AdvertisementFilter,
+        PageIds.Peeper,
+        PageIds.EmoteLog,
+        PageIds.CombinedOverlay,
     };
 
     private static readonly Dictionary<string, FontAwesomeIcon> SubTabIcons = new()
@@ -41,6 +46,9 @@ public sealed partial class ConfigWindow
         ["Active Conversations"] = FontAwesomeIcon.Comments,
         ["Custom Avatars"] = FontAwesomeIcon.UserCircle,
         ["Advertisement Filter"] = FontAwesomeIcon.Filter,
+        ["Peeper"] = FontAwesomeIcon.Eye,
+        ["Emote Log"] = FontAwesomeIcon.TheaterMasks,
+        ["Combined Overlay"] = FontAwesomeIcon.Columns,
     };
 
     private static readonly Dictionary<string, string> PageSubtitles = new()
@@ -49,8 +57,10 @@ public sealed partial class ConfigWindow
         ["Active Conversations"] = "Ongoing tell threads and their Discord counterparts",
         ["Custom Avatars"] = "Per-character avatars used for relayed messages",
         ["Advertisement Filter"] = "Score-based filtering for advertisement spam",
+        ["Peeper"] = "Alerts you when another player targets your character",
+        ["Emote Log"] = "Records emotes performed around you",
+        ["Combined Overlay"] = "Peeper and the Emote Log in a single window",
         [PageIds.Chatbox] = "In-game Discord chat window",
-        [PageIds.Trackers] = "Peeper, Emote Log and Combined Window trackers",
         [PageIds.Activity] = "Discord rich presence and activity reporting",
         [PageIds.PartyAndPlayers] = "Party tracking and remembered players",
         [PageIds.SlashCommands] = "Discord slash commands exposed by Cordi",
@@ -86,9 +96,23 @@ public sealed partial class ConfigWindow
 
         communication.Add(MakeItem(PageIds.Chatbox, "Chatbox", FontAwesomeIcon.CommentAlt, chatboxTab.Draw));
 
+        var watchers = new List<NavItem>();
+
+        foreach (var (label, draw) in watchersTab.SubTabs ?? Array.Empty<(string, Action)>())
+        {
+            watchers.Add(new NavItem
+            {
+                Id = $"watchers/{label}",
+                Label = label,
+                Icon = SubTabIcons.TryGetValue(label, out var icon) ? icon : FontAwesomeIcon.Eye,
+                Draw = draw,
+                Subtitle = PageSubtitles.TryGetValue(label, out var subtitle) ? subtitle : string.Empty,
+                OwnHeader = OwnHeaderPages.Contains($"watchers/{label}"),
+            });
+        }
+
         var integration = new List<NavItem>
         {
-            MakeItem(PageIds.Trackers, "Trackers", FontAwesomeIcon.ChartBar, trackerTab.Draw),
             MakeItem(PageIds.Activity, "Activity", FontAwesomeIcon.WaveSquare, discordActivityTab.Draw),
             MakeItem(PageIds.PartyAndPlayers, "Party & Players", FontAwesomeIcon.Users, partyAndPlayersTab.Draw),
             MakeItem(PageIds.SlashCommands, "Slash Commands", FontAwesomeIcon.Code, slashCommandsTab.Draw),
@@ -109,6 +133,7 @@ public sealed partial class ConfigWindow
         return new List<NavSection>
         {
             new() { Label = "Communication", Items = communication },
+            new() { Label = "Watchers", Items = watchers },
             new() { Label = "Integration", Items = integration },
             new() { Label = "System", Items = system },
         };
@@ -145,7 +170,6 @@ public sealed partial class ConfigWindow
     private Tabs.ConfigTabBase? ResolveTab(string pageId) => pageId switch
     {
         PageIds.Chatbox => chatboxTab,
-        PageIds.Trackers => trackerTab,
         PageIds.Activity => discordActivityTab,
         PageIds.PartyAndPlayers => partyAndPlayersTab,
         PageIds.SlashCommands => slashCommandsTab,

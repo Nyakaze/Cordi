@@ -218,7 +218,7 @@ public partial class ChatsTab
         var pos = ImGui.GetCursorScreenPos();
         float height = theme.Scaled(UiTheme.ControlHeight);
         float gap = theme.Gap(0.7f);
-        float deleteWidth = theme.Scaled(30f);
+        float deleteWidth = theme.Scaled(UiTheme.ActionButtonSize);
         float kindWidth = theme.Scaled(110f);
         float weightWidth = theme.Scaled(120f);
         float valueWidth = MathF.Max(theme.Scaled(120f), rowWidth - kindWidth - weightWidth - deleteWidth - gap * 3f);
@@ -271,9 +271,12 @@ public partial class ChatsTab
                 ImGui.SetTooltip("Invalid regular expression, this pattern never matches");
         }
 
-        float frameOffset = (height - ImGui.GetFrameHeight()) * 0.5f;
-        ImGui.SetCursorScreenPos(new Vector2(valueX + valueWidth + gap, pos.Y + frameOffset));
-        bool remove = theme.DangerIconButton($"##ad-pattern-del-{index}", FontAwesomeIcon.Trash, "Remove pattern");
+        bool remove = theme.DeleteAction(
+            $"ad-pattern-del-{index}",
+            new Vector2(valueX + valueWidth + gap, pos.Y),
+            "Remove pattern",
+            deleteWidth,
+            height);
 
         ImGui.SetCursorScreenPos(pos);
         ImGui.Dummy(new Vector2(rowWidth, height + theme.Gap(0.4f)));
@@ -379,7 +382,7 @@ public partial class ChatsTab
         var pos = ImGui.GetCursorScreenPos();
         float height = theme.Scaled(UiTheme.ControlHeight);
         float gap = theme.Gap(0.7f);
-        float deleteWidth = theme.Scaled(30f);
+        float deleteWidth = theme.Scaled(UiTheme.ActionButtonSize);
         float valueWidth = MathF.Max(theme.Scaled(120f), rowWidth - deleteWidth - gap);
 
         string value = config.Whitelist[index];
@@ -389,9 +392,12 @@ public partial class ChatsTab
         if (ImGui.IsItemDeactivatedAfterEdit())
             plugin.Config.Save();
 
-        float frameOffset = (height - ImGui.GetFrameHeight()) * 0.5f;
-        ImGui.SetCursorScreenPos(new Vector2(pos.X + valueWidth + gap, pos.Y + frameOffset));
-        bool remove = theme.DangerIconButton($"##ad-whitelist-del-{index}", FontAwesomeIcon.Trash, "Remove phrase");
+        bool remove = theme.DeleteAction(
+            $"ad-whitelist-del-{index}",
+            new Vector2(pos.X + valueWidth + gap, pos.Y),
+            "Remove phrase",
+            deleteWidth,
+            height);
 
         ImGui.SetCursorScreenPos(pos);
         ImGui.Dummy(new Vector2(rowWidth, height + theme.Gap(0.4f)));

@@ -5,7 +5,6 @@ using Dalamud.Plugin;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
-using Autofac;
 using Cordi.Attributes;
 using Cordi.Packets;
 using Cordi.Packets.Factory;
@@ -108,6 +107,7 @@ public class CordiPlugin : IDalamudPlugin
     [PluginService] internal static IDataManager Data { get; private set; } = null!;
 
     public ChatMessenger _chat = null!;
+    public AudioService Audio { get; private set; }
     public CordiPeepService CordiPeep { get; private set; }
     public CordiPeepWindow CordiPeepWindow { get; private set; }
     public EmoteLogService EmoteLog { get; private set; }
@@ -141,8 +141,7 @@ public class CordiPlugin : IDalamudPlugin
         EmbedFactory = new DiscordEmbedFactory(Lodestone);
 
         NotificationManager = new NotificationManager();
-
-
+        Audio = new AudioService(this);
 
         EmoteLog = new EmoteLogService(this);
         CordiPeep = new CordiPeepService(this);

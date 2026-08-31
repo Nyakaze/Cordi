@@ -469,4 +469,35 @@ public sealed partial class UiTheme
     }
     public void HoverHandIfItem() { if (ImGui.IsItemHovered()) ImGui.SetMouseCursor(ImGuiMouseCursor.Hand); }
 
+    public void Tooltip(string text)
+    {
+        if (string.IsNullOrEmpty(text))
+            return;
+
+        var padding = ImGui.GetStyle().WindowPadding;
+        var size = ImGui.CalcTextSize(text) + padding * 2f;
+        var mouse = ImGui.GetMousePos();
+        var viewport = ImGui.GetMainViewport();
+        var workMin = viewport.WorkPos;
+        var workMax = viewport.WorkPos + viewport.WorkSize;
+
+        float x = Math.Clamp(mouse.X, workMin.X, MathF.Max(workMin.X, workMax.X - size.X));
+        float y = mouse.Y + Scaled(TooltipCursorOffset);
+
+        if (y + size.Y > workMax.Y)
+            y = MathF.Max(workMin.Y, mouse.Y - size.Y - Scaled(TooltipCursorOffset * 0.5f));
+
+        ImGui.SetNextWindowPos(new Vector2(x, y), ImGuiCond.Always);
+
+        using (ImRaii.Tooltip())
+        {
+            ImGui.TextUnformatted(text);
+        }
+    }
+
+    public void TooltipIfItemHovered(string text)
+    {
+        if (ImGui.IsItemHovered())
+            Tooltip(text);
+    }
 }

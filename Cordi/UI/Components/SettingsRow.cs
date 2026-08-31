@@ -153,7 +153,7 @@ public sealed class SettingsRow
 
             string tooltip = toggleEnabled ? toggleTooltip : toggleDisabledTooltip;
             if (!string.IsNullOrEmpty(tooltip) && ImGui.IsItemHovered())
-                ImGui.SetTooltip(tooltip);
+                theme.Tooltip(tooltip);
 
             if (toggled)
             {

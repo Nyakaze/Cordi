@@ -3,8 +3,11 @@ using System.Collections.Generic;
 using System.Numerics;
 using Cordi.Configuration;
 using Cordi.Core;
+using Cordi.Services;
+using Cordi.UI.Components;
 using Cordi.UI.Themes;
 using Dalamud.Bindings.ImGui;
+using Dalamud.Interface;
 using Dalamud.Interface.Utility.Raii;
 
 namespace Cordi.UI.Tabs;
@@ -16,6 +19,12 @@ public class SettingsTab : ConfigTabBase
     private float? _tempFontScale = null;
     private Vector3 _accentEdit;
     private bool _accentDirty;
+
+    private SettingsRow? rowRenderer;
+    private Panel? panelRenderer;
+
+    private SettingsRow Row => rowRenderer ??= new SettingsRow(theme);
+    private Panel Card => panelRenderer ??= new Panel(theme);
 
     public override string Label => "Settings";
 
@@ -32,9 +41,80 @@ public class SettingsTab : ConfigTabBase
         return new (string, Action)[]
         {
             ("Discord", DrawDiscord),
+            ("Audio", DrawAudio),
             ("Appearance", DrawAppearance),
             ("Font", DrawFont),
         };
+    }
+
+    private void DrawAudio()
+    {
+        var devices = AudioService.GetOutputDevices();
+        var configured = plugin.Config.Audio.OutputDevice;
+        bool deviceMissing = !plugin.Audio.IsConfiguredDeviceAvailable();
+
+        var items = new List<DropdownItem>
+        {
+            new() { Key = string.Empty, Label = AudioService.DefaultDeviceLabel },
+        };
+
+        foreach (var device in devices)
+            items.Add(new DropdownItem { Key = device.Guid.ToString(), Label = device.Description });
+
+        Card.Draw(
+            "audio-output",
+            innerWidth =>
+            {
+                Row.Draw(
+                    id: "audio-device",
+                    icon: deviceMissing ? FontAwesomeIcon.ExclamationTriangle : FontAwesomeIcon.VolumeUp,
+                    iconColor: deviceMissing ? UiTheme.TileAmber : theme.Accent,
+                    title: "Output device",
+                    subtitle: deviceMissing
+                        ? "Saved device not found, using the primary sound driver"
+                        : "Used for every sound Cordi plays",
+                    controlWidth: 260f,
+                    drawControl: (pos, width) =>
+                    {
+                        ImGui.SetCursorScreenPos(pos);
+                        theme.OptionPicker(
+                            "audio-output-device",
+                            configured == Guid.Empty ? string.Empty : configured.ToString(),
+                            items,
+                            key =>
+                            {
+                                plugin.Config.Audio.OutputDevice =
+                                    Guid.TryParse(key, out var parsed) ? parsed : Guid.Empty;
+                                plugin.Config.Save();
+                            },
+                            width);
+                    },
+                    rowWidth: innerWidth);
+
+                Row.Draw(
+                    id: "audio-test",
+                    icon: FontAwesomeIcon.Play,
+                    iconColor: UiTheme.TileGreen,
+                    title: "Test sound",
+                    subtitle: "Plays the built-in alert through the selected device",
+                    controlWidth: 140f,
+                    drawControl: (pos, width) =>
+                    {
+                        float buttonHeight = theme.Scaled(32f);
+                        ImGui.SetCursorScreenPos(new Vector2(pos.X, pos.Y + (theme.Scaled(UiTheme.ControlHeight) - buttonHeight) * 0.5f));
+
+                        if (theme.SecondaryButton("Play", new Vector2(width, buttonHeight)))
+                            plugin.Audio.Play(string.Empty, 1f);
+                    },
+                    rowWidth: innerWidth);
+            },
+            label: "Audio Output",
+            drawTrailing: anchor => theme.HelpPill(
+                "audio-help",
+                anchor,
+                "Cordi plays alert sounds through this device.\n" +
+                "Individual volumes stay with each feature.\n" +
+                "If the device is unplugged, playback falls back to the primary sound driver."));
     }
 
     private void DrawAppearance()

@@ -78,18 +78,14 @@ public partial class ChatsTab
             {
                 float gap = theme.Gap(0.5f);
                 float numWidth = theme.Scaled(58f);
-                float deleteWidth = theme.Scaled(30f);
+                float deleteWidth = theme.Scaled(UiTheme.ActionButtonSize);
                 float pickerWidth = width - numWidth - deleteWidth - gap * 2f;
-                float frameHeight = ImGui.GetFrameHeight();
                 float dropdownHeight = theme.Scaled(UiTheme.ControlHeight);
-                float frameOffset = (dropdownHeight - frameHeight) * 0.5f;
 
-                ImGui.SetCursorScreenPos(new Vector2(pos.X, pos.Y + frameOffset));
-                ImGui.SetNextItemWidth(numWidth);
                 int number = connection.ExtraChatNumber;
-                if (ImGui.InputInt($"##ec-num-{key}", ref number, 0))
+                if (theme.NumberInput($"##ec-num-{key}", pos, numWidth, ref number, 0, 8))
                 {
-                    connection.ExtraChatNumber = Math.Clamp(number, 0, 8);
+                    connection.ExtraChatNumber = number;
                     plugin.Config.Save();
                 }
 
@@ -107,8 +103,12 @@ public partial class ChatsTab
                     showLabel: false,
                     width: pickerWidth);
 
-                ImGui.SetCursorScreenPos(new Vector2(pos.X + numWidth + pickerWidth + gap * 2f, pos.Y + frameOffset));
-                if (theme.DangerIconButton($"##ec-del-{key}", FontAwesomeIcon.Trash, "Remove mapping"))
+                if (theme.DeleteAction(
+                        $"ec-del-{key}",
+                        new Vector2(pos.X + numWidth + pickerWidth + gap * 2f, pos.Y),
+                        "Remove mapping",
+                        deleteWidth,
+                        dropdownHeight))
                 {
                     plugin.Config.Chat.ExtraChatMappings.Remove(key);
                     plugin.Config.Save();
@@ -147,25 +147,19 @@ public partial class ChatsTab
         var basePos = ImGui.GetCursorScreenPos();
 
         float gap = theme.Gap(0.5f);
-        float rowHeight = theme.Scaled(34f);
-        float frameHeight = ImGui.GetFrameHeight();
-        float frameOffset = (rowHeight - frameHeight) * 0.5f;
-        float buttonWidth = theme.Scaled(30f);
+        float rowHeight = theme.Scaled(UiTheme.ControlHeight);
+        float buttonWidth = theme.Scaled(UiTheme.ActionButtonSize);
         float numWidth = theme.Scaled(58f);
         float keyWidth = theme.Scaled(130f);
         float pickerWidth = innerWidth - keyWidth - numWidth - buttonWidth * 2f - gap * 4f;
 
         string key = state.Key;
-        ImGui.SetCursorScreenPos(new Vector2(basePos.X, basePos.Y + frameOffset));
-        ImGui.SetNextItemWidth(keyWidth);
-        ImGui.InputTextWithHint("##ec-add-key", "Label (ECLS1)", ref key, 64);
+        theme.TextInput("##ec-add-key", basePos, keyWidth, ref key, 64, "Label (ECLS1)");
 
         float cursorX = basePos.X + keyWidth + gap;
-        ImGui.SetCursorScreenPos(new Vector2(cursorX, basePos.Y + frameOffset));
-        ImGui.SetNextItemWidth(numWidth);
         int number = state.Value.ExtraChatNumber;
-        if (ImGui.InputInt("##ec-add-num", ref number, 0))
-            state.Value.ExtraChatNumber = Math.Clamp(number, 0, 8);
+        if (theme.NumberInput("##ec-add-num", new Vector2(cursorX, basePos.Y), numWidth, ref number, 0, 8))
+            state.Value.ExtraChatNumber = number;
 
         cursorX += numWidth + gap;
         ImGui.SetCursorScreenPos(new Vector2(cursorX, basePos.Y));
@@ -181,8 +175,14 @@ public partial class ChatsTab
         extraChatAddState = (key, state.Value);
 
         cursorX += pickerWidth + gap;
-        ImGui.SetCursorScreenPos(new Vector2(cursorX, basePos.Y + frameOffset));
-        if (theme.SuccessIconButton("##ec-add-save", FontAwesomeIcon.Check, "Add mapping"))
+        if (theme.IconAction(
+                "ec-add-save",
+                new Vector2(cursorX, basePos.Y),
+                FontAwesomeIcon.Check,
+                UiTheme.TileGreen,
+                "Add mapping",
+                buttonWidth,
+                rowHeight))
         {
             var mappings = plugin.Config.Chat.ExtraChatMappings;
             if (!string.IsNullOrWhiteSpace(key) && !mappings.ContainsKey(key))
@@ -194,8 +194,14 @@ public partial class ChatsTab
         }
 
         cursorX += buttonWidth + gap;
-        ImGui.SetCursorScreenPos(new Vector2(cursorX, basePos.Y + frameOffset));
-        if (theme.SecondaryIconButton("##ec-add-cancel", FontAwesomeIcon.Times, "Cancel"))
+        if (theme.IconAction(
+                "ec-add-cancel",
+                new Vector2(cursorX, basePos.Y),
+                FontAwesomeIcon.Times,
+                UiTheme.TileRed,
+                "Cancel",
+                buttonWidth,
+                rowHeight))
             extraChatAddState = null;
 
         ImGui.SetCursorScreenPos(new Vector2(basePos.X, basePos.Y + rowHeight + theme.Gap(0.6f)));

@@ -120,6 +120,8 @@ public sealed partial class UiTheme
     public const float ControlHeight = 34f;
     public const float ToggleWidth = 42f;
     public const float ToggleHeight = 22f;
+    public const float TooltipCursorOffset = 24f;
+    public const float ActionButtonSize = 34f;
 
     public float Radius(float mul = 1f) => RadiusBase * ImGuiHelpers.GlobalScale * mul;
     public float PadX(float mul = 1f) => PadBase * ImGuiHelpers.GlobalScale * mul;

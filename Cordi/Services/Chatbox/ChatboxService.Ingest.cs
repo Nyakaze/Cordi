@@ -453,31 +453,8 @@ public sealed partial class ChatboxService
     {
         if (DateTime.Now - _lastMentionSound < TimeSpan.FromSeconds(2)) return;
 
-        var path = Config.MentionSoundPath;
-        if (string.IsNullOrWhiteSpace(path))
-            path = System.IO.Path.Join(Service.PluginInterface.AssemblyLocation.Directory!.FullName, "target.wav");
-
-        if (!System.IO.File.Exists(path)) return;
-
         _lastMentionSound = DateTime.Now;
-        var volume = Config.MentionSoundVolume;
-
-        Task.Run(() =>
-        {
-            try
-            {
-                using var audio = new NAudio.Wave.AudioFileReader(path) { Volume = volume };
-                using var device = new NAudio.Wave.WaveOutEvent();
-                device.Init(audio);
-                device.Play();
-                while (device.PlaybackState == NAudio.Wave.PlaybackState.Playing)
-                    Thread.Sleep(100);
-            }
-            catch (Exception ex)
-            {
-                Service.Log.Error(ex, "[Chatbox] Mention sound playback failed");
-            }
-        });
+        _plugin.Audio.Play(Config.MentionSoundPath, Config.MentionSoundVolume);
     }
 
     private static string Excerpt(string text, int max)

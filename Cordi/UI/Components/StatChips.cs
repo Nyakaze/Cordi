@@ -72,7 +72,7 @@ public sealed class StatChips
         ImGui.InvisibleButton($"##stat-chip-{index}", new Vector2(width, height));
         bool hovered = ImGui.IsItemHovered();
         if (hovered && !string.IsNullOrEmpty(chip.Tooltip))
-            ImGui.SetTooltip(chip.Tooltip);
+            theme.Tooltip(chip.Tooltip);
 
         draw.AddRectFilled(min, max, ImGui.GetColorU32(hovered ? theme.RowHover : theme.CardBg), theme.Radius(1.2f));
         draw.AddRect(min, max, ImGui.GetColorU32(theme.Border), theme.Radius(1.2f));

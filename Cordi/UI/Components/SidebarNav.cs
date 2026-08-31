@@ -229,7 +229,7 @@ public sealed class SidebarNav
         if (hovered)
         {
             ImGui.SetMouseCursor(ImGuiMouseCursor.Hand);
-            ImGui.SetTooltip(tooltip);
+            theme.Tooltip(tooltip);
         }
         if (clicked)
             onClick?.Invoke();

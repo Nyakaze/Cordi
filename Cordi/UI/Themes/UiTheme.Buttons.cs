@@ -14,6 +14,50 @@ using Dalamud.Interface.Components;
 
 public sealed partial class UiTheme
 {
+    public Vector2 IconActionSize() => new(Scaled(ActionButtonSize), Scaled(ControlHeight));
+
+    public bool IconAction(
+        string id,
+        Vector2 pos,
+        FontAwesomeIcon icon,
+        Vector4 color,
+        string tooltip = "",
+        float width = 0f,
+        float height = 0f)
+    {
+        var draw = ImGui.GetWindowDrawList();
+        var size = new Vector2(
+            width > 0f ? width : Scaled(ActionButtonSize),
+            height > 0f ? height : Scaled(ControlHeight));
+        var max = pos + size;
+
+        ImGui.SetCursorScreenPos(pos);
+        bool clicked = ImGui.InvisibleButton($"##action-{id}", size);
+        ImGui.SetItemAllowOverlap();
+        bool hovered = ImGui.IsItemHovered();
+
+        if (hovered)
+        {
+            ImGui.SetMouseCursor(ImGuiMouseCursor.Hand);
+            Tooltip(tooltip);
+        }
+
+        draw.AddRectFilled(pos, max, ImGui.GetColorU32(hovered ? FrameBgHover : FrameBg), Radius(0.7f));
+        draw.AddRect(pos, max, ImGui.GetColorU32(Border), Radius(0.7f));
+
+        using (ImRaii.PushFont(UiBuilder.IconFont))
+        {
+            var glyph = icon.ToIconString();
+            var glyphSize = ImGui.CalcTextSize(glyph);
+            draw.AddText((pos + max) * 0.5f - glyphSize * 0.5f, ImGui.GetColorU32(hovered ? color : MutedText), glyph);
+        }
+
+        return clicked;
+    }
+
+    public bool DeleteAction(string id, Vector2 pos, string tooltip = "Remove", float width = 0f, float height = 0f)
+        => IconAction(id, pos, FontAwesomeIcon.Trash, TileRed, tooltip, width, height);
+
     public bool PrimaryButton(string label, Vector2 size = default)
     {
         using var color = ImRaii.PushColor(ImGuiCol.Button, Accent)
@@ -47,7 +91,7 @@ public sealed partial class UiTheme
         var ret = ImGui.Button(label, size);
         if (!string.IsNullOrEmpty(tooltip) && ImGui.IsItemHovered())
         {
-            ImGui.SetTooltip(tooltip);
+            Tooltip(tooltip);
         }
         HoverHandIfItem();
         return ret;
@@ -64,7 +108,7 @@ public sealed partial class UiTheme
         var ret = ImGui.Checkbox(label, ref v);
         if (!string.IsNullOrEmpty(tooltip) && ImGui.IsItemHovered())
         {
-            ImGui.SetTooltip(tooltip);
+            Tooltip(tooltip);
         }
         HoverHandIfItem();
         return ret;
@@ -111,7 +155,7 @@ public sealed partial class UiTheme
         }
         if (!string.IsNullOrEmpty(tooltip) && ImGui.IsItemHovered())
         {
-            ImGui.SetTooltip(tooltip);
+            Tooltip(tooltip);
         }
         HoverHandIfItem();
         return changed;
@@ -123,7 +167,7 @@ public sealed partial class UiTheme
 
         if (!string.IsNullOrEmpty(tooltip) && ImGui.IsItemHovered())
         {
-            ImGui.SetTooltip(tooltip);
+            Tooltip(tooltip);
         }
         HoverHandIfItem();
 

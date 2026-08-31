@@ -481,11 +481,6 @@ public class CordiPeepService : IDisposable
 
     private DateTime _lastSoundPlayTime = DateTime.MinValue;
 
-    public IEnumerable<NAudio.Wave.DirectSoundDeviceInfo> GetOutputDevices()
-    {
-        return NAudio.Wave.DirectSoundOut.Devices;
-    }
-
     private void PlaySound()
     {
         if (!plugin.Config.CordiPeep.SoundEnabled) return;
@@ -498,46 +493,8 @@ public class CordiPeepService : IDisposable
             return;
         if ((DateTime.Now - _lastSoundPlayTime) < _minAlertInterval) return;
 
-        bool windowOpen = plugin.CordiPeepWindow != null && plugin.CordiPeepWindow.IsOpen;
-
-        var path = plugin.Config.CordiPeep.SoundPath;
-
-        if (string.IsNullOrWhiteSpace(path))
-        {
-            path = Path.Join(Service.PluginInterface.AssemblyLocation.Directory!.FullName, "target.wav");
-        }
-
-        if (!File.Exists(path)) return;
-
-        try
-        {
-            float volume = plugin.Config.CordiPeep.SoundVolume;
-            var deviceId = plugin.Config.CordiPeep.SoundDevice;
-
-            Task.Run(() =>
-            {
-                try
-                {
-                    using var audioFile = new NAudio.Wave.AudioFileReader(path);
-                    audioFile.Volume = volume;
-
-                    using var outputDevice = new NAudio.Wave.DirectSoundOut(deviceId);
-                    outputDevice.Init(audioFile);
-                    outputDevice.Play();
-
-                    while (outputDevice.PlaybackState == NAudio.Wave.PlaybackState.Playing)
-                    {
-                        System.Threading.Thread.Sleep(100);
-                    }
-                }
-                catch (Exception ex)
-                {
-                    Log.Error(LogSource, "Sound playback error", ex);
-                }
-            });
-            _lastSoundPlayTime = DateTime.Now;
-        }
-        catch (Exception ex) { Service.Log.Error(ex, "Failed to initiate sound playback"); }
+        plugin.Audio.Play(plugin.Config.CordiPeep.SoundPath, plugin.Config.CordiPeep.SoundVolume);
+        _lastSoundPlayTime = DateTime.Now;
     }
 
     public Task OnDiscordReactionAdded(ReactionAddedEvent e)

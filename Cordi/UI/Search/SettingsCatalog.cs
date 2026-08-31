@@ -11,7 +11,7 @@ public static class SettingsCatalog
     {
         RegisterChats(index);
         RegisterChatbox(index);
-        RegisterTrackers(index);
+        RegisterWatchers(index);
         RegisterActivity(index);
         RegisterParty(index);
         RegisterSlashCommands(index);
@@ -170,39 +170,54 @@ public static class SettingsCatalog
             ("Advanced", "Maintenance", "cleanup reset"));
     }
 
-    private static void RegisterTrackers(SettingsSearchIndex index)
+    private static void RegisterWatchers(SettingsSearchIndex index)
     {
-        Page(index, PageIds.Trackers, "Trackers", FontAwesomeIcon.ChartBar,
-            ("Peeper", "Enable Peeper Detection", "target watcher looker"),
-            ("Peeper", "Enable Discord Notifications", "peeper discord"),
-            ("Peeper", "Detect when Window is Closed", "peeper background"),
-            ("Peeper", "Unhide lookers from Visibility plugin", "visibility plugin"),
-            ("Peeper", "Combat targeters only", "peeper filter"),
-            ("Peeper", "Include yourself", "peeper filter self"),
-            ("Peeper", "Log party members", "peeper filter party"),
-            ("Peeper", "Log alliance members", "peeper filter alliance"),
-            ("Peeper", "Enable Sound Alert", "peeper audio"),
-            ("Peeper", "Primary Sound Driver", "peeper audio device"),
-            ("Peeper", "Enable Window", "peeper overlay"),
-            ("Peeper", "Overlay Display", "peeper overlay layout"),
-            ("Peeper", "Show Distance", "peeper overlay"),
-            ("Peeper", "Show Direction Arrow", "peeper overlay"),
-            ("Peeper", "Show Dot on Targeting Players", "peeper overlay marker"),
-            ("Peeper", "Outline Glow on Targeting Players", "peeper overlay marker"),
-            ("Peeper", "Alt-click Examine", "peeper inspect"),
-            ("Peeper", "Peeper Blacklist", "ignore player"),
-            ("Emote Log", "Enable Emote Detection", "emote tracker"),
-            ("Emote Log", "Enable Discord Notifications", "emote discord"),
-            ("Emote Log", "Detect when Window is Closed", "emote background"),
-            ("Emote Log", "Include Self", "emote filter self"),
-            ("Emote Log", "Collapse Duplicates", "emote filter"),
-            ("Emote Log", "Enable Window", "emote overlay"),
-            ("Emote Log", "Show Reply Button", "emote overlay"),
-            ("Emote Log", "Emote Log Blacklist", "ignore player emote"),
-            ("Combined Window", "In-Game Overlay", "combined window overlay"),
-            ("Combined Window", "Open Window Now", "combined window"));
-    }
+        Page(index, PageIds.Peeper, "Peeper", FontAwesomeIcon.Eye,
+            ("", "Peeper detection", "target watcher looker"),
+            ("", "Detect while the overlay is closed", "peeper background"),
+            ("", "Log party members", "peeper filter party"),
+            ("", "Log alliance members", "peeper filter alliance"),
+            ("", "Combat targeters only", "peeper filter"),
+            ("", "Include yourself", "peeper filter self"),
+            ("", "Skip repeated alerts", "peeper cooldown"),
+            ("", "Repeat cooldown", "peeper cooldown seconds"),
+            ("", "Discord notifications", "peeper discord"),
+            ("", "Notification channel", "peeper discord channel"),
+            ("", "Sound alert", "peeper audio"),
+            ("", "Alert sound", "peeper audio file"),
+            ("", "Volume", "peeper audio volume"),
+            ("", "Test alert", "peeper audio preview"),
+            ("", "In-game overlay", "peeper overlay window"),
+            ("", "Background opacity", "peeper overlay transparency"),
+            ("", "Show direction arrow", "peeper overlay"),
+            ("", "Show distance", "peeper overlay"),
+            ("", "Show peeper's target", "peeper overlay"),
+            ("", "Targeting highlight", "peeper overlay color"),
+            ("", "Outline glow", "peeper overlay marker"),
+            ("", "Targeting dot", "peeper overlay marker"),
+            ("", "Alt-click examine", "peeper inspect"),
+            ("", "Blacklist", "ignore player peeper"));
 
+        Page(index, PageIds.EmoteLog, "Emote Log", FontAwesomeIcon.TheaterMasks,
+            ("", "Emote logging", "emote tracker detection"),
+            ("", "Detect while the overlay is closed", "emote background"),
+            ("", "Include yourself", "emote filter self"),
+            ("", "Collapse duplicates", "emote filter"),
+            ("", "Discord notifications", "emote discord"),
+            ("", "Notification channel", "emote discord channel"),
+            ("", "In-game overlay", "emote overlay window"),
+            ("", "Show reply button", "emote overlay"),
+            ("", "Background opacity", "emote overlay transparency"),
+            ("", "Blacklist", "ignore player emote"));
+
+        Page(index, PageIds.CombinedOverlay, "Combined Overlay", FontAwesomeIcon.Columns,
+            ("", "Open the overlay", "combined window"),
+            ("", "Swap panels", "combined window layout"),
+            ("", "Open on login", "combined window"),
+            ("", "Lock position", "combined window"),
+            ("", "Lock size", "combined window"),
+            ("", "Background opacity", "combined window transparency"));
+    }
     private static void RegisterActivity(SettingsSearchIndex index)
     {
         Page(index, PageIds.Activity, "Activity", FontAwesomeIcon.WaveSquare,

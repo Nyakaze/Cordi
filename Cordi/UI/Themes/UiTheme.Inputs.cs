@@ -241,7 +241,7 @@ public sealed partial class UiTheme
         ApplyFontScale();
 
         if (hovered)
-            ImGui.SetTooltip(tooltip);
+            Tooltip(tooltip);
 
         ImGui.SetCursorScreenPos(min);
         ImGui.Dummy(new Vector2(width, height));
@@ -275,6 +275,26 @@ public sealed partial class UiTheme
 
     public bool ScoreSlider(string id, Vector2 pos, float width, ref int value, int min, int max)
     {
+        float current = value;
+        if (!RangeSlider(id, pos, width, ref current, min, max, 1f))
+            return false;
+
+        value = (int)MathF.Round(current);
+        return true;
+    }
+
+    public bool PercentSlider(string id, Vector2 pos, float width, ref float value)
+    {
+        float percent = value * 100f;
+        if (!RangeSlider(id, pos, width, ref percent, 0f, 100f, 1f))
+            return false;
+
+        value = Math.Clamp(percent / 100f, 0f, 1f);
+        return true;
+    }
+
+    public bool RangeSlider(string id, Vector2 pos, float width, ref float value, float min, float max, float step = 0f)
+    {
         var draw = ImGui.GetWindowDrawList();
         float height = Scaled(ControlHeight);
         float trackHeight = Scaled(8f);
@@ -288,15 +308,20 @@ public sealed partial class UiTheme
             ImGui.SetMouseCursor(ImGuiMouseCursor.Hand);
 
         float usable = width - knobSize.X;
-        int previous = value;
+        float previous = value;
 
-        if (active)
+        if (active && usable > 0f)
         {
             float t = Math.Clamp((ImGui.GetIO().MousePos.X - pos.X - knobSize.X * 0.5f) / usable, 0f, 1f);
-            value = min + (int)MathF.Round(t * (max - min));
+            value = min + t * (max - min);
+
+            if (step > 0f)
+                value = min + MathF.Round((value - min) / step) * step;
+
+            value = Math.Clamp(value, min, max);
         }
 
-        float progress = max > min ? (value - min) / (float)(max - min) : 0f;
+        float progress = max > min ? (value - min) / (max - min) : 0f;
         var trackMin = new Vector2(pos.X, pos.Y + (height - trackHeight) * 0.5f);
         var trackMax = new Vector2(pos.X + width, trackMin.Y + trackHeight);
         float fillEnd = pos.X + knobSize.X * 0.5f + usable * progress;
@@ -309,7 +334,74 @@ public sealed partial class UiTheme
         draw.AddRectFilled(knobMin, knobMin + knobSize, ImGui.GetColorU32(hovered || active ? AccentHover : Accent), Radius(0.42f));
         draw.AddRect(knobMin, knobMin + knobSize, ImGui.GetColorU32(Border), Radius(0.42f));
 
-        return value != previous;
+        return !value.Equals(previous);
+    }
+
+    public bool ColorSwatch(string id, Vector2 pos, float width, ref Vector4 color)
+    {
+        var draw = ImGui.GetWindowDrawList();
+        float height = Scaled(ControlHeight);
+        float inset = Scaled(4f);
+
+        ImGui.SetCursorScreenPos(pos);
+        bool clicked = ImGui.InvisibleButton(id, new Vector2(width, height));
+        bool hovered = ImGui.IsItemHovered();
+        if (hovered)
+            ImGui.SetMouseCursor(ImGuiMouseCursor.Hand);
+
+        var max = pos + new Vector2(width, height);
+        draw.AddRectFilled(pos, max, ImGui.GetColorU32(hovered ? FrameBgHover : FrameBg), Radius());
+        draw.AddRect(pos, max, ImGui.GetColorU32(Border), Radius());
+
+        var fillMin = pos + new Vector2(inset, inset);
+        var fillMax = max - new Vector2(inset, inset);
+        draw.AddRectFilled(fillMin, fillMax, ImGui.GetColorU32(color), Radius(0.7f));
+        draw.AddRect(fillMin, fillMax, ImGui.GetColorU32(Border), Radius(0.7f));
+
+        if (clicked)
+            ImGui.OpenPopup($"{id}-picker");
+
+        bool changed = false;
+
+        using (var popup = ImRaii.Popup($"{id}-picker"))
+        {
+            if (popup)
+            {
+                changed = ImGui.ColorPicker4(
+                    $"{id}-picker4",
+                    ref color,
+                    ImGuiColorEditFlags.AlphaBar | ImGuiColorEditFlags.NoSidePreview | ImGuiColorEditFlags.DisplayHex);
+            }
+        }
+
+        return changed;
+    }
+
+    public bool PathInput(string id, Vector2 pos, float width, ref string value, Action onBrowse, string hint = "")
+    {
+        float height = Scaled(ControlHeight);
+        float browseWidth = height;
+        float fieldWidth = MathF.Max(Scaled(40f), width - browseWidth - Gap(0.5f));
+
+        bool changed = TextInput(id, pos, fieldWidth, ref value, 512, hint);
+
+        var browsePos = new Vector2(pos.X + fieldWidth + Gap(0.5f), pos.Y);
+        ImGui.SetCursorScreenPos(browsePos);
+
+        using (ImRaii.PushStyle(ImGuiStyleVar.FrameRounding, Radius()))
+        using (ImRaii.PushColor(ImGuiCol.Button, FrameBg))
+        using (ImRaii.PushColor(ImGuiCol.ButtonHovered, FrameBgHover))
+        using (ImRaii.PushColor(ImGuiCol.ButtonActive, FrameBgActive))
+        using (ImRaii.PushFont(UiBuilder.IconFont))
+        {
+            if (ImGui.Button($"{FontAwesomeIcon.FolderOpen.ToIconString()}##{id}-browse", new Vector2(browseWidth, height)))
+                onBrowse();
+        }
+
+        if (ImGui.IsItemHovered())
+            ImGui.SetMouseCursor(ImGuiMouseCursor.Hand);
+
+        return changed;
     }
 
     public Vector2 ToggleSize() => new(Scaled(ToggleWidth), Scaled(ToggleHeight));

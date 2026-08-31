@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
@@ -150,9 +150,8 @@ public partial class ChatsTab
             drawControl: (pos, width) =>
             {
                 float gap = theme.Gap(1.6f);
-                float deleteWidth = theme.Scaled(30f);
+                float deleteWidth = theme.Scaled(UiTheme.ActionButtonSize);
                 float pickerWidth = width - deleteWidth - gap;
-                float frameOffset = (theme.Scaled(UiTheme.ControlHeight) - ImGui.GetFrameHeight()) * 0.5f;
 
                 ImGui.SetCursorScreenPos(pos);
                 theme.ThreadPicker(
@@ -168,8 +167,11 @@ public partial class ChatsTab
                     defaultLabel: "Select a thread...",
                     width: pickerWidth);
 
-                ImGui.SetCursorScreenPos(new Vector2(pos.X + pickerWidth + gap, pos.Y + frameOffset));
-                if (theme.DangerIconButton($"##conv-del-{key}", FontAwesomeIcon.Trash, "Unlink conversation"))
+                if (theme.DeleteAction(
+                        $"conv-del-{key}",
+                        new Vector2(pos.X + pickerWidth + gap, pos.Y),
+                        "Unlink conversation",
+                        deleteWidth))
                 {
                     plugin.Config.Chat.TellThreadMappings.Remove(key);
                     plugin.Config.Save();
@@ -222,9 +224,7 @@ public partial class ChatsTab
 
         theme.PushInputScope();
 
-        ImGui.SetCursorScreenPos(new Vector2(min.X, min.Y + (height - ImGui.GetFrameHeight()) * 0.5f));
-        ImGui.SetNextItemWidth(filterWidth);
-        ImGui.InputTextWithHint("##conversation-filter", "Filter by name...", ref conversationFilter, 64);
+        theme.TextInput("##conversation-filter", min, filterWidth, ref conversationFilter, 64, "Filter by name...");
 
         ImGui.SetCursorScreenPos(new Vector2(min.X + filterWidth + gap, min.Y));
         theme.OptionPicker(

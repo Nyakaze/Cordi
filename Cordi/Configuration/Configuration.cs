@@ -29,6 +29,7 @@ public class Configuration : IPluginConfiguration
     public CombinedWindowConfig CombinedWindow { get; set; } = new();
     public FontConfig Font { get; set; } = new();
     public AppearanceConfig Appearance { get; set; } = new();
+    public AudioConfig Audio { get; set; } = new();
     public ThroughputStats Stats { get; set; } = new();
     public SlashCommandConfig SlashCommands { get; set; } = new();
     public bool LogsTabVisible { get; set; }
@@ -48,6 +49,7 @@ public class Configuration : IPluginConfiguration
     {
         this.pluginInterface = pluginInterface;
         MigrateConfig();
+        MigrateAudioDevice();
         BuildCache();
 
         // Initialize advertisement filter defaults on first load
@@ -249,7 +251,7 @@ public class Configuration : IPluginConfiguration
         }
         if (_additionalData.TryGetValue("CordiPeepSoundDevice", out var cpDevice))
         {
-            CordiPeep.SoundDevice = cpDevice.ToObject<Guid>();
+            CordiPeep.LegacySoundDevice = cpDevice.ToObject<Guid>();
             needsSave = true;
         }
         if (_additionalData.TryGetValue("CordiPeepBlacklist", out var cpBlacklist))
@@ -263,6 +265,18 @@ public class Configuration : IPluginConfiguration
             _additionalData = null;
             Save();
         }
+    }
+
+    private void MigrateAudioDevice()
+    {
+        if (CordiPeep.LegacySoundDevice == Guid.Empty)
+            return;
+
+        if (Audio.OutputDevice == Guid.Empty)
+            Audio.OutputDevice = CordiPeep.LegacySoundDevice;
+
+        CordiPeep.LegacySoundDevice = Guid.Empty;
+        Save();
     }
 
     public void BuildCache()

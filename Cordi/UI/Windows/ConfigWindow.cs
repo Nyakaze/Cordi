@@ -30,7 +30,7 @@ public sealed partial class ConfigWindow : Window, IDisposable
     private DiscordActivityTab discordActivityTab;
     private PartyAndPlayersTab partyAndPlayersTab;
     private SettingsTab settingsTab;
-    private TrackerTab trackerTab;
+    private WatchersTab watchersTab;
     private SlashCommandsTab slashCommandsTab;
     private ChatboxTab chatboxTab;
     private LogsTab logsTab;
@@ -49,7 +49,7 @@ public sealed partial class ConfigWindow : Window, IDisposable
 #endif
         partyAndPlayersTab = new PartyAndPlayersTab(plugin, theme);
         settingsTab = new SettingsTab(plugin, theme);
-        trackerTab = new TrackerTab(plugin, theme);
+        watchersTab = new WatchersTab(plugin, theme);
         slashCommandsTab = new SlashCommandsTab(plugin, theme);
         chatboxTab = new ChatboxTab(plugin, theme);
         logsTab = new LogsTab(plugin, theme);
