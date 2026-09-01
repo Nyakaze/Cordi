@@ -1276,13 +1276,13 @@ public class DebugTab : ConfigTabBase
 
                         StatRow("Feature Enabled", config.Enabled ? "Yes" : "No",
                             config.Enabled ? UiTheme.ColorSuccessText : UiTheme.ColorDangerText);
-                        StatRow("Guild ID", string.IsNullOrEmpty(config.GuildId) ? "(not set)" : config.GuildId);
+                        StatRow("Guild ID", plugin.SlashCommandService?.GuildId?.ToString() ?? "(unknown)");
                         StatRow("Channel Restriction", string.IsNullOrEmpty(config.CommandChannelId) ? "None" : config.CommandChannelId);
                         StatRow("Total Commands", totalCommands.ToString());
                         StatRow("User Commands", userCount.ToString());
                         StatRow("Emote Commands", $"{emoteCount} (always available via /emote)");
-                        StatRow("Enabled / Limit", $"{enabledCount} / 98",
-                            enabledCount >= 98 ? UiTheme.ColorDangerText : (Vector4?)null);
+                        StatRow("Enabled / Limit", $"{enabledCount} / {Services.Discord.DiscordSlashCommandService.MaxUserCommands}",
+                            enabledCount >= Services.Discord.DiscordSlashCommandService.MaxUserCommands ? UiTheme.ColorDangerText : (Vector4?)null);
                         StatRow("Groups", groupCount.ToString());
                         StatRow("Bot Connected", plugin.SlashCommandService != null ? "Yes" : "No",
                             plugin.SlashCommandService != null ? UiTheme.ColorSuccessText : UiTheme.ColorDangerText);

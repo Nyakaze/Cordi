@@ -7,7 +7,6 @@ namespace Cordi.Configuration;
 public class SlashCommandConfig
 {
     public bool Enabled { get; set; } = false;
-    public string GuildId { get; set; } = string.Empty;
     public string CommandChannelId { get; set; } = string.Empty;
     public List<CustomSlashCommand> Commands { get; set; } = new();
     public List<CommandGroup> Groups { get; set; } = new();
@@ -31,10 +30,23 @@ public class CustomSlashCommand
     public List<SlashCommandParameter> Parameters { get; set; } = new();
 }
 
+public enum SlashCommandParameterType
+{
+    Text = 0,
+    Integer = 1,
+    Decimal = 2,
+    Boolean = 3,
+    User = 4,
+    Channel = 5,
+    Role = 6,
+    Mentionable = 7,
+}
+
 [Serializable]
 public class SlashCommandParameter
 {
     public string Name { get; set; } = string.Empty;
     public string Description { get; set; } = string.Empty;
     public bool Required { get; set; } = false;
+    public SlashCommandParameterType Type { get; set; } = SlashCommandParameterType.Text;
 }

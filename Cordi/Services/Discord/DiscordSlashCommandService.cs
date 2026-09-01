@@ -21,14 +21,25 @@ public class DiscordSlashCommandService : IDisposable
     private readonly ScreenshotService _screenshotService;
     private bool _bound;
 
-    private const int DiscordMaxGuildCommands = 100;
-    private const int ReservedSlots = 2;
-    private const int MaxUserCommands = DiscordMaxGuildCommands - ReservedSlots;
-    private const string ManageCommandName = "cordi";
-    private const string EmoteCommandName = "emote";
+    public const int DiscordMaxGuildCommands = 100;
+    public const int ReservedSlots = 2;
+    public const int MaxUserCommands = DiscordMaxGuildCommands - ReservedSlots;
+    public const string ManageCommandName = "cordi";
+    public const string EmoteCommandName = "emote";
     private const int MaxAutocompleteChoices = 25;
 
     public List<CustomSlashCommand> EmoteCommands { get; } = new();
+
+    public Snowflake? GuildId => ResolveGuildId();
+
+    private Snowflake? ResolveGuildId()
+    {
+        if (_plugin.DiscordConnection.Session.GuildId is { } sessionGuild)
+            return sessionGuild;
+
+        var guilds = _plugin.Channels.Guilds;
+        return guilds.Count > 0 ? guilds[0].Id : null;
+    }
 
     private CordiLogService Log => _plugin.LogService;
     private const string LogSource = "SlashCommands";
@@ -247,6 +258,18 @@ public class DiscordSlashCommandService : IDisposable
         return result;
     }
 
+    private static ApplicationCommandOptionType ToOptionType(SlashCommandParameterType type) => type switch
+    {
+        SlashCommandParameterType.Integer => ApplicationCommandOptionType.Integer,
+        SlashCommandParameterType.Decimal => ApplicationCommandOptionType.Number,
+        SlashCommandParameterType.Boolean => ApplicationCommandOptionType.Boolean,
+        SlashCommandParameterType.User => ApplicationCommandOptionType.User,
+        SlashCommandParameterType.Channel => ApplicationCommandOptionType.Channel,
+        SlashCommandParameterType.Role => ApplicationCommandOptionType.Role,
+        SlashCommandParameterType.Mentionable => ApplicationCommandOptionType.Mentionable,
+        _ => ApplicationCommandOptionType.String,
+    };
+
     private ApplicationCommandRequest? BuildSingleCommand(CustomSlashCommand cmd)
     {
         if (string.IsNullOrWhiteSpace(cmd.Name) || string.IsNullOrWhiteSpace(cmd.GameCommand))
@@ -271,7 +294,7 @@ public class DiscordSlashCommandService : IDisposable
             {
                 if (string.IsNullOrWhiteSpace(param.Name)) continue;
                 options.Add(new DiscordApplicationCommandOption(
-                    ApplicationCommandOptionType.String,
+                    ToOptionType(param.Type),
                     param.Name.ToLower(),
                     string.IsNullOrWhiteSpace(param.Description) ? param.Name : param.Description)
                 {
@@ -309,9 +332,9 @@ public class DiscordSlashCommandService : IDisposable
             return;
         }
 
-        if (string.IsNullOrEmpty(config.GuildId) || !ulong.TryParse(config.GuildId, out var guildId))
+        if (ResolveGuildId() is not { } guildId)
         {
-            Log.Warning(LogSource, "No guild ID configured for slash command registration.");
+            Log.Warning(LogSource, "Cannot register commands: the bot is not in a guild yet.");
             return;
         }
 
@@ -343,17 +366,36 @@ public class DiscordSlashCommandService : IDisposable
         var config = _plugin.Config.SlashCommands;
         if (!config.Enabled) return;
 
-        if (string.IsNullOrEmpty(config.GuildId) || !ulong.TryParse(config.GuildId, out var guildId))
+        if (ResolveGuildId() is not { } guildId)
         {
-            Log.Warning(LogSource, "No guild ID configured for slash command registration.");
+            Log.Warning(LogSource, "Cannot register command: the bot is not in a guild yet.");
+            return;
+        }
+
+        var request = BuildSingleCommand(cmd);
+        if (request is null)
+        {
+            Log.Warning(LogSource, $"Cannot register /{cmd.Name}: incomplete command definition.");
             return;
         }
 
         try
         {
-            var appCommands = BuildApplicationCommands(out _);
-            await context.Services.Commands.DeployAsync(applicationId, appCommands, guildId);
-            Log.Info(LogSource, $"Registered /{cmd.Name} (bulk-synced {appCommands.Count} command(s)).");
+            var existing = await context.Services.Commands.GetAllAsync(applicationId, guildId);
+            var live = existing.FirstOrDefault(c =>
+                c.Type == request.Type &&
+                string.Equals(c.Name, request.Name, StringComparison.OrdinalIgnoreCase));
+
+            if (live is null)
+            {
+                await context.Services.Commands.RegisterAsync(applicationId, request, guildId);
+                Log.Info(LogSource, $"Registered /{request.Name} with Discord.");
+            }
+            else
+            {
+                await context.Services.Commands.UpdateAsync(applicationId, live.Id, request, guildId);
+                Log.Info(LogSource, $"Updated /{request.Name} on Discord.");
+            }
         }
         catch (Exception ex)
         {
@@ -362,14 +404,38 @@ public class DiscordSlashCommandService : IDisposable
         }
     }
 
+    public async Task UnregisterSingleCommandAsync(string commandName)
+    {
+        if (string.IsNullOrWhiteSpace(commandName)) return;
+        if (Context is not { } context) return;
+        if (context.ApplicationId is not { } applicationId) return;
+        if (ResolveGuildId() is not { } guildId) return;
+
+        var name = commandName.ToLower();
+
+        try
+        {
+            var existing = await context.Services.Commands.GetAllAsync(applicationId, guildId);
+            var live = existing.FirstOrDefault(c =>
+                string.Equals(c.Name, name, StringComparison.OrdinalIgnoreCase));
+
+            if (live is null) return;
+
+            await context.Services.Commands.DeleteAsync(applicationId, live.Id, guildId);
+            Log.Info(LogSource, $"Removed /{name} from Discord.");
+        }
+        catch (Exception ex)
+        {
+            Log.Error(LogSource, $"Failed to remove /{name}: {ex.Message}");
+            throw;
+        }
+    }
+
     public async Task UnregisterAllCommandsAsync()
     {
         if (Context is not { } context) return;
         if (context.ApplicationId is not { } applicationId) return;
-
-        var config = _plugin.Config.SlashCommands;
-        if (string.IsNullOrEmpty(config.GuildId) || !ulong.TryParse(config.GuildId, out var guildId))
-            return;
+        if (ResolveGuildId() is not { } guildId) return;
 
         try
         {

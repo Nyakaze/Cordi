@@ -27,13 +27,12 @@ public class RememberMeService : IDisposable
 
     public RememberedPlayerEntry? FindPlayer(string name, string world)
     {
-        if (!plugin.Config.RememberMe.Enabled) return null;
         return FindInList(plugin.Config.RememberMe.RememberedPlayers, name, world);
     }
 
     public RememberedPlayerEntry? FindPlayerByLodestoneId(string lodestoneId)
     {
-        if (!plugin.Config.RememberMe.Enabled || string.IsNullOrWhiteSpace(lodestoneId))
+        if (string.IsNullOrWhiteSpace(lodestoneId))
             return null;
 
         return plugin.Config.RememberMe.RememberedPlayers
@@ -42,8 +41,6 @@ public class RememberMeService : IDisposable
 
     public void AddOrUpdatePlayer(string name, string world, string? lodestoneId = null, string? notes = null, PlayerGlamour? glamour = null)
     {
-        if (!plugin.Config.RememberMe.Enabled) return;
-
         var existing = FindPlayer(name, world);
 
         if (existing != null)
@@ -81,8 +78,6 @@ public class RememberMeService : IDisposable
 
     public void UpdateNotes(string name, string world, string notes)
     {
-        if (!plugin.Config.RememberMe.Enabled) return;
-
         var player = FindPlayer(name, world);
         if (player != null)
         {
@@ -93,8 +88,6 @@ public class RememberMeService : IDisposable
 
     public void UpdateLastSeen(string name, string world)
     {
-        if (!plugin.Config.RememberMe.Enabled) return;
-
         var player = FindPlayer(name, world);
         if (player != null)
         {
@@ -105,7 +98,6 @@ public class RememberMeService : IDisposable
 
     public void RemovePlayer(string name, string world)
     {
-        if (!plugin.Config.RememberMe.Enabled) return;
         var player = FindInList(plugin.Config.RememberMe.RememberedPlayers, name, world);
         if (player != null)
         {
@@ -117,13 +109,12 @@ public class RememberMeService : IDisposable
 
     public List<RememberedPlayerEntry> GetAllPlayers()
     {
-        if (!plugin.Config.RememberMe.Enabled) return new List<RememberedPlayerEntry>();
         return plugin.Config.RememberMe.RememberedPlayers.OrderByDescending(p => p.LastSeen).ToList();
     }
 
     public List<RememberedPlayerEntry> SearchPlayers(string searchText)
     {
-        if (!plugin.Config.RememberMe.Enabled || string.IsNullOrWhiteSpace(searchText))
+        if (string.IsNullOrWhiteSpace(searchText))
             return GetAllPlayers();
 
         var search = searchText.ToLower();

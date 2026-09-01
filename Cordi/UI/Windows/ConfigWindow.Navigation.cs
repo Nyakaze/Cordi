@@ -21,7 +21,7 @@ public static class PageIds
     public const string ActivityListening = "activity/Listening";
     public const string ActivityWatching = "activity/Watching";
     public const string ActivityCustom = "activity/Custom";
-    public const string PartyAndPlayers = "party";
+    public const string PartyRadar = "party";
     public const string SlashCommands = "slash";
     public const string Settings = "settings";
     public const string Debug = "debug";
@@ -47,6 +47,8 @@ public sealed partial class ConfigWindow
         PageIds.ActivityListening,
         PageIds.ActivityWatching,
         PageIds.ActivityCustom,
+        PageIds.PartyRadar,
+        PageIds.SlashCommands,
     };
 
     private static readonly Dictionary<string, FontAwesomeIcon> SubTabIcons = new()
@@ -80,7 +82,7 @@ public sealed partial class ConfigWindow
         ["Listening"] = "Titles built from the track your Discord account is listening to",
         ["Watching"] = "Titles built from what your Discord account is watching",
         ["Custom"] = "A standalone title that does not need a Discord account",
-        [PageIds.PartyAndPlayers] = "Party tracking and remembered players",
+        [PageIds.PartyRadar] = "Your party, their gear and the notes you left them",
         [PageIds.SlashCommands] = "Discord slash commands exposed by Cordi",
         [PageIds.Settings] = "Appearance, fonts and plugin behaviour",
         [PageIds.Debug] = "Diagnostics and internal state",
@@ -146,7 +148,7 @@ public sealed partial class ConfigWindow
 
         var integration = new List<NavItem>
         {
-            MakeItem(PageIds.PartyAndPlayers, "Party & Players", FontAwesomeIcon.Users, partyAndPlayersTab.Draw),
+            MakeItem(PageIds.PartyRadar, "Party Radar", FontAwesomeIcon.Crosshairs, partyRadarTab.Draw),
             MakeItem(PageIds.SlashCommands, "Slash Commands", FontAwesomeIcon.Code, slashCommandsTab.Draw),
         };
 
@@ -203,7 +205,7 @@ public sealed partial class ConfigWindow
     private Tabs.ConfigTabBase? ResolveTab(string pageId) => pageId switch
     {
         PageIds.Chatbox => chatboxTab,
-        PageIds.PartyAndPlayers => partyAndPlayersTab,
+        PageIds.PartyRadar => partyRadarTab,
         PageIds.SlashCommands => slashCommandsTab,
         PageIds.Settings => settingsTab,
 #if DEBUG || CORDI_DEV

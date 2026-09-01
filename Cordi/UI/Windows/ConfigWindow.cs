@@ -28,7 +28,7 @@ public sealed partial class ConfigWindow : Window, IDisposable
     private DebugTab debugTab;
 #endif
     private ActivityTab activityTab;
-    private PartyAndPlayersTab partyAndPlayersTab;
+    private PartyRadarTab partyRadarTab;
     private SettingsTab settingsTab;
     private WatchersTab watchersTab;
     private SlashCommandsTab slashCommandsTab;
@@ -47,7 +47,7 @@ public sealed partial class ConfigWindow : Window, IDisposable
 #if DEBUG || CORDI_DEV
         debugTab = new DebugTab(plugin, theme);
 #endif
-        partyAndPlayersTab = new PartyAndPlayersTab(plugin, theme);
+        partyRadarTab = new PartyRadarTab(plugin, theme);
         settingsTab = new SettingsTab(plugin, theme);
         watchersTab = new WatchersTab(plugin, theme);
         slashCommandsTab = new SlashCommandsTab(plugin, theme);

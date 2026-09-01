@@ -263,34 +263,38 @@ public static class SettingsCatalog
 
     private static void RegisterParty(SettingsSearchIndex index)
     {
-        Page(index, PageIds.PartyAndPlayers, "Party & Players", FontAwesomeIcon.Users,
-            ("Party", "Enable Party Tracker", "party tracking"),
-            ("Party", "Exclude Alliance Parties", "party filter alliance"),
-            ("Party", "Send Party Summary to Discord", "party discord summary"),
-            ("Party", "Notify on Party Join", "party trigger"),
-            ("Party", "Notify on Party Leave", "party trigger"),
-            ("Party", "Include self", "party integration"),
-            ("Party", "Show gearlevel", "party item level"),
-            ("Party", "Show savage progress", "party progression"),
-            ("Remember Me", "Enable Remember Me", "remembered players"),
-            ("Remember Me", "Remembered Players", "player notes list"),
-            ("Remember Me", "Current Party", "remember party members"),
-            ("Remember Me", "Notes", "player note"));
+        Page(index, PageIds.PartyRadar, "Party Radar", FontAwesomeIcon.Crosshairs,
+            ("", "Track my party", "party tracking radar"),
+            ("", "Current Party", "party roster members"),
+            ("", "Announce party changes", "party discord notifications"),
+            ("", "Notification channel", "party discord channel"),
+            ("", "Send summary now", "party discord summary"),
+            ("", "Someone joins", "party trigger join"),
+            ("", "Someone leaves", "party trigger leave"),
+            ("", "Party fills up", "party trigger full"),
+            ("", "Summary when full", "party auto summary"),
+            ("", "Ignore alliance parties", "party filter alliance"),
+            ("", "Include yourself", "party include self"),
+            ("", "Show item level", "party gear level tomestone"),
+            ("", "Show savage progress", "party progression tomestone"),
+            ("", "Remember everyone I party with", "remember me players notes"),
+            ("", "Remembered Players", "player notes list archive"));
     }
 
     private static void RegisterSlashCommands(SettingsSearchIndex index)
     {
         Page(index, PageIds.SlashCommands, "Slash Commands", FontAwesomeIcon.Code,
-            ("Commands", "Custom Slash Commands", "discord command list"),
-            ("Commands", "Add New Command", "create command"),
-            ("Commands", "Game Command", "in game command"),
-            ("Groups", "Command Groups", "group commands"),
-            ("Groups", "Add Group", "create group"),
-            ("Groups", "Enable All", "group toggle"),
-            ("Groups", "Disable All", "group toggle"),
-            ("Settings", "Register Commands", "discord register sync"),
-            ("Settings", "Unregister All", "discord remove commands"),
-            ("Settings", "Any Channel", "command channel restriction"));
+            ("", "Expose Cordi commands in Discord", "slash commands enable"),
+            ("", "Restrict to a channel", "command channel restriction"),
+            ("", "Sync everything with Discord", "register sync commands"),
+            ("", "Remove every command", "unregister discord commands"),
+            ("", "/cordi", "manage commands screenshot builtin"),
+            ("", "/emote", "emote autocomplete builtin"),
+            ("", "Your Commands", "custom slash command list"),
+            ("", "Add Command", "create new slash command"),
+            ("", "Add Group", "create command group"),
+            ("", "Game command", "in game command mapping"),
+            ("", "Parameters", "slash command options arguments type"));
     }
 
     private static void RegisterSettings(SettingsSearchIndex index)

@@ -424,12 +424,10 @@ public class PartyService : IDisposable
         }
     }
 
-    public async Task SendPartySummary(bool ignoreConfig = false)
+    public async Task SendPartySummary()
     {
         try
         {
-            if (!ignoreConfig && !plugin.Config.Party.NotifyFull) return;
-
             var channelIdStr = plugin.Config.Party.DiscordChannelId;
             if (!ulong.TryParse(channelIdStr, out var channelId)) return;
 
@@ -493,11 +491,11 @@ public class PartyService : IDisposable
             }
 
             await plugin.Discord.SendWebhookMessageRaw(channelId, embed.Build(), "Party Full Summary", null);
-            Service.Log.Info("[PartyService] Sent party full summary to Discord.");
+            Log.Info(LogSource, "Sent party full summary to Discord.");
         }
         catch (Exception ex)
         {
-            Service.Log.Error(ex, "Error in SendPartySummary");
+            Log.Error(LogSource, "Failed to send the party summary", ex);
         }
     }
 
