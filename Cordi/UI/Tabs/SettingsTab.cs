@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Numerics;
 using Cordi.Configuration;
@@ -212,47 +212,92 @@ public class SettingsTab : ConfigTabBase
 
     private void DrawDiscord()
     {
-        bool dummyEnabled = true;
-        theme.DrawPluginCardAuto(
-            id: "bot-token-settings",
-            enabled: ref dummyEnabled,
-            showCheckbox: false,
-            title: "Bot Token",
-            drawContent: (avail) =>
+        Card.Draw(
+            "bot-token-settings",
+            innerWidth =>
             {
-                ImGui.TextDisabled("Configure the Discord bot token used to connect to your server.");
+                ImGui.TextColored(theme.MutedText, "The bot token Cordi uses to connect to Discord.");
                 theme.SpacerY(0.5f);
 
-                ImGui.TextColored(theme.Text, "Token");
-                theme.SpacerY(0.25f);
+                var origin = ImGui.GetCursorScreenPos();
+                float gap = theme.Gap(0.7f);
+                float buttonWidth = theme.Scaled(90f);
+                float rowHeight = theme.Scaled(UiTheme.ControlHeight);
+                float tokenWidth = MathF.Max(theme.Scaled(160f), innerWidth - buttonWidth * 2f - gap * 2f);
 
                 var flags = _botTokenInputActive ? ImGuiInputTextFlags.None : ImGuiInputTextFlags.Password;
-                using (var width1 = ImRaii.ItemWidth(avail))
-                {
-                    if (ImGui.InputText("##bot-token-input", ref _botToken, 256, flags))
-                    {
-                    }
-                    _botTokenInputActive = ImGui.IsItemActive();
-                }
+                theme.TextInput("##bot-token-input", origin, tokenWidth, ref _botToken, 256, "Paste your bot token", flags);
+                _botTokenInputActive = ImGui.IsItemActive();
 
-                theme.SpacerY(0.5f);
-
-                if (theme.PrimaryButton("Save", new Vector2(80, 0)))
+                ImGui.SetCursorScreenPos(new Vector2(origin.X + tokenWidth + gap, origin.Y));
+                if (theme.PrimaryButton("Save##bot-token", new Vector2(buttonWidth, rowHeight)))
                 {
                     plugin.Config.Discord.BotToken = _botToken;
                     plugin.Config.Save();
                 }
                 theme.HoverHandIfItem();
 
-                ImGui.SameLine();
-
-                if (theme.SecondaryButton("Reload", new Vector2(80, 0)))
-                {
+                ImGui.SetCursorScreenPos(new Vector2(origin.X + tokenWidth + buttonWidth + gap * 2f, origin.Y));
+                if (theme.SecondaryButton("Reload##bot-token", new Vector2(buttonWidth, rowHeight)))
                     _botToken = plugin.Config.Discord.BotToken ?? string.Empty;
-                }
                 theme.HoverHandIfItem();
-            }
-        );
+
+                ImGui.SetCursorScreenPos(origin);
+                ImGui.Dummy(new Vector2(innerWidth, rowHeight));
+            },
+            label: "Bot Token",
+            drawTrailing: anchor => theme.HelpPill(
+                "bot-token-help",
+                anchor,
+                "Create an application at discord.com/developers, add a bot to it\n" +
+                "and copy the token from the Bot page.\n" +
+                "The token is stored in your local Cordi config and never leaves your machine."));
+
+        DrawTargetUserCard();
+    }
+
+    private void DrawTargetUserCard()
+    {
+        var config = plugin.Config.ActivityConfig;
+        bool hasTarget = config.TargetUserId != 0;
+
+        Card.Draw(
+            "discord-presence",
+            innerWidth => Row.Draw(
+                id: "target-user-id",
+                icon: hasTarget ? FontAwesomeIcon.UserCheck : FontAwesomeIcon.ExclamationTriangle,
+                iconColor: hasTarget ? UiTheme.TileGreen : UiTheme.TileAmber,
+                title: "Target User ID",
+                subtitle: hasTarget
+                    ? "Activity is read from this Discord account"
+                    : "Not set, Discord driven activity types stay idle",
+                controlWidth: 220f,
+                drawControl: (pos, width) =>
+                {
+                    string value = hasTarget ? config.TargetUserId.ToString() : string.Empty;
+
+                    if (theme.TextInput("##target-user-id", pos, width, ref value, 20, "000000000000000000"))
+                    {
+                        if (string.IsNullOrWhiteSpace(value))
+                        {
+                            config.TargetUserId = 0;
+                            plugin.Config.Save();
+                        }
+                        else if (ulong.TryParse(value, out var parsed))
+                        {
+                            config.TargetUserId = parsed;
+                            plugin.Config.Save();
+                        }
+                    }
+                },
+                rowWidth: innerWidth),
+            label: "Presence",
+            drawTrailing: anchor => theme.HelpPill(
+                "target-user-help",
+                anchor,
+                "Enable Developer Mode in Discord, right click your account\n" +
+                "and choose Copy User ID.\n" +
+                "Cordi watches this account to turn its Discord activity into an in game title."));
     }
 
     private void DrawFont()

@@ -1,5 +1,5 @@
 using System;
-using Cordi.Configuration;
+using System.Collections.Generic;
 using Crovus.Models;
 
 namespace Cordi.Services.Activity;
@@ -7,6 +7,20 @@ namespace Cordi.Services.Activity;
 public sealed record ActivityPlaceholders
 {
     public static readonly ActivityPlaceholders Empty = new();
+
+    private static readonly HashSet<string> Known = new(StringComparer.Ordinal)
+    {
+        "{name}",
+        "{details}",
+        "{state}",
+        "{album}",
+        "{large_image}",
+        "{small_image}",
+        "{elapsed}",
+        "{duration}",
+        "{time_start}",
+        "{time_end}",
+    };
 
     public string Name { get; init; } = "";
 
@@ -83,25 +97,7 @@ public sealed record ActivityPlaceholders
         _ => "",
     };
 
-    public ActivityPlaceholders WithLimits(ActivityTypeConfig config)
-    {
-        var limited = this with
-        {
-            Details = config.TrackLimit > 0 ? ActivityText.Truncate(Details, config.TrackLimit) : Details,
-            State = config.ArtistLimit > 0 ? ActivityText.Truncate(State, config.ArtistLimit) : State,
-        };
-
-        if (config.CharLimits is not { Count: > 0 }) return limited;
-
-        foreach (var rule in config.CharLimits)
-        {
-            if (rule is null || rule.Limit <= 0) continue;
-
-            limited = limited.WithLimit(rule.TargetPlaceholder, rule.Limit);
-        }
-
-        return limited;
-    }
+    public static bool IsKnown(string? placeholder) => Known.Contains(Normalize(placeholder));
 
     public ActivityPlaceholders Sanitized() => this with
     {
@@ -113,22 +109,7 @@ public sealed record ActivityPlaceholders
         SmallImage = ActivityText.SanitizeUrlLikeDots(SmallImage),
     };
 
-    private ActivityPlaceholders WithLimit(string placeholder, int limit) => Normalize(placeholder) switch
-    {
-        "{name}" => this with { Name = ActivityText.Truncate(Name, limit) },
-        "{details}" => this with { Details = ActivityText.Truncate(Details, limit) },
-        "{state}" => this with { State = ActivityText.Truncate(State, limit) },
-        "{album}" => this with { Album = ActivityText.Truncate(Album, limit) },
-        "{large_image}" => this with { LargeImage = ActivityText.Truncate(LargeImage, limit) },
-        "{small_image}" => this with { SmallImage = ActivityText.Truncate(SmallImage, limit) },
-        "{elapsed}" => this with { Elapsed = ActivityText.Truncate(Elapsed, limit) },
-        "{duration}" => this with { Duration = ActivityText.Truncate(Duration, limit) },
-        "{time_start}" => this with { TimeStart = ActivityText.Truncate(TimeStart, limit) },
-        "{time_end}" => this with { TimeEnd = ActivityText.Truncate(TimeEnd, limit) },
-        _ => this,
-    };
-
-    private static string Normalize(string? placeholder) => placeholder switch
+    public static string Normalize(string? placeholder) => placeholder switch
     {
         "{track}" => "{details}",
         "{artist}" => "{state}",

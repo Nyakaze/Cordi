@@ -157,7 +157,7 @@ public sealed partial class UiTheme
     }
 
 
-    public bool TextInput(string id, Vector2 pos, float width, ref string value, int maxLength, string hint = "")
+    public bool TextInput(string id, Vector2 pos, float width, ref string value, int maxLength, string hint = "", ImGuiInputTextFlags flags = ImGuiInputTextFlags.None)
     {
         float height = Scaled(ControlHeight);
         float padY = MathF.Max(0f, (height - ImGui.GetTextLineHeight()) * 0.5f);
@@ -174,8 +174,8 @@ public sealed partial class UiTheme
             .Push(ImGuiCol.Border, Border);
 
         return string.IsNullOrEmpty(hint)
-            ? ImGui.InputText(id, ref value, maxLength)
-            : ImGui.InputTextWithHint(id, hint, ref value, maxLength);
+            ? ImGui.InputText(id, ref value, maxLength, flags)
+            : ImGui.InputTextWithHint(id, hint, ref value, maxLength, flags);
     }
 
     public bool NumberInput(string id, Vector2 pos, float width, ref int value, int min = int.MinValue, int max = int.MaxValue)

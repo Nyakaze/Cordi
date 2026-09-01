@@ -23,7 +23,8 @@ public sealed partial class UiTheme
         Vector4 color,
         string tooltip = "",
         float width = 0f,
-        float height = 0f)
+        float height = 0f,
+        Vector4? restColor = null)
     {
         var draw = ImGui.GetWindowDrawList();
         var size = new Vector2(
@@ -49,7 +50,7 @@ public sealed partial class UiTheme
         {
             var glyph = icon.ToIconString();
             var glyphSize = ImGui.CalcTextSize(glyph);
-            draw.AddText((pos + max) * 0.5f - glyphSize * 0.5f, ImGui.GetColorU32(hovered ? color : MutedText), glyph);
+            draw.AddText((pos + max) * 0.5f - glyphSize * 0.5f, ImGui.GetColorU32(hovered ? color : restColor ?? MutedText), glyph);
         }
 
         return clicked;
@@ -57,6 +58,13 @@ public sealed partial class UiTheme
 
     public bool DeleteAction(string id, Vector2 pos, string tooltip = "Remove", float width = 0f, float height = 0f)
         => IconAction(id, pos, FontAwesomeIcon.Trash, TileRed, tooltip, width, height);
+
+    public bool ToggleAction(string id, Vector2 pos, bool active, string tooltip = "", float width = 0f, float height = 0f)
+    {
+        var color = active ? TileGreen : MutedText;
+
+        return IconAction(id, pos, FontAwesomeIcon.PowerOff, color, tooltip, width, height, color);
+    }
 
     public bool PrimaryButton(string label, Vector2 size = default)
     {

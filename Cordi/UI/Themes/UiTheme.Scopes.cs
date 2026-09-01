@@ -41,7 +41,8 @@ public sealed partial class UiTheme
             .Push(ImGuiCol.ScrollbarBg, new Vector4(0f, 0f, 0f, 0f))
             .Push(ImGuiCol.ScrollbarGrab, FrameBgActive)
             .Push(ImGuiCol.ScrollbarGrabHovered, RowHover)
-            .Push(ImGuiCol.ScrollbarGrabActive, Accent);
+            .Push(ImGuiCol.ScrollbarGrabActive, Accent)
+            .Push(ImGuiCol.DragDropTarget, Accent);
         _activeWindowStyleScope = ImRaii.PushStyle(ImGuiStyleVar.WindowRounding, Radius(1.2f))
             .Push(ImGuiStyleVar.WindowBorderSize, 1f * ImGuiHelpers.GlobalScale)
             .Push(ImGuiStyleVar.WindowPadding, new Vector2(PadX(), PadY()))

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Linq;
 using Cordi.UI.Windows;
 using Dalamud.Interface;
@@ -220,29 +220,45 @@ public static class SettingsCatalog
     }
     private static void RegisterActivity(SettingsSearchIndex index)
     {
-        Page(index, PageIds.Activity, "Activity", FontAwesomeIcon.WaveSquare,
-            ("General", "Enable Discord Activity Integration", "rich presence toggle"),
-            ("General", "Prefix Mode", "presence prefix title"),
-            ("General", "Text Replacements", "replace original text"),
-            ("General", "Character Limits", "presence length truncate"),
-            ("Playing", "Playing", "rich presence playing game status"),
-            ("Playing", "Format String", "presence template placeholder"),
-            ("Playing", "Cycling Mode", "presence rotate formats"),
-            ("Playing", "Priority", "presence order"),
-            ("Playing", "Title Colors", "presence color gradient glow"),
-            ("Playing", "Game Specific Overrides", "per game format override"),
-            ("Listening", "Listening", "rich presence listening to status"),
-            ("Listening", "Format String", "presence template placeholder"),
-            ("Listening", "Cycling Mode", "presence rotate formats"),
-            ("Listening", "Priority", "presence order"),
-            ("Listening", "Title Colors", "presence color gradient glow"),
-            ("Watching", "Watching", "rich presence watching status"),
-            ("Watching", "Format String", "presence template placeholder"),
-            ("Watching", "Cycling Mode", "presence rotate formats"),
-            ("Watching", "Priority", "presence order"),
-            ("Watching", "Title Colors", "presence color gradient glow"),
-            ("Custom", "Enable Custom Status", "custom presence status"),
-            ("Custom", "Presets", "custom status preset"));
+        Page(index, PageIds.ActivityOverview, "Overview", FontAwesomeIcon.WaveSquare,
+            ("", "Broadcast title", "activity live preview current"),
+            ("", "Prefix mode", "title prefix above name"),
+            ("", "Text Replacements", "replace original text"));
+
+        Page(index, PageIds.ActivityPlaying, "Playing", FontAwesomeIcon.Gamepad,
+            ("", "Report this activity", "playing game status toggle"),
+            ("", "Title Format", "template placeholder format string"),
+            ("", "Priority", "activity order"),
+            ("", "Cycling", "rotate formats interval"),
+            ("", "Character Limits", "truncate placeholder length"),
+            ("", "Appearance", "title colour glow gradient"),
+            ("", "Blacklist Filters", "ignore activity rule"),
+            ("", "Game Overrides", "per game format override"));
+
+        Page(index, PageIds.ActivityListening, "Listening", FontAwesomeIcon.Music,
+            ("", "Report this activity", "listening music status toggle"),
+            ("", "Title Format", "template placeholder format string"),
+            ("", "Priority", "activity order"),
+            ("", "Cycling", "rotate formats interval"),
+            ("", "Character Limits", "truncate track artist length"),
+            ("", "Appearance", "title colour glow gradient"),
+            ("", "Blacklist Filters", "ignore activity rule"));
+
+        Page(index, PageIds.ActivityWatching, "Watching", FontAwesomeIcon.Video,
+            ("", "Report this activity", "watching video status toggle"),
+            ("", "Title Format", "template placeholder format string"),
+            ("", "Priority", "activity order"),
+            ("", "Cycling", "rotate formats interval"),
+            ("", "Character Limits", "truncate placeholder length"),
+            ("", "Appearance", "title colour glow gradient"),
+            ("", "Blacklist Filters", "ignore activity rule"));
+
+        Page(index, PageIds.ActivityCustom, "Custom", FontAwesomeIcon.CommentDots,
+            ("", "Report this activity", "custom status toggle"),
+            ("", "Presets", "custom status preset"),
+            ("", "Title Format", "template placeholder format string"),
+            ("", "Cycling", "rotate formats interval"),
+            ("", "Appearance", "title colour glow gradient"));
     }
 
     private static void RegisterParty(SettingsSearchIndex index)

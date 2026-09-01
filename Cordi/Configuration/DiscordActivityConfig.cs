@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using Crovus.Models;
 using System.Collections.Generic;
 
@@ -26,8 +26,6 @@ public class DiscordActivityConfig
 
     public List<ActivityPreset> CustomPresets { get; set; } = new();
     public int ActiveCustomPreset { get; set; } = 0;
-
-    public bool Enabled { get; set; } = true;
 }
 
 [Serializable]
@@ -54,6 +52,8 @@ public class ActivityTypeConfig
     public int ArtistLimit { get; set; } = 0;
 
     public List<CharLimitRule> CharLimits { get; set; } = new();
+
+    public bool DynamicTrim { get; set; } = true;
 
 
     public System.Numerics.Vector3? Color { get; set; } = null;

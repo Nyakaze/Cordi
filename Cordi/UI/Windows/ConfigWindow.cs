@@ -27,7 +27,7 @@ public sealed partial class ConfigWindow : Window, IDisposable
 #if DEBUG || CORDI_DEV
     private DebugTab debugTab;
 #endif
-    private DiscordActivityTab discordActivityTab;
+    private ActivityTab activityTab;
     private PartyAndPlayersTab partyAndPlayersTab;
     private SettingsTab settingsTab;
     private WatchersTab watchersTab;
@@ -43,7 +43,7 @@ public sealed partial class ConfigWindow : Window, IDisposable
         this.plugin = plugin;
 
         chatsTab = new ChatsTab(plugin, theme);
-        discordActivityTab = new DiscordActivityTab(plugin, theme);
+        activityTab = new ActivityTab(plugin, theme);
 #if DEBUG || CORDI_DEV
         debugTab = new DebugTab(plugin, theme);
 #endif

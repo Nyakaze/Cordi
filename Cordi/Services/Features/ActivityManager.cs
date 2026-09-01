@@ -26,6 +26,15 @@ namespace Cordi.Services
         private bool _hasLoggedPresenceReceived;
         private string _lastLoggedTitle = string.Empty;
         private DateTime _lastRefreshTick = DateTime.MinValue;
+        private ActivityCandidate? _lastCandidate;
+
+        public DiscordPresence? CurrentPresence => _cachedPresence;
+
+        public ActivityCandidate? CurrentCandidate => _lastCandidate;
+
+        public string CurrentTitle => _broadcaster.LastTitle;
+
+        public int CurrentCycleIndex => _cycler.Index;
 
         public ActivityManager(CordiPlugin plugin, HonorificBridge honorific)
         {
@@ -75,6 +84,18 @@ namespace Cordi.Services
             return Task.CompletedTask;
         }
 
+        public void ForgetPresence()
+        {
+            if (_cachedPresence is null && _lastCandidate is null) return;
+
+            Log.Debug(LogSource, "Dropping cached presence, the watched account changed.");
+
+            _cachedPresence = null;
+            _lastCandidate = null;
+            _hasLoggedPresenceReceived = false;
+            _hasPendingPresenceUpdate = true;
+        }
+
         public void Dispose()
         {
             Log.Info(LogSource, "Disposing — unsubscribing from events.");
@@ -95,13 +116,6 @@ namespace Cordi.Services
                 return;
             }
 
-            if (!config.Enabled)
-            {
-                Log.Debug(LogSource, "Activity integration is disabled, clearing title.", mute: quiet);
-                ClearTitle(quiet);
-                return;
-            }
-
             if (config.TargetUserId == 0 && !IsCustomAlwaysOn())
             {
                 Log.Warning(LogSource, "TargetUserId is not set (0). No presence will be tracked.", mute: quiet);
@@ -118,6 +132,7 @@ namespace Cordi.Services
                 return;
             }
 
+            _lastCandidate = best;
             _cycler.Advance(best, detail);
 
             var title = ActivityTitleRenderer.Render(best.Activity, best.Config, _cycler.Index,
@@ -156,6 +171,7 @@ namespace Cordi.Services
         private void ClearTitle(bool quiet)
         {
             _isIdle = true;
+            _lastCandidate = null;
 
             _cycler.Reset();
             _broadcaster.Clear(_plugin.cachedLocalPlayer);
@@ -167,7 +183,7 @@ namespace Cordi.Services
         {
             var config = _plugin.Config.ActivityConfig;
 
-            if (config is null || !config.Enabled) return false;
+            if (config is null) return false;
 
             return config.TypeConfigs.TryGetValue(ActivityType.Custom, out var custom) && custom.Enabled;
         }

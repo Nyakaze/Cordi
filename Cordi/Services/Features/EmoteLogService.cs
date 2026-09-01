@@ -92,34 +92,7 @@ public class EmoteLogService : IDisposable
     {
         try
         {
-            if (_plugin.Config.EmoteLog.Enabled)
-            {
-                var localPlayer = Service.ObjectTable[0];
-                if (localPlayer != null)
-                {
-
-                    bool windowOpen = _plugin.EmoteLogWindow.IsOpen;
-                    bool detectClosed = _plugin.Config.EmoteLog.DetectWhenClosed;
-
-                    if (!windowOpen && !detectClosed) return;
-
-
-                    if (targetId == localPlayer.GameObjectId)
-                    {
-
-                        var instigator = Service.ObjectTable.FirstOrDefault(x => (ulong)x.Address == instigatorAddr);
-
-                        if (instigator is IPlayerCharacter player)
-                        {
-
-                            if (player.GameObjectId != localPlayer.GameObjectId || _plugin.Config.EmoteLog.IncludeSelf)
-                            {
-                                LogEmote(player, emoteId);
-                            }
-                        }
-                    }
-                }
-            }
+            HandleEmote(instigatorAddr, emoteId, targetId);
         }
         catch (Exception ex)
         {
@@ -128,6 +101,27 @@ public class EmoteLogService : IDisposable
         }
 
         _hookEmote.Original(unk, instigatorAddr, emoteId, targetId, unk2);
+    }
+
+    private void HandleEmote(ulong instigatorAddr, ushort emoteId, ulong targetId)
+    {
+        if (!_plugin.Config.EmoteLog.Enabled) return;
+
+        if (_plugin.EmoteLogWindow == null) return;
+
+        if (!_plugin.EmoteLogWindow.IsOpen && !_plugin.Config.EmoteLog.DetectWhenClosed) return;
+
+        var localPlayer = Service.ObjectTable[0];
+        if (localPlayer == null) return;
+
+        if (targetId != localPlayer.GameObjectId) return;
+
+        if (Service.ObjectTable.FirstOrDefault(x => (ulong)x.Address == instigatorAddr) is not IPlayerCharacter player)
+            return;
+
+        if (player.GameObjectId == localPlayer.GameObjectId && !_plugin.Config.EmoteLog.IncludeSelf) return;
+
+        LogEmote(player, emoteId);
     }
 
     private void LogEmote(IPlayerCharacter player, ushort emoteId)

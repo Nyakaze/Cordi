@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
@@ -16,7 +16,11 @@ public static class PageIds
     public const string Peeper = "watchers/Peeper";
     public const string EmoteLog = "watchers/Emote Log";
     public const string CombinedOverlay = "watchers/Combined Overlay";
-    public const string Activity = "activity";
+    public const string ActivityOverview = "activity/Overview";
+    public const string ActivityPlaying = "activity/Playing";
+    public const string ActivityListening = "activity/Listening";
+    public const string ActivityWatching = "activity/Watching";
+    public const string ActivityCustom = "activity/Custom";
     public const string PartyAndPlayers = "party";
     public const string SlashCommands = "slash";
     public const string Settings = "settings";
@@ -38,6 +42,11 @@ public sealed partial class ConfigWindow
         PageIds.Peeper,
         PageIds.EmoteLog,
         PageIds.CombinedOverlay,
+        PageIds.ActivityOverview,
+        PageIds.ActivityPlaying,
+        PageIds.ActivityListening,
+        PageIds.ActivityWatching,
+        PageIds.ActivityCustom,
     };
 
     private static readonly Dictionary<string, FontAwesomeIcon> SubTabIcons = new()
@@ -49,6 +58,11 @@ public sealed partial class ConfigWindow
         ["Peeper"] = FontAwesomeIcon.Eye,
         ["Emote Log"] = FontAwesomeIcon.TheaterMasks,
         ["Combined Overlay"] = FontAwesomeIcon.Columns,
+        ["Overview"] = FontAwesomeIcon.WaveSquare,
+        ["Playing"] = FontAwesomeIcon.Gamepad,
+        ["Listening"] = FontAwesomeIcon.Music,
+        ["Watching"] = FontAwesomeIcon.Video,
+        ["Custom"] = FontAwesomeIcon.CommentDots,
     };
 
     private static readonly Dictionary<string, string> PageSubtitles = new()
@@ -61,7 +75,11 @@ public sealed partial class ConfigWindow
         ["Emote Log"] = "Records emotes performed around you",
         ["Combined Overlay"] = "Peeper and the Emote Log in a single window",
         [PageIds.Chatbox] = "In-game Discord chat window",
-        [PageIds.Activity] = "Discord rich presence and activity reporting",
+        ["Overview"] = "What Cordi is reading from Discord and putting on your title",
+        ["Playing"] = "Titles built from the game your Discord account is playing",
+        ["Listening"] = "Titles built from the track your Discord account is listening to",
+        ["Watching"] = "Titles built from what your Discord account is watching",
+        ["Custom"] = "A standalone title that does not need a Discord account",
         [PageIds.PartyAndPlayers] = "Party tracking and remembered players",
         [PageIds.SlashCommands] = "Discord slash commands exposed by Cordi",
         [PageIds.Settings] = "Appearance, fonts and plugin behaviour",
@@ -111,9 +129,23 @@ public sealed partial class ConfigWindow
             });
         }
 
+        var activity = new List<NavItem>();
+
+        foreach (var (label, draw) in activityTab.SubTabs ?? Array.Empty<(string, Action)>())
+        {
+            activity.Add(new NavItem
+            {
+                Id = $"activity/{label}",
+                Label = label,
+                Icon = SubTabIcons.TryGetValue(label, out var icon) ? icon : FontAwesomeIcon.WaveSquare,
+                Draw = draw,
+                Subtitle = PageSubtitles.TryGetValue(label, out var subtitle) ? subtitle : string.Empty,
+                OwnHeader = OwnHeaderPages.Contains($"activity/{label}"),
+            });
+        }
+
         var integration = new List<NavItem>
         {
-            MakeItem(PageIds.Activity, "Activity", FontAwesomeIcon.WaveSquare, discordActivityTab.Draw),
             MakeItem(PageIds.PartyAndPlayers, "Party & Players", FontAwesomeIcon.Users, partyAndPlayersTab.Draw),
             MakeItem(PageIds.SlashCommands, "Slash Commands", FontAwesomeIcon.Code, slashCommandsTab.Draw),
         };
@@ -134,6 +166,7 @@ public sealed partial class ConfigWindow
         {
             new() { Label = "Communication", Items = communication },
             new() { Label = "Watchers", Items = watchers },
+            new() { Label = "Activity", Items = activity },
             new() { Label = "Integration", Items = integration },
             new() { Label = "System", Items = system },
         };
@@ -170,7 +203,6 @@ public sealed partial class ConfigWindow
     private Tabs.ConfigTabBase? ResolveTab(string pageId) => pageId switch
     {
         PageIds.Chatbox => chatboxTab,
-        PageIds.Activity => discordActivityTab,
         PageIds.PartyAndPlayers => partyAndPlayersTab,
         PageIds.SlashCommands => slashCommandsTab,
         PageIds.Settings => settingsTab,
