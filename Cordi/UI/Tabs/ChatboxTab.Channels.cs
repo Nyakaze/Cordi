@@ -1,13 +1,14 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Numerics;
 using Cordi.Configuration;
 using Cordi.Services.Chatbox;
+using Cordi.UI.Components;
+using Cordi.UI.Themes;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Game.Text;
 using Dalamud.Interface;
-using Dalamud.Interface.Utility;
-using Dalamud.Interface.Utility.Raii;
-using DiscordChannel = Crovus.Models.DiscordChannel;
 
 namespace Cordi.UI.Tabs;
 
@@ -48,309 +49,429 @@ public partial class ChatboxTab
     private static bool IsTellType(XivChatType type) =>
         type is XivChatType.TellIncoming or XivChatType.TellOutgoing;
 
+    private string? editingChannelId;
     private string? pendingRemoveId;
     private string? pendingMoveId;
     private int pendingMoveDelta;
 
-    private void DrawChannels()
+    public void DrawChannels()
     {
-        var textChannels = plugin.Channels.TextChannels;
+        ConsumeScroll();
 
-        Card("chatbox-channels", "Channels", _ =>
+        var editing = Cfg.Channels.FirstOrDefault(c => c.Id == editingChannelId);
+
+        if (editing != null)
         {
-            ImGui.TextDisabled("A channel bundles game chat types and an optional Discord channel.");
+            DrawChannelEditor(editing);
+            return;
+        }
 
-            if (theme.PrimaryButton("Add Channel##chatbox"))
+        editingChannelId = null;
+
+        Layout.Draw(
+            "Channels",
+            "A channel bundles game chat types and an optional Discord channel.",
+            innerWidth =>
             {
-                Cfg.Channels.Add(new ChatboxChannelConfig
+                if (theme.PrimaryButton("Add Channel##chatbox", new Vector2(theme.Scaled(160f), theme.Scaled(UiTheme.ControlHeight))))
                 {
-                    Name = "New Channel",
-                    Order = Cfg.Channels.Count,
-                });
-                Save();
-                plugin.Chatbox.RebuildChannels();
-            }
+                    var created = new ChatboxChannelConfig
+                    {
+                        Name = "New Channel",
+                        Order = Cfg.Channels.Count,
+                    };
 
-            ImGui.SameLine();
-            if (theme.Button("Sort by Order##chatbox"))
+                    Cfg.Channels.Add(created);
+                    Save();
+                    plugin.Chatbox.RebuildChannels();
+                    OpenChannelEditor(created.Id);
+                }
+
+                theme.SameLineGap();
+
+                if (theme.SecondaryButton("Sort by Order##chatbox", new Vector2(theme.Scaled(160f), theme.Scaled(UiTheme.ControlHeight))))
+                {
+                    Cfg.Channels.Sort((a, b) => a.Order.CompareTo(b.Order));
+                    Save();
+                    plugin.Chatbox.RebuildChannels();
+                }
+
+                _ = innerWidth;
+            });
+
+        Card.Draw(
+            "chatbox-channel-list",
+            innerWidth =>
             {
-                Cfg.Channels.Sort((a, b) => a.Order.CompareTo(b.Order));
-                Save();
-                plugin.Chatbox.RebuildChannels();
-            }
-        });
+                if (Cfg.Channels.Count == 0)
+                {
+                    ImGui.TextColored(theme.FaintText, "No channels configured yet.");
+                    return;
+                }
 
-        for (var i = 0; i < Cfg.Channels.Count; i++)
-            DrawChannelCard(Cfg.Channels[i], i, textChannels);
+                for (int i = 0; i < Cfg.Channels.Count; i++)
+                    DrawChannelListRow(Cfg.Channels[i], i, innerWidth);
+            },
+            "Configured Channels",
+            anchor => DrawCountChip(anchor, Cfg.Channels.Count == 1 ? "1 channel" : $"{Cfg.Channels.Count} channels"));
 
         ApplyPendingChannelChanges();
+    }
+
+    private void OpenChannelEditor(string id)
+    {
+        editingChannelId = id;
+        pendingScrollTop = true;
+    }
+
+    private void DrawChannelListRow(ChatboxChannelConfig channel, int index, float rowWidth)
+    {
+        string title = string.IsNullOrWhiteSpace(channel.Name) ? $"Channel {index + 1}" : channel.Name;
+        string subtitle = DescribeChannel(channel);
+
+        var result = Row.Draw(
+            id: $"chatbox-channel-{channel.Id}",
+            icon: FontAwesomeIcon.Hashtag,
+            iconColor: channel.Enabled ? channel.Color : theme.MutedText,
+            title: title,
+            subtitle: subtitle,
+            controlWidth: 172f,
+            drawControl: (pos, width) =>
+            {
+                float size = theme.Scaled(UiTheme.ActionButtonSize);
+                float step = (width - size) / 3f;
+
+                if (theme.IconAction($"##chatbox-up-{channel.Id}", pos, FontAwesomeIcon.ArrowUp, theme.MutedText, "Move up"))
+                {
+                    pendingMoveId = channel.Id;
+                    pendingMoveDelta = -1;
+                }
+
+                var next = new Vector2(pos.X + step, pos.Y);
+
+                if (theme.IconAction($"##chatbox-down-{channel.Id}", next, FontAwesomeIcon.ArrowDown, theme.MutedText, "Move down"))
+                {
+                    pendingMoveId = channel.Id;
+                    pendingMoveDelta = 1;
+                }
+
+                next = new Vector2(pos.X + step * 2f, pos.Y);
+
+                if (theme.ToggleAction($"##chatbox-power-{channel.Id}", next, channel.Enabled, channel.Enabled ? "Disable channel" : "Enable channel"))
+                {
+                    channel.Enabled = !channel.Enabled;
+                    Save();
+                    plugin.Chatbox.RebuildChannels();
+                }
+
+                next = new Vector2(pos.X + step * 3f, pos.Y);
+
+                if (theme.DeleteAction($"##chatbox-del-{channel.Id}", next, "Delete channel"))
+                    pendingRemoveId = channel.Id;
+            },
+            showChevron: true,
+            rowWidth: rowWidth);
+
+        if (result.RowClicked || result.ChevronClicked)
+            OpenChannelEditor(channel.Id);
+    }
+
+    private string DescribeChannel(ChatboxChannelConfig channel)
+    {
+        string types = channel.GameChatTypes.Count == 0
+            ? "No game chat"
+            : string.Join(", ", channel.GameChatTypes.Select(ChatboxService.LabelFor).Distinct());
+
+        string discord = string.IsNullOrEmpty(channel.DiscordChannelId)
+            ? "no Discord channel"
+            : "linked to Discord";
+
+        return $"{types} · {discord}";
     }
 
     private void ApplyPendingChannelChanges()
     {
         if (pendingRemoveId != null)
         {
+            if (editingChannelId == pendingRemoveId)
+                editingChannelId = null;
+
             Cfg.Channels.RemoveAll(c => c.Id == pendingRemoveId);
             pendingRemoveId = null;
             Save();
             plugin.Chatbox.RebuildChannels();
         }
 
-        if (pendingMoveId == null) return;
+        if (pendingMoveId == null)
+            return;
 
-        var index = Cfg.Channels.FindIndex(c => c.Id == pendingMoveId);
-        var target = index + pendingMoveDelta;
+        int index = Cfg.Channels.FindIndex(c => c.Id == pendingMoveId);
+        int target = index + pendingMoveDelta;
         pendingMoveId = null;
 
-        if (index < 0 || target < 0 || target >= Cfg.Channels.Count) return;
+        if (index < 0 || target < 0 || target >= Cfg.Channels.Count)
+            return;
 
         (Cfg.Channels[index], Cfg.Channels[target]) = (Cfg.Channels[target], Cfg.Channels[index]);
-        for (var i = 0; i < Cfg.Channels.Count; i++)
+
+        for (int i = 0; i < Cfg.Channels.Count; i++)
             Cfg.Channels[i].Order = i;
 
         Save();
         plugin.Chatbox.RebuildChannels();
     }
 
-    private void DrawChannelCard(ChatboxChannelConfig channel, int index, IReadOnlyList<DiscordChannel>? textChannels)
+    private void DrawChannelEditor(ChatboxChannelConfig channel)
     {
-        var title = string.IsNullOrWhiteSpace(channel.Name) ? $"Channel {index + 1}" : channel.Name;
+        string title = string.IsNullOrWhiteSpace(channel.Name) ? "Channel" : channel.Name;
 
-        Card($"chatbox-channel-{channel.Id}", title, _ =>
+        Layout.Draw(title, DescribeChannel(channel), innerWidth =>
         {
-            DrawChannelHeader(channel);
-            DrawChannelIdentity(channel);
-            DrawChannelSources(channel, textChannels);
-            DrawChannelSending(channel);
-            DrawChannelBehaviour(channel);
-        });
-    }
+            var back = Row.Draw(
+                id: "chatbox-channel-back",
+                icon: FontAwesomeIcon.ArrowLeft,
+                iconColor: theme.Accent,
+                title: "Back to Channels",
+                subtitle: "Return to the channel list",
+                rowWidth: innerWidth);
 
-    private void DrawChannelHeader(ChatboxChannelConfig channel)
-    {
-        var enabled = channel.Enabled;
-        if (ImGui.Checkbox($"Enabled##chatbox-en-{channel.Id}", ref enabled))
-        {
-            channel.Enabled = enabled;
-            Save();
-        }
-
-        ImGui.SameLine();
-        var showInNav = channel.ShowInNav;
-        if (ImGui.Checkbox($"Show in Navigation##chatbox-nav-{channel.Id}", ref showInNav))
-        {
-            channel.ShowInNav = showInNav;
-            Save();
-        }
-
-        ImGui.SameLine();
-        if (theme.IconButton($"##chatbox-up-{channel.Id}", FontAwesomeIcon.ArrowUp, "Move up"))
-        {
-            pendingMoveId = channel.Id;
-            pendingMoveDelta = -1;
-        }
-
-        ImGui.SameLine();
-        if (theme.IconButton($"##chatbox-down-{channel.Id}", FontAwesomeIcon.ArrowDown, "Move down"))
-        {
-            pendingMoveId = channel.Id;
-            pendingMoveDelta = 1;
-        }
-
-        ImGui.SameLine();
-        if (theme.DangerIconButton($"##chatbox-del-{channel.Id}", FontAwesomeIcon.Trash, "Delete channel"))
-            pendingRemoveId = channel.Id;
-    }
-
-    private void DrawChannelIdentity(ChatboxChannelConfig channel)
-    {
-        var name = channel.Name;
-        ImGui.SetNextItemWidth(240f * ImGuiHelpers.GlobalScale);
-        if (ImGui.InputText($"Name##chatbox-name-{channel.Id}", ref name, 64))
-        {
-            channel.Name = name;
-            Save();
-        }
-
-        var shortLabel = channel.ShortLabel;
-        ImGui.SetNextItemWidth(90f * ImGuiHelpers.GlobalScale);
-        if (ImGui.InputText($"Rail Label##chatbox-short-{channel.Id}", ref shortLabel, 6))
-        {
-            channel.ShortLabel = shortLabel;
-            Save();
-        }
-
-        ImGui.SameLine();
-        var color = channel.Color;
-        if (ImGui.ColorEdit4($"Color##chatbox-color-{channel.Id}", ref color, ImGuiColorEditFlags.NoInputs))
-        {
-            channel.Color = color;
-            Save();
-        }
-
-        var iconUrl = channel.IconUrl;
-        ImGui.SetNextItemWidth(320f * ImGuiHelpers.GlobalScale);
-        if (ImGui.InputTextWithHint($"Icon URL##chatbox-icon-{channel.Id}", "https://...", ref iconUrl, 260))
-        {
-            channel.IconUrl = iconUrl;
-            Save();
-        }
-    }
-
-    private void DrawChannelSources(ChatboxChannelConfig channel, IReadOnlyList<DiscordChannel>? textChannels)
-    {
-        theme.SpacerY(0.4f);
-
-        var preview = channel.GameChatTypes.Count == 0
-            ? "None"
-            : string.Join(", ", channel.GameChatTypes.Select(ChatboxService.LabelFor).Distinct());
-
-        ImGui.SetNextItemWidth(320f * ImGuiHelpers.GlobalScale);
-        using (var combo = ImRaii.Combo($"Game Chats##chatbox-types-{channel.Id}", preview))
-        {
-            if (combo)
+            if (back.RowClicked)
             {
-                foreach (var type in SelectableChatTypes)
-                {
-                    var selected = channel.GameChatTypes.Contains(type);
-                    if (!ImGui.Checkbox($"{ChatboxService.LabelFor(type)}##chatbox-{channel.Id}-{type}", ref selected))
-                        continue;
-
-                    if (selected) channel.GameChatTypes.Add(type);
-                    else channel.GameChatTypes.Remove(type);
-
-                    if (IsTellType(type))
-                    {
-                        if (selected) channel.GameChatTypes.Add(XivChatType.TellOutgoing);
-                        else channel.GameChatTypes.Remove(XivChatType.TellOutgoing);
-                    }
-
-                    Save();
-                    plugin.Chatbox.RebuildChannels();
-                }
+                editingChannelId = null;
+                pendingScrollTop = true;
             }
-        }
+        });
 
-        if (textChannels != null)
+        if (editingChannelId == null)
+            return;
+
+        DrawChannelIdentity(channel);
+        DrawChannelSources(channel);
+        DrawChannelSending(channel);
+        DrawChannelBehaviour(channel);
+        DrawChannelHistory(channel);
+
+        ApplyPendingChannelChanges();
+    }
+
+    private void DrawChannelIdentity(ChatboxChannelConfig channel) =>
+        Card.Draw($"chatbox-identity-{channel.Id}", innerWidth =>
         {
-            theme.ChannelPicker(
-                $"chatbox-discord-{channel.Id}",
-                channel.DiscordChannelId,
-                textChannels,
-                id =>
+            DrawToggleRow(
+                $"chatbox-enabled-{channel.Id}", FontAwesomeIcon.PowerOff,
+                "Enabled", "Messages are only captured while the channel is enabled.",
+                innerWidth,
+                () => channel.Enabled,
+                v =>
                 {
-                    channel.DiscordChannelId = id;
-                    Save();
+                    channel.Enabled = v;
                     plugin.Chatbox.RebuildChannels();
                 },
-                defaultLabel: "No Discord Channel",
-                width: 320f * ImGuiHelpers.GlobalScale);
-        }
+                UiTheme.TileGreen);
+
+            DrawToggleRow(
+                $"chatbox-nav-{channel.Id}", FontAwesomeIcon.Bars,
+                "Show in Navigation", "Lists the channel in the chatbox sidebar.",
+                innerWidth, () => channel.ShowInNav, v => channel.ShowInNav = v);
+
+            DrawTextRow(
+                $"chatbox-name-{channel.Id}", FontAwesomeIcon.Tag,
+                "Name", "Shown in the chatbox navigation.",
+                innerWidth, () => channel.Name, v => channel.Name = v, 64, "Channel name");
+
+            DrawTextRow(
+                $"chatbox-short-{channel.Id}", FontAwesomeIcon.Font,
+                "Rail Label", "Up to six characters, used by the server rail.",
+                innerWidth, () => channel.ShortLabel, v => channel.ShortLabel = v, 6, "ABC", 120f);
+
+            DrawTextRow(
+                $"chatbox-icon-{channel.Id}", FontAwesomeIcon.Image,
+                "Icon URL", "Optional image shown instead of the label.",
+                innerWidth, () => channel.IconUrl, v => channel.IconUrl = v, 260, "https://...", 320f);
+
+            DrawColorRow(
+                $"chatbox-color-{channel.Id}",
+                "Colour", "Tints the channel entry and its names.",
+                innerWidth, () => channel.Color, v => channel.Color = v);
+        }, "Identity");
+
+    private void DrawChannelSources(ChatboxChannelConfig channel) =>
+        Card.Draw($"chatbox-sources-{channel.Id}", innerWidth =>
+        {
+            var items = SelectableChatTypes
+                .Select(type => new DropdownItem { Key = type.ToString(), Label = ChatboxService.LabelFor(type) })
+                .ToList();
+
+            string preview = channel.GameChatTypes.Count == 0
+                ? "None"
+                : string.Join(", ", channel.GameChatTypes.Select(ChatboxService.LabelFor).Distinct());
+
+            Row.Draw(
+                id: $"chatbox-types-{channel.Id}",
+                icon: FontAwesomeIcon.Comments,
+                iconColor: channel.GameChatTypes.Count == 0 ? theme.MutedText : theme.Accent,
+                title: "Game Chats",
+                subtitle: "Which in-game chat types land in this channel.",
+                controlWidth: 280f,
+                drawControl: (pos, width) =>
+                {
+                    ImGui.SetCursorScreenPos(pos);
+                    theme.MultiPicker(
+                        $"chatbox-types-picker-{channel.Id}",
+                        preview,
+                        channel.GameChatTypes.Count > 0,
+                        items,
+                        key => Enum.TryParse<XivChatType>(key, out var parsed) && channel.GameChatTypes.Contains(parsed),
+                        key =>
+                        {
+                            if (!Enum.TryParse<XivChatType>(key, out var parsed))
+                                return;
+
+                            ToggleChatType(channel, parsed);
+                        },
+                        width);
+                },
+                rowWidth: innerWidth);
+
+            bool linked = !string.IsNullOrEmpty(channel.DiscordChannelId);
+
+            Row.Draw(
+                id: $"chatbox-discord-{channel.Id}",
+                icon: linked ? FontAwesomeIcon.Hashtag : FontAwesomeIcon.ExclamationTriangle,
+                iconColor: linked ? UiTheme.TileGreen : UiTheme.TileAmber,
+                title: "Discord Channel",
+                subtitle: linked ? "Messages are mirrored here" : "Not linked to Discord",
+                controlWidth: 280f,
+                drawControl: (pos, width) =>
+                {
+                    ImGui.SetCursorScreenPos(pos);
+                    theme.ChannelPicker(
+                        $"chatbox-discord-picker-{channel.Id}",
+                        channel.DiscordChannelId,
+                        plugin.Channels.TextChannels,
+                        id =>
+                        {
+                            channel.DiscordChannelId = id;
+                            Save();
+                            plugin.Chatbox.RebuildChannels();
+                        },
+                        defaultLabel: "No Discord Channel",
+                        showLabel: false,
+                        width: width);
+                },
+                rowWidth: innerWidth);
+        }, "Sources");
+
+    private void ToggleChatType(ChatboxChannelConfig channel, XivChatType type)
+    {
+        bool add = !channel.GameChatTypes.Contains(type);
+
+        if (add)
+            channel.GameChatTypes.Add(type);
         else
+            channel.GameChatTypes.Remove(type);
+
+        if (IsTellType(type))
         {
-            var discordId = channel.DiscordChannelId;
-            ImGui.SetNextItemWidth(320f * ImGuiHelpers.GlobalScale);
-            if (ImGui.InputTextWithHint($"Discord Channel ID##chatbox-dc-{channel.Id}", "Channel ID", ref discordId, 32))
+            if (add)
+                channel.GameChatTypes.Add(XivChatType.TellOutgoing);
+            else
+                channel.GameChatTypes.Remove(XivChatType.TellOutgoing);
+        }
+
+        Save();
+        plugin.Chatbox.RebuildChannels();
+    }
+
+    private void DrawChannelSending(ChatboxChannelConfig channel) =>
+        Card.Draw($"chatbox-sending-{channel.Id}", innerWidth =>
+        {
+            DrawToggleRow(
+                $"chatbox-sendtogame-{channel.Id}", FontAwesomeIcon.PaperPlane,
+                "Send to Game", "Messages typed here are forwarded into game chat.",
+                innerWidth, () => channel.SendToGame, v => channel.SendToGame = v);
+
+            var items = new List<DropdownItem>
             {
-                channel.DiscordChannelId = discordId;
-                Save();
-                plugin.Chatbox.RebuildChannels();
-            }
-        }
-    }
+                new() { Key = XivChatType.None.ToString(), Label = "None (Tell reply)" },
+            };
 
-    private void DrawChannelSending(ChatboxChannelConfig channel)
-    {
-        theme.SpacerY(0.4f);
+            items.AddRange(SelectableChatTypes
+                .Where(type => !IsTellType(type))
+                .Select(type => new DropdownItem { Key = type.ToString(), Label = ChatboxService.LabelFor(type) }));
 
-        var sendToGame = channel.SendToGame;
-        if (ImGui.Checkbox($"Send to Game##chatbox-stg-{channel.Id}", ref sendToGame))
+            Row.Draw(
+                id: $"chatbox-sendtype-{channel.Id}",
+                icon: FontAwesomeIcon.Reply,
+                iconColor: theme.Accent,
+                title: "Send as",
+                subtitle: "Chat type used when this channel sends into the game.",
+                controlWidth: 240f,
+                drawControl: (pos, width) =>
+                {
+                    ImGui.SetCursorScreenPos(pos);
+                    theme.OptionPicker(
+                        $"chatbox-sendtype-picker-{channel.Id}",
+                        channel.SendGameChatType.ToString(),
+                        items,
+                        key =>
+                        {
+                            if (!Enum.TryParse<XivChatType>(key, out var parsed))
+                                return;
+
+                            channel.SendGameChatType = parsed;
+                            Save();
+                        },
+                        width);
+                },
+                rowWidth: innerWidth);
+        }, "Sending");
+
+    private void DrawChannelBehaviour(ChatboxChannelConfig channel) =>
+        Card.Draw($"chatbox-behaviour-{channel.Id}", innerWidth =>
         {
-            channel.SendToGame = sendToGame;
-            Save();
-        }
+            DrawToggleRow(
+                $"chatbox-mute-{channel.Id}", FontAwesomeIcon.BellSlash,
+                "Mute Notifications", "No sounds, badges or popups from this channel.",
+                innerWidth, () => channel.MuteNotifications, v => channel.MuteNotifications = v);
 
-        var sendPreview = channel.SendGameChatType == XivChatType.None
-            ? "None (Tell reply)"
-            : ChatboxService.LabelFor(channel.SendGameChatType);
+            DrawToggleRow(
+                $"chatbox-allmention-{channel.Id}", FontAwesomeIcon.At,
+                "Treat every Message as Mention", "Every message here counts as a mention.",
+                innerWidth, () => channel.TreatAllAsMention, v => channel.TreatAllAsMention = v);
 
-        ImGui.SetNextItemWidth(240f * ImGuiHelpers.GlobalScale);
-        using var combo = ImRaii.Combo($"Send as##chatbox-sendtype-{channel.Id}", sendPreview);
-        if (!combo) return;
+            DrawToggleRow(
+                $"chatbox-combined-{channel.Id}", FontAwesomeIcon.LayerGroup,
+                "Include in Combined View", "Messages also appear in the combined channel.",
+                innerWidth, () => channel.IncludeInCombined, v => channel.IncludeInCombined = v);
 
-        if (ImGui.Selectable($"None (Tell reply)##chatbox-sendnone-{channel.Id}"))
+            DrawToggleRow(
+                $"chatbox-ads-{channel.Id}", FontAwesomeIcon.Filter,
+                "Hide Advertisements", "Uses the Advertisement Filter from the Chats page. Blocked messages collapse into a placeholder.",
+                innerWidth, () => channel.FilterAdvertisements, v => channel.FilterAdvertisements = v);
+        }, "Behaviour");
+
+    private void DrawChannelHistory(ChatboxChannelConfig channel) =>
+        Card.Draw($"chatbox-history-{channel.Id}", innerWidth =>
         {
-            channel.SendGameChatType = XivChatType.None;
-            Save();
-        }
+            DrawToggleRow(
+                $"chatbox-persist-{channel.Id}", FontAwesomeIcon.Save,
+                "Save History", "Keeps this channel's messages on disk between sessions.",
+                innerWidth, () => channel.PersistHistory, v => channel.PersistHistory = v);
 
-        foreach (var type in SelectableChatTypes)
-        {
-            if (IsTellType(type)) continue;
-            if (!ImGui.Selectable($"{ChatboxService.LabelFor(type)}##chatbox-send-{channel.Id}-{type}")) continue;
+            DrawIntSliderRow(
+                $"chatbox-limit-{channel.Id}", FontAwesomeIcon.Sort,
+                "Messages kept",
+                channel.MaxMessages <= 0
+                    ? $"0 uses the global default ({Cfg.MaxMessagesPerChannel})."
+                    : "How many messages this channel keeps.",
+                innerWidth, 0, 50000,
+                () => channel.MaxMessages, v => channel.MaxMessages = v);
 
-            channel.SendGameChatType = type;
-            Save();
-        }
-    }
-
-    private void DrawChannelBehaviour(ChatboxChannelConfig channel)
-    {
-        theme.SpacerY(0.4f);
-
-        var mute = channel.MuteNotifications;
-        if (ImGui.Checkbox($"Mute Notifications##chatbox-mute-{channel.Id}", ref mute))
-        {
-            channel.MuteNotifications = mute;
-            Save();
-        }
-
-        ImGui.SameLine();
-        var treatAll = channel.TreatAllAsMention;
-        if (ImGui.Checkbox($"Treat every Message as Mention##chatbox-all-{channel.Id}", ref treatAll))
-        {
-            channel.TreatAllAsMention = treatAll;
-            Save();
-        }
-
-        var filterAds = channel.FilterAdvertisements;
-        if (ImGui.Checkbox($"Hide Advertisements##chatbox-ads-{channel.Id}", ref filterAds))
-        {
-            channel.FilterAdvertisements = filterAds;
-            Save();
-        }
-
-        DrawChannelHistory(channel);
-    }
-
-    private void DrawChannelHistory(ChatboxChannelConfig channel)
-    {
-        theme.SpacerY(0.4f);
-
-        var persist = channel.PersistHistory;
-        if (ImGui.Checkbox($"Save History##chatbox-persist-{channel.Id}", ref persist))
-        {
-            channel.PersistHistory = persist;
-            Save();
-        }
-
-        ImGui.SameLine();
-        var stored = plugin.Chatbox.Store.CountFor(channel.Id);
-        ImGui.TextDisabled($"{stored} stored");
-
-        ImGui.SameLine();
-        if (theme.Button($"Delete History##chatbox-forget-{channel.Id}"))
-            plugin.Chatbox.ForgetChannel(channel.Id);
-
-        var limit = channel.MaxMessages;
-        ImGui.SetNextItemWidth(220f * ImGuiHelpers.GlobalScale);
-        if (ImGui.SliderInt($"Messages kept##chatbox-limit-{channel.Id}", ref limit, 0, 50000))
-        {
-            channel.MaxMessages = limit;
-            Save();
-        }
-
-        if (channel.MaxMessages <= 0)
-            ImGui.TextDisabled($"0 = use the global default ({plugin.Config.Chatbox.MaxMessagesPerChannel}).");
-    }
+            DrawActionRow(
+                $"chatbox-forget-{channel.Id}", FontAwesomeIcon.TrashAlt, UiTheme.TileRed,
+                "Delete History", $"{plugin.Chatbox.Store.CountFor(channel.Id)} messages stored.",
+                "Delete History", innerWidth,
+                () => plugin.Chatbox.ForgetChannel(channel.Id));
+        }, "History");
 }

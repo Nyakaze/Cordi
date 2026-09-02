@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Numerics;
+using Cordi.Configuration;
 using Cordi.Services.Chatbox;
 using Cordi.UI.Panels;
 using Dalamud.Bindings.ImGui;
@@ -40,7 +41,7 @@ public sealed partial class ChatboxWindow
             "##chatbox-input",
             $"Message {channel.Config.Name}",
             ref _input,
-            Math.Max(16, Config.MaxInputLength),
+            ChatboxConfig.InputBufferLength,
             ImGuiInputTextFlags.EnterReturnsTrue);
         _theme.PopInputScope();
 
@@ -97,7 +98,7 @@ public sealed partial class ChatboxWindow
         Chatbox.Send(channel.Id, _input, _replyTarget);
 
         _replyTarget = null;
-        if (Config.ClearInputAfterSend) _input = string.Empty;
+        _input = string.Empty;
         if (Config.KeepFocusAfterSend) _focusInput = true;
         _scrollToBottomFrames = ScrollSettleFrames;
     }

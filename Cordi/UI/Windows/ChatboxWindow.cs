@@ -263,14 +263,12 @@ public sealed partial class ChatboxWindow : Window, IDisposable
             return;
         }
 
-        var listHeight = Config.ShowInputBar ? -inputHeight : 0f;
-
-        using (var list = ImRaii.Child($"##chatbox-messages-{channel.Id}", new Vector2(0, listHeight), false))
+        using (var list = ImRaii.Child($"##chatbox-messages-{channel.Id}", new Vector2(0, -inputHeight), false))
         {
             if (list) DrawMessages(channel);
         }
 
-        if (Config.ShowInputBar) DrawInputBar(channel);
+        DrawInputBar(channel);
     }
 
     private void DrawEmptyState()
@@ -290,8 +288,6 @@ public sealed partial class ChatboxWindow : Window, IDisposable
 
     private float MeasureInputHeight()
     {
-        if (!Config.ShowInputBar) return 0f;
-
         var height = ImGui.GetFrameHeightWithSpacing();
         if (_replyTarget != null && Config.EnableReplies)
             height += ImGui.GetTextLineHeightWithSpacing() + _theme.Gap(0.5f);

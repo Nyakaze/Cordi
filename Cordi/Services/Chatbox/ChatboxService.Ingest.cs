@@ -32,7 +32,7 @@ public sealed partial class ChatboxService
     private readonly object _guildEmoteGate = new();
 
     private bool FilterAdvertisementsFor(ChatboxChannelState channel) =>
-        Config.FilterAdvertisements && channel.Config.FilterAdvertisements;
+        channel.Config.FilterAdvertisements;
 
     public static bool IsCommunicationChatType(XivChatType type) =>
         type is XivChatType.Say
@@ -522,7 +522,7 @@ public sealed partial class ChatboxService
     }
 
     private ulong ParseSelfDiscordId() =>
-        ulong.TryParse(Config.DiscordUserId, out var id) ? id : 0UL;
+        _plugin.Config.ActivityConfig?.TargetUserId ?? 0UL;
 
     private MentionResolver BuildResolver(ChatboxChannelState channel)
     {

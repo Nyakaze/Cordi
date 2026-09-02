@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Numerics;
 using Cordi.Configuration;
@@ -214,7 +214,7 @@ public partial class WatchersTab
                     0f, 100f, 1f,
                     () => config.SoundVolume * 100f,
                     value => config.SoundVolume = value / 100f,
-                    value => $"{value:F0}%");
+                    suffix: "%");
 
                 DrawButtonRow(
                     "peep-sound-test",
@@ -358,7 +358,8 @@ public partial class WatchersTab
                     1f, 10f, 0.5f,
                     () => config.TargetingGlowThickness,
                     value => config.TargetingGlowThickness = value,
-                    value => $"{value:F1} px");
+                    decimals: 1,
+                    suffix: " px");
             },
             label: "Highlight & Glow");
     }
@@ -400,7 +401,8 @@ public partial class WatchersTab
                     2f, 20f, 0.5f,
                     () => config.TargetingDotSize,
                     value => config.TargetingDotSize = value,
-                    value => $"{value:F1} px");
+                    decimals: 1,
+                    suffix: " px");
 
                 DrawSliderRow(
                     "peep-dot-offset",
@@ -412,7 +414,7 @@ public partial class WatchersTab
                     -2.5f, 2.5f, 0.1f,
                     () => config.TargetingDotYOffset,
                     value => config.TargetingDotYOffset = value,
-                    value => $"{value:F1}");
+                    decimals: 1);
             },
             label: "Targeting Dot");
     }

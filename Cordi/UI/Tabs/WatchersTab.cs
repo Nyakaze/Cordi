@@ -95,7 +95,8 @@ public partial class WatchersTab : ConfigTabBase
         float step,
         Func<float> get,
         Action<float> set,
-        Func<float, string> format)
+        int decimals = 0,
+        string suffix = "")
     {
         Row.Draw(
             id: id,
@@ -103,25 +104,16 @@ public partial class WatchersTab : ConfigTabBase
             iconColor: iconColor,
             title: title,
             subtitle: subtitle,
-            controlWidth: 240f,
+            controlWidth: 260f,
             drawControl: (pos, width) =>
             {
                 float value = get();
-                string valueText = format(value);
-                var chipSize = theme.ChipSize(valueText);
-                float sliderWidth = MathF.Max(theme.Scaled(60f), width - chipSize.X - theme.Gap());
 
-                if (theme.RangeSlider($"##{id}-slider", pos, sliderWidth, ref value, min, max, step))
-                {
-                    set(value);
-                    Save();
-                }
+                if (!theme.SliderControl($"##{id}-slider", pos, width, ref value, min, max, step, decimals, suffix))
+                    return;
 
-                theme.ChipAt(
-                    new Vector2(
-                        pos.X + sliderWidth + theme.Gap(),
-                        pos.Y + (theme.Scaled(UiTheme.ControlHeight) - chipSize.Y) * 0.5f),
-                    valueText);
+                set(value);
+                Save();
             },
             rowWidth: rowWidth);
     }
@@ -140,7 +132,7 @@ public partial class WatchersTab : ConfigTabBase
             0f, 100f, 1f,
             () => get() * 100f,
             value => set(value / 100f),
-            value => $"{value:F0}%");
+            suffix: "%");
 
     private void DrawColorRow(
         string id,

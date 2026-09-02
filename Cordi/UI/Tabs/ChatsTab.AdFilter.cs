@@ -87,23 +87,16 @@ public partial class ChatsTab
                     iconColor: theme.Accent,
                     title: "Detection threshold",
                     subtitle: DescribeThreshold(config.ScoreThreshold),
-                    controlWidth: 240f,
+                    controlWidth: 260f,
                     drawControl: (pos, width) =>
                     {
-                        string valueText = config.ScoreThreshold.ToString();
-                        var chipSize = theme.ChipSize(valueText);
-                        float sliderWidth = width - chipSize.X - theme.Gap();
-
                         int threshold = config.ScoreThreshold;
-                        if (theme.ScoreSlider("##ad-threshold", pos, sliderWidth, ref threshold, 1, 10))
-                        {
-                            config.ScoreThreshold = threshold;
-                            plugin.Config.Save();
-                        }
 
-                        theme.ChipAt(
-                            new Vector2(pos.X + sliderWidth + theme.Gap(), pos.Y + (theme.Scaled(UiTheme.ControlHeight) - chipSize.Y) * 0.5f),
-                            valueText);
+                        if (!theme.SliderControl("##ad-threshold", pos, width, ref threshold, 1, 10))
+                            return;
+
+                        config.ScoreThreshold = threshold;
+                        plugin.Config.Save();
                     },
                     rowWidth: innerWidth);
 

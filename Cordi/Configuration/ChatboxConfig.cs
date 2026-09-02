@@ -87,7 +87,6 @@ public class ChatboxConfig
     public float BackgroundOpacity { get; set; } = 1.0f;
     public bool HideWhenNotLoggedIn { get; set; } = true;
     public bool HideGameChat { get; set; }
-    public bool CaptureEnterKey { get; set; }
 
     public ChatboxLayout Layout { get; set; } = ChatboxLayout.Cozy;
     public ChatboxNavStyle NavStyle { get; set; } = ChatboxNavStyle.ServerRail;
@@ -137,7 +136,6 @@ public class ChatboxConfig
     public bool MentionOwnNameParts { get; set; } = true;
     public bool MentionOnTell { get; set; } = true;
     public List<string> MentionKeywords { get; set; } = new();
-    public string DiscordUserId { get; set; } = string.Empty;
     public Vector4 MentionColor { get; set; } = new(0.34f, 0.39f, 0.85f, 1f);
     public Vector4 MentionHighlightColor { get; set; } = new(0.98f, 0.75f, 0.18f, 0.10f);
     public Vector4 UnreadBadgeColor { get; set; } = new(0.93f, 0.27f, 0.27f, 1f);
@@ -164,11 +162,12 @@ public class ChatboxConfig
     public int ReplyExcerptLength { get; set; } = 64;
     public string GameReplyFormat { get; set; } = "@{name} {message}";
 
-    public bool ShowInputBar { get; set; } = true;
-    public bool ClearInputAfterSend { get; set; } = true;
+    public const int MaxMessageLength = 480;
+    public const int InputBufferLength = 2048;
+
     public bool KeepFocusAfterSend { get; set; } = true;
+    public bool SplitLongMessages { get; set; } = true;
     public int MaxMessagesPerChannel { get; set; } = 5000;
-    public int MaxInputLength { get; set; } = 500;
 
     public bool ImageCacheEnabled { get; set; } = true;
     public int ImageCacheMaxEntries { get; set; } = 600;
@@ -183,10 +182,6 @@ public class ChatboxConfig
     public bool RelayEmotesAsUrls { get; set; } = true;
     public List<string> FavoriteEmojis { get; set; } = new();
     public List<string> RecentEmojis { get; set; } = new();
-
-    public bool PersistHistory { get; set; } = true;
-
-    public bool FilterAdvertisements { get; set; } = true;
 
     public string ActiveChannelId { get; set; } = string.Empty;
     public List<ChatboxChannelConfig> Channels { get; set; } = new();

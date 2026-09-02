@@ -12,7 +12,12 @@ public static class PageIds
     public const string ChannelMappings = "chats/Channel Mappings";
     public const string ActiveConversations = "chats/Active Conversations";
     public const string AdvertisementFilter = "chats/Advertisement Filter";
-    public const string Chatbox = "chatbox";
+    public const string ChatboxOverview = "chatbox/Overview";
+    public const string ChatboxChannels = "chatbox/Channels";
+    public const string ChatboxAppearance = "chatbox/Appearance";
+    public const string ChatboxMentions = "chatbox/Mentions";
+    public const string ChatboxContent = "chatbox/Content";
+    public const string ChatboxStorage = "chatbox/Storage";
     public const string Peeper = "watchers/Peeper";
     public const string EmoteLog = "watchers/Emote Log";
     public const string CombinedOverlay = "watchers/Combined Overlay";
@@ -39,6 +44,12 @@ public sealed partial class ConfigWindow
         PageIds.ChannelMappings,
         PageIds.ActiveConversations,
         PageIds.AdvertisementFilter,
+        PageIds.ChatboxOverview,
+        PageIds.ChatboxChannels,
+        PageIds.ChatboxAppearance,
+        PageIds.ChatboxMentions,
+        PageIds.ChatboxContent,
+        PageIds.ChatboxStorage,
         PageIds.Peeper,
         PageIds.EmoteLog,
         PageIds.CombinedOverlay,
@@ -76,7 +87,12 @@ public sealed partial class ConfigWindow
         ["Peeper"] = "Alerts you when another player targets your character",
         ["Emote Log"] = "Records emotes performed around you",
         ["Combined Overlay"] = "Peeper and the Emote Log in a single window",
-        [PageIds.Chatbox] = "In-game Discord chat window",
+        [PageIds.ChatboxOverview] = "Turn the chatbox on and shape its window",
+        [PageIds.ChatboxChannels] = "Bundle game chat types with Discord channels",
+        [PageIds.ChatboxAppearance] = "Layout, avatars, message style and colours",
+        [PageIds.ChatboxMentions] = "What counts as a mention and how you hear about it",
+        [PageIds.ChatboxContent] = "Emotes, the emoji picker and link previews",
+        [PageIds.ChatboxStorage] = "History limits, image cache and maintenance",
         ["Overview"] = "What Cordi is reading from Discord and putting on your title",
         ["Playing"] = "Titles built from the game your Discord account is playing",
         ["Listening"] = "Titles built from the track your Discord account is listening to",
@@ -114,7 +130,15 @@ public sealed partial class ConfigWindow
             });
         }
 
-        communication.Add(MakeItem(PageIds.Chatbox, "Chatbox", FontAwesomeIcon.CommentAlt, chatboxTab.Draw));
+        var chatbox = new List<NavItem>
+        {
+            MakeItem(PageIds.ChatboxOverview, "Overview", FontAwesomeIcon.CommentAlt, chatboxTab.DrawOverview),
+            MakeItem(PageIds.ChatboxChannels, "Channels", FontAwesomeIcon.Hashtag, chatboxTab.DrawChannels),
+            MakeItem(PageIds.ChatboxAppearance, "Appearance", FontAwesomeIcon.PaintRoller, chatboxTab.DrawAppearance),
+            MakeItem(PageIds.ChatboxMentions, "Mentions", FontAwesomeIcon.At, chatboxTab.DrawMentions),
+            MakeItem(PageIds.ChatboxContent, "Content", FontAwesomeIcon.Smile, chatboxTab.DrawContent),
+            MakeItem(PageIds.ChatboxStorage, "Storage", FontAwesomeIcon.Database, chatboxTab.DrawStorage),
+        };
 
         var watchers = new List<NavItem>();
 
@@ -167,6 +191,7 @@ public sealed partial class ConfigWindow
         return new List<NavSection>
         {
             new() { Label = "Communication", Items = communication },
+            new() { Label = "Chatbox", Items = chatbox },
             new() { Label = "Watchers", Items = watchers },
             new() { Label = "Activity", Items = activity },
             new() { Label = "Integration", Items = integration },
@@ -181,6 +206,7 @@ public sealed partial class ConfigWindow
         Icon = icon,
         Draw = draw,
         Subtitle = PageSubtitles.TryGetValue(id, out var subtitle) ? subtitle : string.Empty,
+        OwnHeader = OwnHeaderPages.Contains(id),
     };
 
     private ResolvedPage? ResolvePage(IReadOnlyList<NavSection> sections, string pageId)
@@ -204,7 +230,12 @@ public sealed partial class ConfigWindow
 
     private Tabs.ConfigTabBase? ResolveTab(string pageId) => pageId switch
     {
-        PageIds.Chatbox => chatboxTab,
+        PageIds.ChatboxOverview => chatboxTab,
+        PageIds.ChatboxChannels => chatboxTab,
+        PageIds.ChatboxAppearance => chatboxTab,
+        PageIds.ChatboxMentions => chatboxTab,
+        PageIds.ChatboxContent => chatboxTab,
+        PageIds.ChatboxStorage => chatboxTab,
         PageIds.PartyRadar => partyRadarTab,
         PageIds.SlashCommands => slashCommandsTab,
         PageIds.Settings => settingsTab,

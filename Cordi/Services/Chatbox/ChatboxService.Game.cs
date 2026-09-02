@@ -86,7 +86,7 @@ public sealed partial class ChatboxService
 
     private void UpdateEnterCapture()
     {
-        if (!Config.Enabled || !Config.CaptureEnterKey || !Config.ShowInputBar || !Service.ClientState.IsLoggedIn)
+        if (!Config.Enabled || !Service.ClientState.IsLoggedIn)
         {
             _enterHeld = false;
             return;

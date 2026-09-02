@@ -269,8 +269,8 @@ public class SettingsTab : ConfigTabBase
                 iconColor: hasTarget ? UiTheme.TileGreen : UiTheme.TileAmber,
                 title: "Target User ID",
                 subtitle: hasTarget
-                    ? "Activity is read from this Discord account"
-                    : "Not set, Discord driven activity types stay idle",
+                    ? "Used for activity titles and for chatbox mentions of you"
+                    : "Not set, Discord driven activity types stay idle and mentions of you are missed",
                 controlWidth: 220f,
                 drawControl: (pos, width) =>
                 {
@@ -297,7 +297,8 @@ public class SettingsTab : ConfigTabBase
                 anchor,
                 "Enable Developer Mode in Discord, right click your account\n" +
                 "and choose Copy User ID.\n" +
-                "Cordi watches this account to turn its Discord activity into an in game title."));
+                "Cordi watches this account to turn its Discord activity into an in game title,\n" +
+                "and uses the same ID to spot chatbox mentions of you."));
     }
 
     private void DrawFont()

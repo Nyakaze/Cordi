@@ -1,6 +1,8 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using Cordi.Configuration;
 using Cordi.Domain;
 using Cordi.Services.Discord;
 using Dalamud.Game.Text;
@@ -36,16 +38,55 @@ public sealed partial class ChatboxService
         if (channel == null || !CanSend(channel)) return;
 
         var useReply = reply != null && Config.EnableReplies;
+
+        foreach (var part in SplitForSending(text))
+        {
+            SendPart(channel, part, useReply ? reply : null);
+            useReply = false;
+        }
+    }
+
+    private void SendPart(ChatboxChannelState channel, string text, ChatboxReplyRef? reply)
+    {
         var sentToGame = false;
 
         if (SupportsGameSend(channel))
-            sentToGame = SendToGame(channel, text, useReply ? reply : null);
+            sentToGame = SendToGame(channel, text, reply);
 
         if (SupportsDiscordSend(channel))
             SendToDiscord(channel, text);
 
         if (!sentToGame)
-            EchoLocally(channel, text, useReply ? reply : null);
+            EchoLocally(channel, text, reply);
+    }
+
+    private List<string> SplitForSending(string text)
+    {
+        const int limit = ChatboxConfig.MaxMessageLength;
+
+        if (text.Length <= limit) return new List<string> { text };
+
+        if (!Config.SplitLongMessages)
+            return new List<string> { text[..limit].TrimEnd() };
+
+        var parts = new List<string>();
+        var remaining = text;
+
+        while (remaining.Length > limit)
+        {
+            var take = remaining.LastIndexOfAny(new[] { ' ', '\n' }, limit - 1);
+            if (take < limit / 2) take = limit;
+
+            var part = remaining[..take].Trim();
+            if (part.Length != 0) parts.Add(part);
+
+            remaining = remaining[take..].TrimStart();
+        }
+
+        var tail = remaining.Trim();
+        if (tail.Length != 0) parts.Add(tail);
+
+        return parts;
     }
 
     private bool SendToGame(ChatboxChannelState channel, string text, ChatboxReplyRef? reply)

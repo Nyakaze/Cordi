@@ -32,6 +32,33 @@ public sealed class Dropdown
         string selectedKey,
         Action<string> onSelect)
     {
+        var (popupId, min, max) = DrawHeader(id, width, preview, hasValue);
+        DrawPopup(popupId, min, max, width, items, key => key == selectedKey, key =>
+        {
+            onSelect(key);
+            ImGui.CloseCurrentPopup();
+        });
+    }
+
+    public void DrawMulti(
+        string id,
+        float width,
+        string preview,
+        bool hasValue,
+        IReadOnlyList<DropdownItem> items,
+        Func<string, bool> isSelected,
+        Action<string> onToggle)
+    {
+        var (popupId, min, max) = DrawHeader(id, width, preview, hasValue);
+        DrawPopup(popupId, min, max, width, items, isSelected, onToggle);
+    }
+
+    private (string PopupId, Vector2 Min, Vector2 Max) DrawHeader(
+        string id,
+        float width,
+        string preview,
+        bool hasValue)
+    {
         string popupId = $"##dropdown-popup-{id}";
         var draw = ImGui.GetWindowDrawList();
         float height = theme.Scaled(UiTheme.ControlHeight);
@@ -69,9 +96,8 @@ public sealed class Dropdown
         if (clicked)
             ImGui.OpenPopup(popupId);
 
-        DrawPopup(popupId, min, max, width, items, selectedKey, onSelect);
-
         ImGui.SetCursorScreenPos(afterButton);
+        return (popupId, min, max);
     }
 
     private void DrawPopup(
@@ -80,7 +106,7 @@ public sealed class Dropdown
         Vector2 max,
         float width,
         IReadOnlyList<DropdownItem> items,
-        string selectedKey,
+        Func<string, bool> isSelected,
         Action<string> onSelect)
     {
         float rowHeight = theme.Scaled(30f);
@@ -103,11 +129,8 @@ public sealed class Dropdown
 
             for (int i = 0; i < items.Count; i++)
             {
-                if (!DrawRow(items[i], items[i].Key == selectedKey, rowHeight, i))
-                    continue;
-
-                onSelect(items[i].Key);
-                ImGui.CloseCurrentPopup();
+                if (DrawRow(items[i], isSelected(items[i].Key), rowHeight, i))
+                    onSelect(items[i].Key);
             }
         }
     }

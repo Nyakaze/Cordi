@@ -26,7 +26,7 @@ public sealed partial class ChatboxService
 
     private void Persist(ChatboxMessage entry, ChatboxChannelState target)
     {
-        if (!Config.PersistHistory || !target.Config.PersistHistory) return;
+        if (!target.Config.PersistHistory) return;
         if (target.Id == CombinedChannelId) return;
 
         Store.Enqueue(entry);
@@ -34,7 +34,7 @@ public sealed partial class ChatboxService
 
     private void Hydrate(ChatboxChannelState channel)
     {
-        if (!Config.PersistHistory || !channel.Config.PersistHistory) return;
+        if (!channel.Config.PersistHistory) return;
 
         var history = Store.Load(channel.Id, LimitFor(channel.Id));
         if (history.Count == 0) return;
@@ -104,7 +104,7 @@ public sealed partial class ChatboxService
 
     internal void PersistState(ChatboxChannelState channel)
     {
-        if (!Config.PersistHistory || channel.Id == CombinedChannelId) return;
+        if (!channel.Config.PersistHistory || channel.Id == CombinedChannelId) return;
 
         Store.QueueState(channel.Id, channel.DividerSeq, channel.LastReadSeq);
     }
@@ -126,8 +126,6 @@ public sealed partial class ChatboxService
 
     public void PersistAllState()
     {
-        if (!Config.PersistHistory) return;
-
         foreach (var channel in Channels)
             PersistState(channel);
     }
