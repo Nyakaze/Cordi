@@ -30,6 +30,24 @@ public sealed partial class ChatboxWindow
 
         ImGui.SetCursorPosY(ImGui.GetCursorPosY() + _theme.PickerCaptionHeight());
 
+        var escapeConsumed = false;
+
+        if (_autocomplete.IsOpen)
+        {
+            if (ImGui.IsKeyPressed(ImGuiKey.DownArrow)) _autocomplete.MoveSelection(1);
+            if (ImGui.IsKeyPressed(ImGuiKey.UpArrow)) _autocomplete.MoveSelection(-1);
+
+            if (ImGui.IsKeyPressed(ImGuiKey.Escape))
+            {
+                _autocomplete.Dismiss();
+                escapeConsumed = true;
+            }
+            else if (ImGui.IsKeyPressed(ImGuiKey.Tab))
+            {
+                ApplyCompletion(_autocomplete.Accept());
+            }
+        }
+
         DrawSendTargetPicker(channel, buttonWidth);
         ImGui.SameLine(0, spacing);
 
@@ -52,8 +70,18 @@ public sealed partial class ChatboxWindow
             ImGuiInputTextFlags.EnterReturnsTrue);
         _theme.PopInputScope();
 
+        var inputMin = ImGui.GetItemRectMin();
+        var inputWidth = ImGui.GetItemRectSize().X;
         var inputActive = ImGui.IsItemActive();
         var pickerOpen = false;
+
+        _autocomplete.Update(_input);
+
+        if (submitted && _autocomplete.IsOpen)
+        {
+            ApplyCompletion(_autocomplete.Accept());
+            submitted = false;
+        }
 
         if (Config.ShowEmojiPicker)
         {
@@ -69,7 +97,11 @@ public sealed partial class ChatboxWindow
         ImGui.SameLine(0, spacing);
         if (_theme.IconButton("##chatbox-send", FontAwesomeIcon.PaperPlane, "Send")) submitted = true;
 
-        if (inputActive && !pickerOpen && _replyTarget != null && ImGui.IsKeyPressed(ImGuiKey.Escape)) CancelReply();
+        if (inputActive && !pickerOpen && !escapeConsumed && _replyTarget != null && ImGui.IsKeyPressed(ImGuiKey.Escape))
+            CancelReply();
+
+        var picked = _autocomplete.Draw(inputMin, inputWidth);
+        if (picked != null) ApplyCompletion(picked);
 
         if (submitted) Submit(channel);
     }
@@ -149,10 +181,24 @@ public sealed partial class ChatboxWindow
 
         Chatbox.Send(channel.Id, _input, _replyTarget);
 
+        _autocomplete.Reset();
         _replyTarget = null;
         _input = string.Empty;
         if (Config.KeepFocusAfterSend) _focusInput = true;
         _scrollToBottomFrames = ScrollSettleFrames;
+    }
+
+    private void ApplyCompletion(string? token)
+    {
+        if (string.IsNullOrEmpty(token)) return;
+
+        var caret = Math.Clamp(_autocomplete.Caret, 0, _input.Length);
+        var start = caret - _autocomplete.ReplaceLength;
+        if (start < 0) return;
+
+        _input = _input[..start] + token + " " + _input[caret..];
+        _autocomplete.Sync(_input, start + token.Length + 1);
+        _focusInput = true;
     }
 
     public void InsertText(string text)

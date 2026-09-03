@@ -21,6 +21,7 @@ public sealed partial class ChatboxWindow : Window, IDisposable
     private readonly UiTheme _theme = new();
     private readonly ChatboxInlineFlow _flow = new();
     private readonly ChatboxEmojiPicker _picker;
+    private readonly ChatboxEmojiAutocomplete _autocomplete;
 
     private string _input = string.Empty;
     private ChatboxReplyRef? _replyTarget;
@@ -35,6 +36,7 @@ public sealed partial class ChatboxWindow : Window, IDisposable
     {
         _plugin = plugin;
         _picker = new ChatboxEmojiPicker(plugin, _theme);
+        _autocomplete = new ChatboxEmojiAutocomplete(plugin, _theme);
 
         SizeConstraints = new WindowSizeConstraints
         {
