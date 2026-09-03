@@ -5,6 +5,7 @@ using System.Text.RegularExpressions;
 using Cordi.Configuration;
 using Cordi.Core;
 using Cordi.Services.Chatbox;
+using Cordi.Services.Emojis;
 using Cordi.UI.Themes;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Interface.Utility;
@@ -27,11 +28,9 @@ public sealed class ChatboxEmojiPicker
     private readonly UiTheme _theme;
 
     private readonly List<EmojiCatalogEntry> _matches = new();
-    private readonly List<GuildEmoteGroup> _guildEmotes = new();
-    private readonly HashSet<ulong> _guildEmoteIds = new();
     private readonly List<ChatboxSeenEmote> _seenEmotes = new();
 
-    private DateTime _guildEmotesRefreshedAt = DateTime.MinValue;
+    private int _guildVersion = -1;
     private int _seenVersion = -1;
 
     private string _emojiQuery = string.Empty;
@@ -53,6 +52,7 @@ public sealed class ChatboxEmojiPicker
 
     private ChatboxConfig Config => _plugin.Config.Chatbox;
     private ChatboxService Chatbox => _plugin.Chatbox;
+    private GuildEmoteCache GuildEmotes => _plugin.Emoji.Guilds;
 
     public void Open() => _requestOpen = true;
 
@@ -95,7 +95,6 @@ public sealed class ChatboxEmojiPicker
         var scale = ImGuiHelpers.GlobalScale * UiTheme.GlobalFontScale;
         BeginGrid(30f * scale, _theme.Gap(0.35f));
 
-        RefreshGuildEmotes();
         RefreshSeenEmotes();
 
         var query = _emojiQuery.Trim();
@@ -120,11 +119,9 @@ public sealed class ChatboxEmojiPicker
                 DrawTokenCell(insert, token);
         }
 
-        foreach (var guild in _guildEmotes)
+        foreach (var guild in GuildEmotes.Groups)
         {
-            if (guild.Emotes.Count == 0) continue;
-
-            Section(guild.Name);
+            Section(guild.Guild);
             foreach (var emote in guild.Emotes)
                 DrawTokenCell(insert, emote.Token, emote.Name);
         }
@@ -150,7 +147,7 @@ public sealed class ChatboxEmojiPicker
     {
         var any = false;
 
-        foreach (var guild in _guildEmotes)
+        foreach (var guild in GuildEmotes.Groups)
         {
             foreach (var emote in guild.Emotes)
             {
@@ -198,7 +195,7 @@ public sealed class ChatboxEmojiPicker
         var id = custom.Success ? ulong.Parse(custom.Groups["id"].Value) : 0ul;
 
         var url = custom.Success
-            ? ChatboxContentParser.CustomEmoteUrl(id, animated)
+            ? EmojiTranslator.EmoteUrl(id, animated)
             : EmojiCatalog.ImageUrl(Config.TwemojiBaseUrl, token);
 
         name ??= custom.Success ? custom.Groups["name"].Value : EmojiCatalog.Find(token)?.Name ?? token;
@@ -333,41 +330,6 @@ public sealed class ChatboxEmojiPicker
         return clicked;
     }
 
-    private void RefreshGuildEmotes()
-    {
-        if (DateTime.UtcNow - _guildEmotesRefreshedAt < TimeSpan.FromSeconds(30)) return;
-
-        _guildEmotesRefreshedAt = DateTime.UtcNow;
-
-        var guilds = _plugin.Channels?.Guilds;
-        if (guilds == null) return;
-
-        _guildEmotes.Clear();
-        _guildEmoteIds.Clear();
-
-        foreach (var guild in guilds)
-        {
-            var group = new GuildEmoteGroup { Name = guild.Name ?? "Server" };
-
-            foreach (var emoji in guild.Emojis)
-            {
-                if (string.IsNullOrEmpty(emoji.Name)) continue;
-
-                group.Emotes.Add(new GuildEmote
-                {
-                    Name = emoji.Name,
-                    Token = $"<{(emoji.Animated ? "a" : string.Empty)}:{emoji.Name}:{emoji.Id.Value}>",
-                });
-
-                _guildEmoteIds.Add(emoji.Id.Value);
-            }
-
-            if (group.Emotes.Count > 0) _guildEmotes.Add(group);
-        }
-
-        _seenVersion = -1;
-    }
-
     private void RefreshSeenEmotes()
     {
         if (!Config.PickerIncludeSeenEmotes)
@@ -378,28 +340,19 @@ public sealed class ChatboxEmojiPicker
         }
 
         var version = Chatbox.Emotes.Version;
-        if (version == _seenVersion) return;
+        var guildVersion = GuildEmotes.Version;
+
+        if (version == _seenVersion && guildVersion == _guildVersion) return;
 
         _seenVersion = version;
+        _guildVersion = guildVersion;
         _seenEmotes.Clear();
 
         foreach (var emote in Chatbox.Emotes.Snapshot())
         {
-            if (_guildEmoteIds.Contains(emote.Id)) continue;
+            if (GuildEmotes.Contains(emote.Id)) continue;
 
             _seenEmotes.Add(emote);
         }
-    }
-
-    private sealed class GuildEmoteGroup
-    {
-        public string Name { get; init; } = string.Empty;
-        public List<GuildEmote> Emotes { get; } = new();
-    }
-
-    private sealed class GuildEmote
-    {
-        public string Name { get; init; } = string.Empty;
-        public string Token { get; init; } = string.Empty;
     }
 }

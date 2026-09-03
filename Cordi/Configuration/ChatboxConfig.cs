@@ -64,7 +64,6 @@ public class ChatboxChannelConfig
 
     public bool MuteNotifications { get; set; }
     public bool TreatAllAsMention { get; set; }
-    public bool IncludeInCombined { get; set; } = true;
 
     public int MaxMessages { get; set; } = 5000;
     public bool PersistHistory { get; set; } = true;
@@ -115,8 +114,7 @@ public class ChatboxConfig
 
     public bool ShowUnreadDot { get; set; } = true;
     public bool ShowMentionBadge { get; set; } = true;
-    public bool ShowCombinedChannel { get; set; } = true;
-    public string CombinedChannelName { get; set; } = "All";
+    public bool AdvancedChatTypes { get; set; }
 
     public bool RenderCustomEmotes { get; set; } = true;
     public bool RenderUnicodeEmoji { get; set; } = true;

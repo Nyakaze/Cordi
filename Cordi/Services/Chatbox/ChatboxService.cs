@@ -12,11 +12,8 @@ namespace Cordi.Services.Chatbox;
 
 public sealed partial class ChatboxService : IDisposable
 {
-    public const string CombinedChannelId = "__combined__";
-
     private readonly CordiPlugin _plugin;
     private readonly Dictionary<string, ChatboxChannelState> _channels = new(StringComparer.Ordinal);
-    private readonly ChatboxChannelState _combined;
     private readonly ChatboxContentParser _parser;
     private readonly ReaderWriterLockSlim _channelLock = new(LockRecursionPolicy.SupportsRecursion);
     private long _sequence;
@@ -41,15 +38,7 @@ public sealed partial class ChatboxService : IDisposable
         Emotes = new ChatboxEmoteLibrary(Database, () => plugin.Config.Chatbox.SeenEmoteLimit);
         _sequence = Store.HighestSeq();
 
-        _combined = new ChatboxChannelState(new ChatboxChannelConfig
-        {
-            Id = CombinedChannelId,
-            Name = plugin.Config.Chatbox.CombinedChannelName,
-            ShortLabel = "ALL",
-        });
-
         RebuildChannels();
-        RestoreCombined();
         LoadHiddenEmbeds();
     }
 
@@ -94,8 +83,6 @@ public sealed partial class ChatboxService : IDisposable
 
     public ChatboxEmoteLibrary Emotes { get; }
 
-    public ChatboxChannelState Combined => _combined;
-
     private ChatboxConfig Config => _plugin.Config.Chatbox;
 
     public string ActiveChannelId { get; private set; } = string.Empty;
@@ -129,8 +116,6 @@ public sealed partial class ChatboxService : IDisposable
 
     public ChatboxChannelState? GetChannel(string id)
     {
-        if (id == CombinedChannelId) return _combined;
-
         _channelLock.EnterReadLock();
         try
         {
@@ -156,7 +141,7 @@ public sealed partial class ChatboxService : IDisposable
         }
 
         var first = Channels.FirstOrDefault(c => c.Config.Enabled);
-        ActiveChannelId = first?.Id ?? (Config.ShowCombinedChannel ? CombinedChannelId : string.Empty);
+        ActiveChannelId = first?.Id ?? string.Empty;
         return ActiveChannelId;
     }
 
@@ -168,15 +153,6 @@ public sealed partial class ChatboxService : IDisposable
         var active = GetChannel(id);
         var divider = active?.BeginViewing() ?? 0;
         if (active != null) PersistState(active);
-
-        if (id == CombinedChannelId)
-        {
-            foreach (var channel in Channels)
-            {
-                channel.BeginViewing();
-                PersistState(channel);
-            }
-        }
 
         _plugin.Config.Save();
         return divider;
@@ -190,7 +166,6 @@ public sealed partial class ChatboxService : IDisposable
 
         var before = active.LastReadSeq;
         active.MarkRead();
-        if (id != CombinedChannelId) _combined.MarkRead();
 
         if (active.LastReadSeq != before) PersistState(active);
     }
@@ -249,8 +224,6 @@ public sealed partial class ChatboxService : IDisposable
             _channelLock.ExitWriteLock();
         }
 
-        _combined.Config.Name = Config.CombinedChannelName;
-
         foreach (var channel in added)
             Hydrate(channel);
     }
@@ -281,6 +254,25 @@ public sealed partial class ChatboxService : IDisposable
         XivChatType.CrossLinkShell8,
     };
 
+    public static string SendGroupFor(XivChatType type)
+    {
+        if (LinkshellNameService.LinkshellSlot(type) >= 0)
+            return "Linkshells";
+
+        return LinkshellNameService.CrossWorldLinkshellSlot(type) >= 0 ? "Cross-world Linkshells" : "Chat";
+    }
+
+    public static bool IsGameMasterChatType(XivChatType type) =>
+        type is XivChatType.GmTell
+            or XivChatType.GmSay
+            or XivChatType.GmShout
+            or XivChatType.GmYell
+            or XivChatType.GmParty
+            or XivChatType.GmFreeCompany
+            or XivChatType.GmNoviceNetwork
+            or XivChatType.GmLinkshell1 or XivChatType.GmLinkshell2 or XivChatType.GmLinkshell3 or XivChatType.GmLinkshell4
+            or XivChatType.GmLinkshell5 or XivChatType.GmLinkshell6 or XivChatType.GmLinkshell7 or XivChatType.GmLinkshell8;
+
     public static bool IsSendTargetAvailable(XivChatType type) =>
         Array.IndexOf(SendableChatTypes, type) >= 0 && LinkshellNameService.IsJoined(type);
 
@@ -297,6 +289,60 @@ public sealed partial class ChatboxService : IDisposable
         XivChatType.TellOutgoing => "Tells",
         XivChatType.NoviceNetwork => "Novice Network",
         XivChatType.PvPTeam => "PvP Team",
+        XivChatType.CustomEmote => "Custom Emotes",
+        XivChatType.StandardEmote => "Standard Emotes",
+        XivChatType.Damage => "Damage Dealt",
+        XivChatType.Miss => "Missed Attacks",
+        XivChatType.Action => "Actions Used",
+        XivChatType.Item => "Items Used",
+        XivChatType.Healing => "HP Recovery",
+        XivChatType.GainBuff => "Beneficial Effects Granted",
+        XivChatType.LoseBuff => "Beneficial Effects Lost",
+        XivChatType.GainDebuff => "Detrimental Effects Inflicted",
+        XivChatType.LoseDebuff => "Detrimental Effects Lost",
+        XivChatType.FreeCompanyAnnouncement => "Free Company Announcements",
+        XivChatType.FreeCompanyLoginLogout => "Free Company Login and Logout",
+        XivChatType.PvpTeamAnnouncement => "PvP Team Announcements",
+        XivChatType.PvpTeamLoginLogout => "PvP Team Login and Logout",
+        XivChatType.NoviceNetworkSystem => "Novice Network Notices",
+        XivChatType.NPCDialogue => "NPC Dialogue",
+        XivChatType.NPCDialogueAnnouncements => "NPC Announcements",
+        XivChatType.LootNotice => "Loot Messages",
+        XivChatType.LootRoll => "Loot Rolls",
+        XivChatType.Progress => "Progression Messages",
+        XivChatType.Crafting => "Synthesis Messages",
+        XivChatType.Gathering => "Gathering Messages",
+        XivChatType.Sign => "Sign Messages",
+        XivChatType.RandomNumber => "Random Number Messages",
+        XivChatType.Orchestrion => "Orchestrion Track Messages",
+        XivChatType.MessageBook => "Message Book Alerts",
+        XivChatType.PeriodicRecruitmentNotification => "Recruitment Notices",
+        XivChatType.GlamourNotifications => "Glamour Messages",
+        XivChatType.RetainerSale => "Retainer Sales",
+        XivChatType.Alarm => "Alarm Notifications",
+        XivChatType.Echo => "Echo",
+        XivChatType.SystemMessage => "System Messages",
+        XivChatType.SystemError => "Battle System Messages",
+        XivChatType.GatheringSystemMessage => "Gathering System Messages",
+        XivChatType.ErrorMessage => "Error Messages",
+        XivChatType.Notice => "Notices",
+        XivChatType.Urgent => "Urgent Messages",
+        XivChatType.Debug => "Debug Messages",
+        XivChatType.GmTell => "GM Tells",
+        XivChatType.GmSay => "GM Say",
+        XivChatType.GmShout => "GM Shout",
+        XivChatType.GmYell => "GM Yell",
+        XivChatType.GmParty => "GM Party",
+        XivChatType.GmFreeCompany => "GM Free Company",
+        XivChatType.GmLinkshell1 => "GM Linkshell 1",
+        XivChatType.GmLinkshell2 => "GM Linkshell 2",
+        XivChatType.GmLinkshell3 => "GM Linkshell 3",
+        XivChatType.GmLinkshell4 => "GM Linkshell 4",
+        XivChatType.GmLinkshell5 => "GM Linkshell 5",
+        XivChatType.GmLinkshell6 => "GM Linkshell 6",
+        XivChatType.GmLinkshell7 => "GM Linkshell 7",
+        XivChatType.GmLinkshell8 => "GM Linkshell 8",
+        XivChatType.GmNoviceNetwork => "GM Novice Network",
         _ => type.ToString(),
     };
 
@@ -304,7 +350,6 @@ public sealed partial class ChatboxService : IDisposable
     {
         foreach (var channel in Channels)
             channel.Clear();
-        _combined.Clear();
         Store.DeleteAll();
     }
 

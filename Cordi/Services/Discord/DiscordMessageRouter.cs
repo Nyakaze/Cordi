@@ -1,15 +1,15 @@
-﻿using System;
+using System;
 using System.Linq;
 using System.Threading.Tasks;
 using Cordi.Core;
-using Dalamud.Plugin.Services;
 using Crovus.Models;
 
 namespace Cordi.Services.Discord;
 
 public class DiscordMessageRouter
 {
-    private static readonly IPluginLog Logger = Service.Log;
+    private const string LogSource = "Relay";
+
     private readonly CordiPlugin _plugin;
 
     public DiscordMessageRouter(CordiPlugin plugin)
@@ -17,13 +17,15 @@ public class DiscordMessageRouter
         _plugin = plugin;
     }
 
-    private string ParseForGame(string? content)
+    private CordiLogService Log => _plugin.LogService;
+
+    private string ParseForGame(string? content, bool translateEmoji)
     {
         _plugin.Chatbox?.RegisterEmotes(content);
 
-        return _plugin.Config.Chatbox.RelayEmotesAsUrls
-            ? DiscordEmojiParser.Parse(DiscordEmojiParser.ParseToUrls(content))
-            : DiscordEmojiParser.Parse(content);
+        return translateEmoji
+            ? _plugin.Emoji.ToGame(content, _plugin.Config.Chatbox.RelayEmotesAsUrls)
+            : content ?? string.Empty;
     }
 
     public async Task<bool> RouteExtraChatMessage(DiscordMessage message, ulong channelId)
@@ -36,34 +38,31 @@ public class DiscordMessageRouter
         var label = extraChatMapping.Key;
         var connection = extraChatMapping.Value;
 
-        if (connection.ExtraChatNumber > 0)
+        if (connection.ExtraChatNumber <= 0)
         {
-            string contentToSend = ParseForGame(message.Content);
-
-            try
-            {
-                string command = $"/ecl{connection.ExtraChatNumber} {contentToSend}";
-                Logger.Info($"[DiscordMessageRouter] Routing to ExtraChat (Key: {label}, Channel: {connection.ExtraChatNumber}) for Msg {message.Id}: {command}");
-
-                await Service.Framework.RunOnFrameworkThread(() =>
-                {
-                    _plugin._chat.SendMessage(command);
-                });
-
-                try { await message.DeleteAsync(); } catch { }
-                return true;
-            }
-            catch (Exception ex)
-            {
-                Logger.Error(ex, $"Failed to send ExtraChat command for {label}");
-            }
-        }
-        else
-        {
-            Logger.Warning($"[DiscordMessageRouter] ExtraChat mapping found for {label} but 'Channel #' is not configured (0). Msg not sent.");
+            Log.Warning(LogSource, $"ExtraChat mapping '{label}' has no channel number configured, message not sent.");
+            return false;
         }
 
-        return false;
+        var content = ParseForGame(message.Content, true);
+        if (string.IsNullOrWhiteSpace(content)) return false;
+
+        try
+        {
+            var command = $"/ecl{connection.ExtraChatNumber} {content}";
+
+            await Service.Framework.RunOnFrameworkThread(() => _plugin._chat.SendMessage(command));
+
+            Log.Info(LogSource, $"Forwarded to ExtraChat {connection.ExtraChatNumber} ({label}): {content}");
+
+            await DeleteAsync(message);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            Log.Error(LogSource, $"Failed to forward message to ExtraChat {label}", ex);
+            return false;
+        }
     }
 
     public async Task<bool> RouteStandardMessage(DiscordMessage message, ulong channelId)
@@ -71,10 +70,22 @@ public class DiscordMessageRouter
         var mapping = _plugin.Config.Chat.Mappings.FirstOrDefault(m => m.DiscordChannelId == channelId.ToString());
         if (mapping == null) return false;
 
-        var content = ParseForGame(message.Content);
-        _ = _plugin._chat.SendAsync(mapping.GameChatType, content);
-        Logger.Info($"Forwarding message: {content} to {mapping.GameChatType}");
-        try { await message.DeleteAsync(); } catch { }
+        var content = ParseForGame(message.Content, mapping.TranslateEmoji);
+        if (string.IsNullOrWhiteSpace(content)) return false;
+
+        try
+        {
+            await _plugin._chat.SendAsync(mapping.GameChatType, content);
+        }
+        catch (Exception ex)
+        {
+            Log.Error(LogSource, $"Failed to forward message to {mapping.GameChatType}", ex);
+            return false;
+        }
+
+        Log.Info(LogSource, $"Forwarded to {mapping.GameChatType}: {content}");
+
+        await DeleteAsync(message);
         return true;
     }
 
@@ -83,10 +94,37 @@ public class DiscordMessageRouter
         var tellTarget = _plugin.Config.Chat.TellThreadMappings.FirstOrDefault(x => x.Value == channelId.ToString()).Key;
         if (string.IsNullOrEmpty(tellTarget)) return false;
 
-        var content = ParseForGame(message.Content);
-        _ = _plugin._chat.SendTellAsync(tellTarget, content);
-        Logger.Info($"Forwarding Tell reply: {content} to {tellTarget}");
-        try { await message.DeleteAsync(); } catch { }
+        var mapping = _plugin.Config.Chat.Mappings
+            .FirstOrDefault(m => m.GameChatType == Dalamud.Game.Text.XivChatType.TellIncoming);
+
+        var content = ParseForGame(message.Content, mapping?.TranslateEmoji ?? true);
+        if (string.IsNullOrWhiteSpace(content)) return false;
+
+        try
+        {
+            await _plugin._chat.SendTellAsync(tellTarget, content);
+        }
+        catch (Exception ex)
+        {
+            Log.Error(LogSource, $"Failed to forward tell reply to {tellTarget}", ex);
+            return false;
+        }
+
+        Log.Info(LogSource, $"Forwarded tell reply to {tellTarget}: {content}");
+
+        await DeleteAsync(message);
         return true;
+    }
+
+    private async Task DeleteAsync(DiscordMessage message)
+    {
+        try
+        {
+            await message.DeleteAsync();
+        }
+        catch (Exception ex)
+        {
+            Log.Debug(LogSource, $"Could not delete relayed message {message.Id}: {ex.Message}");
+        }
     }
 }

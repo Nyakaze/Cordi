@@ -12,6 +12,7 @@ public readonly struct DropdownItem
 {
     public required string Key { get; init; }
     public required string Label { get; init; }
+    public string? Group { get; init; }
 }
 
 public sealed class Dropdown
@@ -53,13 +54,23 @@ public sealed class Dropdown
         DrawPopup(popupId, min, max, width, items, isSelected, onToggle);
     }
 
-    public float MeasureCompact(string preview) =>
-        ImGui.CalcTextSize(preview).X + theme.PadX(0.7f) * 2f + theme.Scaled(14f);
+    public const float CaptionFontScale = 0.78f;
 
-    public void DrawCompact(
+    public float CaptionHeight()
+    {
+        theme.ApplyFontScale(CaptionFontScale);
+        float height = ImGui.GetTextLineHeight() + theme.Scaled(3f);
+        theme.ApplyFontScale();
+
+        return height;
+    }
+
+    public void DrawIconPicker(
         string id,
         Vector2 size,
-        string preview,
+        FontAwesomeIcon icon,
+        string caption,
+        float captionWidth,
         IReadOnlyList<DropdownItem> items,
         string selectedKey,
         Action<string> onSelect,
@@ -71,8 +82,22 @@ public sealed class Dropdown
         var draw = ImGui.GetWindowDrawList();
         var min = ImGui.GetCursorScreenPos();
         var max = min + size;
+        float alpha = enabled ? 1f : 0.5f;
+
+        if (!string.IsNullOrEmpty(caption))
+        {
+            theme.ApplyFontScale(CaptionFontScale);
+            using (ImRaii.PushColor(ImGuiCol.Text, new Vector4(theme.MutedText.X, theme.MutedText.Y, theme.MutedText.Z, theme.MutedText.W * alpha)))
+            {
+                ImGui.SetCursorScreenPos(new Vector2(min.X, min.Y - ImGui.GetTextLineHeight() - theme.Scaled(3f)));
+                theme.FittedText(caption, captionWidth);
+            }
+            theme.ApplyFontScale();
+        }
 
         bool open = ImGui.IsPopupOpen(popupId);
+
+        ImGui.SetCursorScreenPos(min);
         bool clicked = ImGui.InvisibleButton($"##dropdown-{id}", size) && enabled;
         bool hovered = ImGui.IsItemHovered();
         var afterButton = ImGui.GetCursorScreenPos();
@@ -80,27 +105,18 @@ public sealed class Dropdown
         if (hovered && enabled)
             ImGui.SetMouseCursor(ImGuiMouseCursor.Hand);
 
-        float alpha = enabled ? 1f : 0.5f;
-        var fill = hovered && enabled || open ? theme.FrameBgHover : theme.FrameBg;
+        var fill = (hovered && enabled) || open ? theme.FrameBgHover : theme.FrameBg;
 
         draw.AddRectFilled(min, max, Fade(fill, alpha), theme.Radius());
         draw.AddRect(min, max, Fade(open ? theme.Accent : theme.Border, alpha), theme.Radius());
 
-        float chevronSpace = theme.Scaled(14f);
-        var textSize = ImGui.CalcTextSize(preview);
-        var textPos = new Vector2(min.X + theme.PadX(0.7f), min.Y + (size.Y - textSize.Y) * 0.5f);
-
-        draw.PushClipRect(min, new Vector2(max.X - chevronSpace, max.Y), true);
-        draw.AddText(textPos, Fade(theme.Text, alpha), preview);
-        draw.PopClipRect();
-
         using (ImRaii.PushFont(UiBuilder.IconFont))
         {
-            var glyph = FontAwesomeIcon.ChevronDown.ToIconString();
+            var glyph = icon.ToIconString();
             var glyphSize = ImGui.CalcTextSize(glyph);
             draw.AddText(
-                new Vector2(max.X - theme.PadX(0.4f) - glyphSize.X, min.Y + (size.Y - glyphSize.Y) * 0.5f),
-                Fade(hovered && enabled || open ? theme.Text : theme.FaintText, alpha),
+                min + (size - glyphSize) * 0.5f,
+                Fade((hovered && enabled) || open ? theme.Text : theme.MutedText, alpha),
                 glyph);
         }
 
@@ -146,12 +162,13 @@ public sealed class Dropdown
         draw.AddRect(min, max, ImGui.GetColorU32(open ? theme.Accent : theme.Border), theme.Radius());
 
         float chevronSpace = theme.Scaled(28f);
-        var textSize = ImGui.CalcTextSize(preview);
-        var textPos = new Vector2(min.X + theme.PadX(0.8f), min.Y + (height - textSize.Y) * 0.5f);
+        var textPos = new Vector2(min.X + theme.PadX(0.8f), min.Y + (height - ImGui.GetTextLineHeight()) * 0.5f);
+        var shown = theme.Fit(preview, max.X - chevronSpace - textPos.X);
 
-        draw.PushClipRect(min, new Vector2(max.X - chevronSpace, max.Y), true);
-        draw.AddText(textPos, ImGui.GetColorU32(hasValue ? theme.Text : theme.FaintText), preview);
-        draw.PopClipRect();
+        draw.AddText(textPos, ImGui.GetColorU32(hasValue ? theme.Text : theme.FaintText), shown);
+
+        if (hovered && shown != preview)
+            theme.Tooltip(preview);
 
         using (ImRaii.PushFont(UiBuilder.IconFont))
         using (ImRaii.PushColor(ImGuiCol.Text, hovered || open ? theme.Text : theme.FaintText))
@@ -181,7 +198,8 @@ public sealed class Dropdown
     {
         float rowHeight = theme.Scaled(30f);
         float spacing = theme.Gap(0.2f);
-        float wanted = items.Count * (rowHeight + spacing) + theme.PadY(1.2f);
+        float headerHeight = GroupHeaderHeight();
+        float wanted = items.Count * (rowHeight + spacing) + GroupCount(items) * (headerHeight + spacing) + theme.PadY(1.2f);
         float capped = MathF.Min(wanted, theme.Scaled(320f));
 
         ImGui.SetNextWindowPos(above
@@ -199,12 +217,65 @@ public sealed class Dropdown
             if (!popup)
                 return;
 
+            string? group = null;
+
             for (int i = 0; i < items.Count; i++)
             {
+                if (!string.IsNullOrEmpty(items[i].Group) && items[i].Group != group)
+                {
+                    group = items[i].Group;
+                    DrawGroupHeader(group!, headerHeight);
+                }
+
                 if (DrawRow(items[i], isSelected(items[i].Key), rowHeight, i))
                     onSelect(items[i].Key);
             }
         }
+    }
+
+    private float GroupHeaderHeight()
+    {
+        theme.ApplyFontScale(CaptionFontScale);
+        float height = ImGui.GetTextLineHeight() + theme.Gap(0.6f);
+        theme.ApplyFontScale();
+
+        return height;
+    }
+
+    private static int GroupCount(IReadOnlyList<DropdownItem> items)
+    {
+        int count = 0;
+        string? group = null;
+
+        foreach (var item in items)
+        {
+            if (string.IsNullOrEmpty(item.Group) || item.Group == group)
+                continue;
+
+            group = item.Group;
+            count++;
+        }
+
+        return count;
+    }
+
+    private void DrawGroupHeader(string label, float height)
+    {
+        var min = ImGui.GetCursorScreenPos();
+        float width = ImGui.GetContentRegionAvail().X;
+
+        ImGui.Dummy(new Vector2(width, height));
+        var afterDummy = ImGui.GetCursorScreenPos();
+
+        theme.ApplyFontScale(CaptionFontScale);
+        using (ImRaii.PushColor(ImGuiCol.Text, theme.FaintText))
+        {
+            ImGui.SetCursorScreenPos(new Vector2(min.X + theme.PadX(0.7f), min.Y + height - ImGui.GetTextLineHeight()));
+            theme.FittedText(label.ToUpperInvariant(), width - theme.PadX(1.4f));
+        }
+        theme.ApplyFontScale();
+
+        ImGui.SetCursorScreenPos(afterDummy);
     }
 
     private bool DrawRow(DropdownItem item, bool selected, float height, int index)
@@ -223,12 +294,13 @@ public sealed class Dropdown
             draw.AddRectFilled(min, min + new Vector2(width, height), ImGui.GetColorU32(selected ? theme.AccentSoft : theme.RowHover), theme.Radius(0.8f));
 
         float checkSpace = theme.Scaled(22f);
-        var textSize = ImGui.CalcTextSize(item.Label);
-        var textPos = new Vector2(min.X + theme.PadX(0.7f), min.Y + (height - textSize.Y) * 0.5f);
+        var textPos = new Vector2(min.X + theme.PadX(0.7f), min.Y + (height - ImGui.GetTextLineHeight()) * 0.5f);
+        var shown = theme.Fit(item.Label, min.X + width - checkSpace - textPos.X);
 
-        draw.PushClipRect(min, new Vector2(min.X + width - checkSpace, min.Y + height), true);
-        draw.AddText(textPos, ImGui.GetColorU32(theme.Text), item.Label);
-        draw.PopClipRect();
+        draw.AddText(textPos, ImGui.GetColorU32(theme.Text), shown);
+
+        if (hovered && shown != item.Label)
+            theme.Tooltip(item.Label);
 
         if (selected)
         {

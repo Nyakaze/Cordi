@@ -1,6 +1,7 @@
 using System;
 using System.Linq;
 using System.Reflection;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Dalamud.Game.Text;
@@ -183,9 +184,32 @@ public class ChatMessenger : IAsyncDisposable
     private static string Sanitize(string s, int max)
     {
         if (string.IsNullOrWhiteSpace(s)) return string.Empty;
-        s = s.Replace('\r', ' ').Replace('\n', ' ').Trim();
+        s = StripUnsendable(s.Replace('\r', ' ').Replace('\n', ' ')).Trim();
+        if (string.IsNullOrWhiteSpace(s)) return string.Empty;
         if (s.Length <= max) return s;
         const string ell = "…";
         return s[..Math.Max(0, max - ell.Length)] + ell;
+    }
+
+    private static string StripUnsendable(string s)
+    {
+        var builder = new StringBuilder(s.Length);
+
+        for (var i = 0; i < s.Length; i++)
+        {
+            var c = s[i];
+
+            if (char.IsHighSurrogate(c) && i + 1 < s.Length && char.IsLowSurrogate(s[i + 1]))
+            {
+                i++;
+                continue;
+            }
+
+            if (char.IsSurrogate(c) || char.IsControl(c)) continue;
+
+            builder.Append(c);
+        }
+
+        return builder.ToString();
     }
 }

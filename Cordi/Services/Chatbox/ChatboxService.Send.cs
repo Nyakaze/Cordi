@@ -9,7 +9,6 @@ public sealed partial class ChatboxService
 {
     public bool CanSend(ChatboxChannelState? channel) =>
         channel != null
-        && channel.Id != CombinedChannelId
         && (ResolveSendType(channel.Config) != XivChatType.None || IsTellChannel(channel));
 
     public XivChatType ResolveSendType(ChatboxChannelConfig config)
@@ -78,7 +77,8 @@ public sealed partial class ChatboxService
 
     private void SendToGame(ChatboxChannelState channel, string text, ChatboxReplyRef? reply)
     {
-        text = EncodeEmojiForGame(StripEmoteTokens(text));
+        text = _plugin.Emoji.ToGame(text, Config.RelayEmotesAsUrls);
+        if (text.Length == 0) return;
 
         var body = reply != null ? FormatGameReply(reply, text) : text;
 

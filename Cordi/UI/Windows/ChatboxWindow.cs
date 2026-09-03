@@ -292,6 +292,9 @@ public sealed partial class ChatboxWindow : Window, IDisposable
         if (_replyTarget != null && Config.EnableReplies)
             height += ImGui.GetTextLineHeightWithSpacing() + _theme.Gap(0.5f);
 
+        if (Chatbox.CanSend(Chatbox.ActiveChannel))
+            height += _theme.PickerCaptionHeight();
+
         return height;
     }
 

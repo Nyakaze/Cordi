@@ -37,6 +37,7 @@ using Cordi.Services.Discord.Webhooks;
 using DiscordConnection = Cordi.Services.Discord.Connection.DiscordConnection;
 using Cordi.Services.Discord.Queue;
 using Cordi.Services.Chatbox;
+using Cordi.Services.Emojis;
 using Cordi.UI.Windows;
 using Newtonsoft.Json;
 
@@ -114,6 +115,7 @@ public class CordiPlugin : IDalamudPlugin
     public EmoteLogWindow EmoteLogWindow { get; private set; }
     public CombinedWindow CombinedWindow { get; private set; }
     public ChatboxService Chatbox { get; private set; }
+    public EmojiTranslator Emoji { get; private set; } = null!;
     public ChatboxWindow ChatboxWindow { get; private set; }
     public PartyService PartyService { get; private set; }
     public RememberMeService RememberMe { get; private set; }
@@ -162,6 +164,10 @@ public class CordiPlugin : IDalamudPlugin
         DiscordSendQueue.Start();
 
         FrameworkScheduler = new FrameworkScheduler(this);
+
+        Emoji = new EmojiTranslator(
+            new GuildEmoteCache(() => Channels?.Guilds),
+            () => Chatbox?.Emotes);
 
         Chatbox = new ChatboxService(this);
 
@@ -436,8 +442,6 @@ public class CordiPlugin : IDalamudPlugin
     {
         if (message.IsHandled) return;
 
-        if (message.LogKind == XivChatType.RetainerSale) return;
-
         var msg = new ChatMessage
         {
             ChatType = message.LogKind,
@@ -451,6 +455,8 @@ public class CordiPlugin : IDalamudPlugin
             LogService.Debug("ChatRouter", $"[{message.LogKind}] {msg.SenderName}: {msg.Message.TextValue}");
         }
         if (Config.Chatbox.Enabled) Chatbox?.IngestGameMessage(msg);
+
+        if (message.LogKind == XivChatType.RetainerSale) return;
 
         _router.RouteAsync(msg, Discord);
 

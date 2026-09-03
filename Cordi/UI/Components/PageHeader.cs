@@ -36,10 +36,7 @@ public sealed class PageHeader
             theme.ApplyFontScale();
 
             if (!string.IsNullOrEmpty(subtitle))
-            {
-                using (ImRaii.PushColor(ImGuiCol.Text, theme.MutedText))
-                    ImGui.TextUnformatted(subtitle);
-            }
+                theme.WrappedText(subtitle, width - padX * 2f, theme.MutedText);
 
             if (drawInside != null)
             {

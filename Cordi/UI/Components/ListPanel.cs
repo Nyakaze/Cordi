@@ -65,7 +65,7 @@ public sealed class ListPanel
             {
                 if (!string.IsNullOrEmpty(description))
                 {
-                    ImGui.TextColored(theme.MutedText, description);
+                    theme.WrappedText(description, innerWidth, theme.MutedText);
                     theme.SpacerY(0.5f);
                 }
 
@@ -77,7 +77,7 @@ public sealed class ListPanel
 
                 if (items.Count == 0)
                 {
-                    ImGui.TextColored(theme.FaintText, emptyText);
+                    theme.WrappedText(emptyText, innerWidth, theme.FaintText);
                 }
                 else
                 {
@@ -161,7 +161,7 @@ public sealed class ListPanel
                 if (!string.IsNullOrEmpty(columns[index].Header))
                 {
                     ImGui.SetCursorScreenPos(new Vector2(x, origin.Y));
-                    ImGui.TextUnformatted(columns[index].Header);
+                    theme.FittedText(columns[index].Header, widths[index]);
                 }
 
                 x += widths[index] + gap;

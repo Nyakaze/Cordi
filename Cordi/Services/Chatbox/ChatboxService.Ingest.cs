@@ -9,6 +9,7 @@ using Cordi.Core;
 using Cordi.Domain;
 using Cordi.Packets.Handler.Chat;
 using Cordi.Services.Discord;
+using Cordi.Services.Emojis;
 using Dalamud.Game.Text;
 using Dalamud.Game.Text.SeStringHandling;
 using Dalamud.Game.Text.SeStringHandling.Payloads;
@@ -17,50 +18,22 @@ namespace Cordi.Services.Chatbox;
 
 public sealed partial class ChatboxService
 {
-    private static readonly Regex EmoteTokenRegex = new(
-        @"<(?<a>a?):(?<name>[A-Za-z0-9_~]{2,32}):(?<id>\d{5,25})>",
-        RegexOptions.Compiled);
-    private static readonly Regex EmoteOrShortcodeRegex = new(
-        @"<(?<a>a?):(?<token>[A-Za-z0-9_~]{2,32}):(?<id>\d{5,25})>|:(?<code>[A-Za-z0-9_+-]{2,32}):",
-        RegexOptions.Compiled);
-
-    private readonly Dictionary<string, (ulong Id, bool Animated)> _guildEmotes = new(StringComparer.OrdinalIgnoreCase);
-    private readonly HashSet<ulong> _guildEmoteIds = new();
-    private DateTime _guildEmotesRefreshedAt = DateTime.MinValue;
-    private readonly object _guildEmoteGate = new();
+    private EmojiTranslator Emoji => _plugin.Emoji;
 
     private bool FilterAdvertisementsFor(ChatboxChannelState channel) =>
         channel.Config.FilterAdvertisements;
-
-    public static bool IsCommunicationChatType(XivChatType type) =>
-        type is XivChatType.Say
-            or XivChatType.Shout
-            or XivChatType.Yell
-            or XivChatType.TellIncoming
-            or XivChatType.TellOutgoing
-            or XivChatType.Party
-            or XivChatType.CrossParty
-            or XivChatType.Alliance
-            or XivChatType.FreeCompany
-            or XivChatType.NoviceNetwork
-            or XivChatType.PvPTeam
-            or XivChatType.CustomEmote
-            or XivChatType.StandardEmote
-            or XivChatType.Ls1 or XivChatType.Ls2 or XivChatType.Ls3 or XivChatType.Ls4
-            or XivChatType.Ls5 or XivChatType.Ls6 or XivChatType.Ls7 or XivChatType.Ls8
-            or XivChatType.CrossLinkShell1 or XivChatType.CrossLinkShell2 or XivChatType.CrossLinkShell3 or XivChatType.CrossLinkShell4
-            or XivChatType.CrossLinkShell5 or XivChatType.CrossLinkShell6 or XivChatType.CrossLinkShell7 or XivChatType.CrossLinkShell8
-            or XivChatType.Echo;
 
     public void IngestGameMessage(ChatMessage message)
     {
         if (_disposed || !Config.Enabled) return;
 
+        var gameMaster = IsGameMasterChatType(message.ChatType);
+
         var targets = Channels
-            .Where(c => c.Config.GameChatTypes.Contains(message.ChatType))
+            .Where(c => gameMaster || c.Config.GameChatTypes.Contains(message.ChatType))
             .ToList();
 
-        if (targets.Count == 0 && !IsCommunicationChatType(message.ChatType))
+        if (targets.Count == 0)
             return;
 
         var (name, world) = ResolveGameSender(message);
@@ -73,53 +46,19 @@ public sealed partial class ChatboxService
                        && targets.Any(FilterAdvertisementsFor)
                        && _plugin.AdvertisementFilterService.IsAdvertisementPreview(Player.FromNameWorld(name, world), raw);
 
-        ChatboxMessage? combinedEntry = null;
-
-        if (targets.Count > 0)
+        foreach (var target in targets)
         {
-            foreach (var target in targets)
-            {
-                var resolver = BuildResolver(target);
-                var segments = ParseGameContent(message, resolver, out var onlyEmotes, out var parsedMentionsMe);
-                var blocked = filtered && FilterAdvertisementsFor(target);
-                var mentionsMe = !blocked && !isSelf
-                                 && (parsedMentionsMe || target.Config.TreatAllAsMention
-                                     || (Config.MentionOnTell && message.ChatType == XivChatType.TellIncoming));
-
-                var entry = new ChatboxMessage
-                {
-                    FilteredAsAd = blocked,
-                    ChannelId = target.Id,
-                    Origin = ChatboxOrigin.Game,
-                    AuthorKey = $"{name}@{world}",
-                    AuthorName = name,
-                    AuthorWorld = world,
-                    GameChatType = message.ChatType,
-                    RawContent = raw,
-                    Segments = segments,
-                    MentionsMe = mentionsMe,
-                    IsSelf = isSelf,
-                    AuthorColor = target.Config.Color,
-                    OnlyEmotes = onlyEmotes,
-                };
-
-                Publish(target, entry, notify: !blocked, addToCombined: false);
-                combinedEntry ??= entry;
-                RequestGameAvatar(entry);
-            }
-        }
-        else
-        {
-            // Message does not belong to any custom tab, but IS a valid communication chat type for Combined Channel
-            var resolver = BuildResolver(_combined);
+            var resolver = BuildResolver(target);
             var segments = ParseGameContent(message, resolver, out var onlyEmotes, out var parsedMentionsMe);
-            var mentionsMe = !isSelf && (parsedMentionsMe
-                             || (Config.MentionOnTell && message.ChatType == XivChatType.TellIncoming));
+            var blocked = filtered && FilterAdvertisementsFor(target);
+            var mentionsMe = !blocked && !isSelf
+                             && (parsedMentionsMe || target.Config.TreatAllAsMention
+                                 || (Config.MentionOnTell && message.ChatType == XivChatType.TellIncoming));
 
             var entry = new ChatboxMessage
             {
-                FilteredAsAd = false,
-                ChannelId = CombinedChannelId,
+                FilteredAsAd = blocked,
+                ChannelId = target.Id,
                 Origin = ChatboxOrigin.Game,
                 AuthorKey = $"{name}@{world}",
                 AuthorName = name,
@@ -129,20 +68,12 @@ public sealed partial class ChatboxService
                 Segments = segments,
                 MentionsMe = mentionsMe,
                 IsSelf = isSelf,
+                AuthorColor = target.Config.Color,
                 OnlyEmotes = onlyEmotes,
             };
 
-            entry.Seq = Interlocked.Increment(ref _sequence);
-            entry.SegmentsReady = true;
-            Persist(entry, _combined);
-            combinedEntry = entry;
+            Publish(target, entry, notify: !blocked);
             RequestGameAvatar(entry);
-        }
-
-        if (Config.ShowCombinedChannel && combinedEntry != null)
-        {
-            _combined.Append(combinedEntry, Config.MaxMessagesPerChannel, markUnread: false);
-            MessageAdded?.Invoke(combinedEntry);
         }
     }
 
@@ -294,7 +225,7 @@ public sealed partial class ChatboxService
     public void PostSystemMessage(string channelId, string text)
     {
         var target = GetChannel(channelId);
-        if (target == null || target.Id == CombinedChannelId) return;
+        if (target == null) return;
 
         var entry = new ChatboxMessage
         {
@@ -308,7 +239,7 @@ public sealed partial class ChatboxService
         Publish(target, entry, notify: false);
     }
 
-    private void Publish(ChatboxChannelState target, ChatboxMessage entry, bool notify = true, bool addToCombined = true)
+    private void Publish(ChatboxChannelState target, ChatboxMessage entry, bool notify = true)
     {
         entry.Seq = Interlocked.Increment(ref _sequence);
         entry.SegmentsReady = true;
@@ -317,12 +248,9 @@ public sealed partial class ChatboxService
 
         var isActive = WindowFocused
                        && _plugin.ChatboxWindow?.IsOpen == true
-                       && (ResolveActiveChannelId() == target.Id || ResolveActiveChannelId() == CombinedChannelId);
+                       && ResolveActiveChannelId() == target.Id;
 
         target.Append(entry, LimitFor(target.Id), markUnread: !isActive && !entry.IsSelf && !entry.FilteredAsAd);
-
-        if (addToCombined && Config.ShowCombinedChannel)
-            _combined.Append(entry, Config.MaxMessagesPerChannel, markUnread: false);
 
         Persist(entry, target);
 
@@ -453,168 +381,14 @@ public sealed partial class ChatboxService
 
     private string? ResolveDiscordChannelName(ulong id) => _plugin.Channels?.Find(id)?.Name;
 
-    private void RefreshGuildEmotes()
-    {
-        if (DateTime.UtcNow - _guildEmotesRefreshedAt < TimeSpan.FromSeconds(30)) return;
+    private string? ResolveGuildEmoteUrl(string name) => Emoji.ResolveUrlByName(name);
 
-        var guilds = _plugin.Channels?.Guilds;
-        if (guilds == null) return;
-
-        lock (_guildEmoteGate)
-        {
-            _guildEmotesRefreshedAt = DateTime.UtcNow;
-            _guildEmotes.Clear();
-            _guildEmoteIds.Clear();
-
-            foreach (var guild in guilds)
-            {
-                foreach (var emoji in guild.Emojis)
-                {
-                    if (string.IsNullOrEmpty(emoji.Name)) continue;
-
-                    _guildEmotes[emoji.Name] = (emoji.Id.Value, emoji.Animated);
-                    _guildEmoteIds.Add(emoji.Id.Value);
-                }
-            }
-        }
-    }
-
-    private string? ResolveGuildEmoteUrl(string name)
-    {
-        RefreshGuildEmotes();
-        lock (_guildEmoteGate)
-        {
-            if (_guildEmotes.TryGetValue(name, out var emote))
-                return ChatboxContentParser.CustomEmoteUrl(emote.Id, emote.Animated);
-        }
-
-        return Emotes.FindByName(name)?.ImageUrl;
-    }
-
-    private string? ResolveEmoteName(ulong id)
-    {
-        var guilds = _plugin.Channels?.Guilds;
-        if (guilds != null)
-        {
-            foreach (var guild in guilds)
-            {
-                foreach (var emoji in guild.Emojis)
-                {
-                    if (emoji.Id.Value == id && !string.IsNullOrEmpty(emoji.Name))
-                        return emoji.Name;
-                }
-            }
-        }
-
-        var seen = Emotes.FindById(id);
-
-        return seen != null && seen.Name != "emote" ? seen.Name : null;
-    }
+    private string? ResolveEmoteName(ulong id) => Emoji.ResolveName(id);
 
     public void RegisterEmotes(string? content)
     {
-        if (_disposed || string.IsNullOrEmpty(content)) return;
+        if (_disposed) return;
 
-        foreach (var emote in DiscordEmojiParser.Extract(content))
-            Emotes.Record(emote.Id, emote.Name, emote.Animated);
-    }
-
-    private bool IsUsableGuildEmote(ulong id)
-    {
-        RefreshGuildEmotes();
-        lock (_guildEmoteGate)
-        {
-            return _guildEmoteIds.Contains(id);
-        }
-    }
-
-    public string EncodeEmojiForGame(string text)
-    {
-        if (string.IsNullOrEmpty(text)) return text;
-
-        var builder = new System.Text.StringBuilder(text.Length);
-
-        for (var i = 0; i < text.Length;)
-        {
-            if (!EmojiIndex.IsEmojiStart(text, i))
-            {
-                builder.Append(text[i]);
-                i++;
-                continue;
-            }
-
-            var length = EmojiIndex.MeasureCluster(text, i);
-            var cluster = text.Substring(i, length);
-
-            builder.Append(EmojiShortcodeForGame(cluster) ?? cluster);
-            i += length;
-        }
-
-        return builder.ToString();
-    }
-
-    private string? EmojiShortcodeForGame(string cluster)
-    {
-        var indexed = EmojiIndex.TryGetShortcodeName(cluster, out var shortName) ? shortName : null;
-        var catalog = EmojiCatalog.Find(cluster)?.Shortcode;
-
-        if (indexed != null && !IsCustomEmoteName(indexed)) return $":{indexed}:";
-        if (!string.IsNullOrEmpty(catalog) && !IsCustomEmoteName(catalog!)) return $":{catalog}:";
-
-        var fallback = catalog ?? indexed;
-
-        return string.IsNullOrEmpty(fallback) ? null : $":{fallback}:";
-    }
-
-    private bool IsCustomEmoteName(string name)
-    {
-        RefreshGuildEmotes();
-
-        lock (_guildEmoteGate)
-        {
-            if (_guildEmotes.ContainsKey(name)) return true;
-        }
-
-        return Emotes.FindByName(name) != null;
-    }
-
-    public static string StripEmoteTokens(string text) =>
-        string.IsNullOrEmpty(text)
-            ? text
-            : EmoteTokenRegex.Replace(text, match => $":{match.Groups["name"].Value}:");
-
-    public string ConvertShortcodes(string text)
-    {
-        if (string.IsNullOrEmpty(text)) return text;
-        RefreshGuildEmotes();
-
-        return EmoteOrShortcodeRegex.Replace(text, match =>
-        {
-            if (match.Groups["id"].Success)
-            {
-                if (!ulong.TryParse(match.Groups["id"].Value, out var id)) return match.Value;
-                if (IsUsableGuildEmote(id)) return match.Value;
-
-                var animated = match.Groups["a"].Value.Length > 0;
-                return $" {ChatboxContentParser.CustomEmoteLink(id, animated)} ";
-            }
-
-            var name = match.Groups["code"].Value;
-
-            lock (_guildEmoteGate)
-            {
-                if (_guildEmotes.TryGetValue(name, out var emote))
-                {
-                    return emote.Animated
-                        ? $"<a:{name}:{emote.Id}>"
-                        : $"<:{name}:{emote.Id}>";
-                }
-            }
-
-            var seen = Emotes.FindByName(name);
-            if (seen != null) return $" {seen.ShareUrl} ";
-
-            return EmojiIndex.TryGetShortcode(name, out var unicode) ? unicode : match.Value;
-        });
+        Emoji.Register(content);
     }
 }

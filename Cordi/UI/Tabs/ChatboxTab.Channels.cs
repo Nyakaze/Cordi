@@ -14,37 +14,156 @@ namespace Cordi.UI.Tabs;
 
 public partial class ChatboxTab
 {
-    private static readonly XivChatType[] SelectableChatTypes =
+    private static readonly (string Group, bool Simple, XivChatType[] Types)[] SelectableChatGroups =
     {
-        XivChatType.Say,
-        XivChatType.Shout,
-        XivChatType.Yell,
-        XivChatType.TellIncoming,
-        XivChatType.Party,
-        XivChatType.CrossParty,
-        XivChatType.Alliance,
-        XivChatType.FreeCompany,
-        XivChatType.NoviceNetwork,
-        XivChatType.PvPTeam,
-        XivChatType.Ls1,
-        XivChatType.Ls2,
-        XivChatType.Ls3,
-        XivChatType.Ls4,
-        XivChatType.Ls5,
-        XivChatType.Ls6,
-        XivChatType.Ls7,
-        XivChatType.Ls8,
-        XivChatType.CrossLinkShell1,
-        XivChatType.CrossLinkShell2,
-        XivChatType.CrossLinkShell3,
-        XivChatType.CrossLinkShell4,
-        XivChatType.CrossLinkShell5,
-        XivChatType.CrossLinkShell6,
-        XivChatType.CrossLinkShell7,
-        XivChatType.CrossLinkShell8,
-        XivChatType.Echo,
-        XivChatType.SystemMessage,
+        ("Chat", true, new[]
+        {
+            XivChatType.Say,
+            XivChatType.Shout,
+            XivChatType.Yell,
+            XivChatType.TellIncoming,
+            XivChatType.Party,
+            XivChatType.CrossParty,
+            XivChatType.Alliance,
+            XivChatType.FreeCompany,
+            XivChatType.NoviceNetwork,
+            XivChatType.PvPTeam,
+        }),
+        ("Linkshells", true, new[]
+        {
+            XivChatType.Ls1,
+            XivChatType.Ls2,
+            XivChatType.Ls3,
+            XivChatType.Ls4,
+            XivChatType.Ls5,
+            XivChatType.Ls6,
+            XivChatType.Ls7,
+            XivChatType.Ls8,
+        }),
+        ("Cross-world Linkshells", true, new[]
+        {
+            XivChatType.CrossLinkShell1,
+            XivChatType.CrossLinkShell2,
+            XivChatType.CrossLinkShell3,
+            XivChatType.CrossLinkShell4,
+            XivChatType.CrossLinkShell5,
+            XivChatType.CrossLinkShell6,
+            XivChatType.CrossLinkShell7,
+            XivChatType.CrossLinkShell8,
+        }),
+        ("Emotes", false, new[]
+        {
+            XivChatType.CustomEmote,
+            XivChatType.StandardEmote,
+        }),
+        ("Battle", false, new[]
+        {
+            XivChatType.Damage,
+            XivChatType.Miss,
+            XivChatType.Action,
+            XivChatType.Item,
+            XivChatType.Healing,
+            XivChatType.GainBuff,
+            XivChatType.LoseBuff,
+            XivChatType.GainDebuff,
+            XivChatType.LoseDebuff,
+        }),
+        ("Announcements", false, new[]
+        {
+            XivChatType.FreeCompanyAnnouncement,
+            XivChatType.FreeCompanyLoginLogout,
+            XivChatType.PvpTeamAnnouncement,
+            XivChatType.PvpTeamLoginLogout,
+            XivChatType.NoviceNetworkSystem,
+            XivChatType.NPCDialogue,
+            XivChatType.NPCDialogueAnnouncements,
+            XivChatType.PeriodicRecruitmentNotification,
+            XivChatType.MessageBook,
+        }),
+        ("Progress", false, new[]
+        {
+            XivChatType.LootNotice,
+            XivChatType.LootRoll,
+            XivChatType.Progress,
+            XivChatType.Crafting,
+            XivChatType.Gathering,
+            XivChatType.GlamourNotifications,
+            XivChatType.RetainerSale,
+        }),
+        ("System", false, new[]
+        {
+            XivChatType.Echo,
+            XivChatType.SystemMessage,
+            XivChatType.SystemError,
+            XivChatType.GatheringSystemMessage,
+            XivChatType.ErrorMessage,
+            XivChatType.Notice,
+            XivChatType.Urgent,
+            XivChatType.Debug,
+            XivChatType.Alarm,
+            XivChatType.Orchestrion,
+            XivChatType.Sign,
+            XivChatType.RandomNumber,
+        }),
     };
+
+    private const string ChatGroupKeyPrefix = "group:";
+
+    private static List<ChipSelectorGroup> BuildSelectableChatGroups(bool advanced)
+    {
+        var groups = SelectableChatGroups
+            .Where(group => advanced || group.Simple)
+            .Select(group => new ChipSelectorGroup
+            {
+                Label = group.Group,
+                Items = group.Types
+                    .Select(type => new DropdownItem
+                    {
+                        Key = type.ToString(),
+                        Label = ChatboxService.LabelFor(type),
+                    })
+                    .ToList(),
+            })
+            .ToList();
+
+        if (advanced)
+            return groups;
+
+        groups.Add(new ChipSelectorGroup
+        {
+            Label = "Categories",
+            Items = SelectableChatGroups
+                .Where(group => !group.Simple)
+                .Select(group => new DropdownItem
+                {
+                    Key = ChatGroupKeyPrefix + group.Group,
+                    Label = group.Group,
+                })
+                .ToList(),
+        });
+
+        return groups;
+    }
+
+    private static IReadOnlyList<XivChatType> ResolveChatTypes(string key)
+    {
+        if (key.StartsWith(ChatGroupKeyPrefix, StringComparison.Ordinal))
+        {
+            string name = key[ChatGroupKeyPrefix.Length..];
+
+            foreach (var group in SelectableChatGroups)
+            {
+                if (string.Equals(group.Group, name, StringComparison.Ordinal))
+                    return group.Types;
+            }
+
+            return Array.Empty<XivChatType>();
+        }
+
+        return Enum.TryParse<XivChatType>(key, out var parsed)
+            ? new[] { parsed }
+            : Array.Empty<XivChatType>();
+    }
 
     private static bool IsTellType(XivChatType type) =>
         type is XivChatType.TellIncoming or XivChatType.TellOutgoing;
@@ -307,58 +426,97 @@ public partial class ChatboxTab
     private void DrawChannelSources(ChatboxChannelConfig channel) =>
         Card.Draw($"chatbox-sources-{channel.Id}", innerWidth =>
         {
-            var items = SelectableChatTypes
-                .Select(type => new DropdownItem { Key = type.ToString(), Label = ChatboxService.LabelFor(type) })
-                .ToList();
+            theme.WrappedText(
+                Cfg.AdvancedChatTypes
+                    ? "Which in-game chat types land in this channel. Game Master messages always arrive."
+                    : "Which in-game chat types land in this channel. Categories switch on everything they contain, Advanced unfolds them into single types.",
+                innerWidth,
+                theme.MutedText);
+            theme.SpacerY(0.6f);
 
-            string preview = channel.GameChatTypes.Count == 0
-                ? "None"
-                : string.Join(", ", channel.GameChatTypes.Select(ChatboxService.LabelFor).Distinct());
-
-            Row.Draw(
-                id: $"chatbox-types-{channel.Id}",
-                icon: FontAwesomeIcon.Comments,
-                iconColor: channel.GameChatTypes.Count == 0 ? theme.MutedText : theme.Accent,
-                title: "Game Chats",
-                subtitle: "Which in-game chat types land in this channel.",
-                controlWidth: 280f,
-                drawControl: (pos, width) =>
+            Chips.Draw(
+                $"chatbox-types-{channel.Id}",
+                innerWidth,
+                BuildSelectableChatGroups(Cfg.AdvancedChatTypes),
+                key => IsChatKeySelected(channel, key),
+                key => ToggleChatKey(channel, key),
+                (keys, enabled) => SetChatTypes(channel, keys, enabled),
+                Cfg.AdvancedChatTypes,
+                advanced =>
                 {
-                    ImGui.SetCursorScreenPos(pos);
-                    theme.MultiPicker(
-                        $"chatbox-types-picker-{channel.Id}",
-                        preview,
-                        channel.GameChatTypes.Count > 0,
-                        items,
-                        key => Enum.TryParse<XivChatType>(key, out var parsed) && channel.GameChatTypes.Contains(parsed),
-                        key =>
-                        {
-                            if (!Enum.TryParse<XivChatType>(key, out var parsed))
-                                return;
-
-                            ToggleChatType(channel, parsed);
-                        },
-                        width);
+                    Cfg.AdvancedChatTypes = advanced;
+                    Save();
                 },
-                rowWidth: innerWidth);
-        }, "Sources");
+                key => IsChatKeyPartial(channel, key));
+        }, "Game Chats");
 
-    private void ToggleChatType(ChatboxChannelConfig channel, XivChatType type)
+    private static bool ApplyChatType(ChatboxChannelConfig channel, XivChatType type, bool enabled)
     {
-        bool add = !channel.GameChatTypes.Contains(type);
+        if (channel.GameChatTypes.Contains(type) == enabled)
+            return false;
 
-        if (add)
+        if (enabled)
             channel.GameChatTypes.Add(type);
         else
             channel.GameChatTypes.Remove(type);
 
-        if (IsTellType(type))
+        if (!IsTellType(type))
+            return true;
+
+        if (enabled)
         {
-            if (add)
+            if (!channel.GameChatTypes.Contains(XivChatType.TellOutgoing))
                 channel.GameChatTypes.Add(XivChatType.TellOutgoing);
-            else
-                channel.GameChatTypes.Remove(XivChatType.TellOutgoing);
         }
+        else
+        {
+            channel.GameChatTypes.Remove(XivChatType.TellOutgoing);
+        }
+
+        return true;
+    }
+
+    private static bool IsChatKeySelected(ChatboxChannelConfig channel, string key)
+    {
+        var types = ResolveChatTypes(key);
+
+        return types.Count > 0 && types.All(channel.GameChatTypes.Contains);
+    }
+
+    private static bool IsChatKeyPartial(ChatboxChannelConfig channel, string key)
+    {
+        var types = ResolveChatTypes(key);
+
+        if (types.Count < 2)
+            return false;
+
+        int active = types.Count(channel.GameChatTypes.Contains);
+
+        return active > 0 && active < types.Count;
+    }
+
+    private void ToggleChatKey(ChatboxChannelConfig channel, string key)
+    {
+        var types = ResolveChatTypes(key);
+
+        if (types.Count == 0)
+            return;
+
+        ApplyChatTypes(channel, types, !types.All(channel.GameChatTypes.Contains));
+    }
+
+    private void SetChatTypes(ChatboxChannelConfig channel, IReadOnlyList<string> keys, bool enabled) =>
+        ApplyChatTypes(channel, keys.SelectMany(ResolveChatTypes).ToList(), enabled);
+
+    private void ApplyChatTypes(ChatboxChannelConfig channel, IReadOnlyList<XivChatType> types, bool enabled)
+    {
+        bool changed = false;
+
+        foreach (var type in types)
+            changed |= ApplyChatType(channel, type, enabled);
+
+        if (!changed)
+            return;
 
         Save();
         plugin.Chatbox.RebuildChannels();
@@ -373,7 +531,12 @@ public partial class ChatboxTab
             };
 
             items.AddRange(ChatboxService.SendableChatTypes
-                .Select(type => new DropdownItem { Key = type.ToString(), Label = ChatboxService.LabelFor(type) }));
+                .Select(type => new DropdownItem
+                {
+                    Key = type.ToString(),
+                    Label = ChatboxService.LabelFor(type),
+                    Group = ChatboxService.SendGroupFor(type),
+                }));
 
             Row.Draw(
                 id: $"chatbox-sendtype-{channel.Id}",
@@ -414,11 +577,6 @@ public partial class ChatboxTab
                 $"chatbox-allmention-{channel.Id}", FontAwesomeIcon.At,
                 "Treat every Message as Mention", "Every message here counts as a mention.",
                 innerWidth, () => channel.TreatAllAsMention, v => channel.TreatAllAsMention = v);
-
-            DrawToggleRow(
-                $"chatbox-combined-{channel.Id}", FontAwesomeIcon.LayerGroup,
-                "Include in Combined View", "Messages also appear in the combined channel.",
-                innerWidth, () => channel.IncludeInCombined, v => channel.IncludeInCombined = v);
 
             DrawToggleRow(
                 $"chatbox-ads-{channel.Id}", FontAwesomeIcon.Filter,

@@ -24,8 +24,6 @@ public sealed partial class ChatboxWindow
 
     private IEnumerable<ChatboxChannelState> NavChannels()
     {
-        if (Config.ShowCombinedChannel) yield return Chatbox.Combined;
-
         foreach (var channel in Chatbox.Channels)
         {
             if (!channel.Config.Enabled || !channel.Config.ShowInNav) continue;
@@ -167,12 +165,14 @@ public sealed partial class ChatboxWindow
                 ImGui.GetColorU32(_theme.Text));
         }
 
-        var prefix = channel.Id == ChatboxService.CombinedChannelId ? "≡ " : "# ";
+        const string prefix = "# ";
         var prefixSize = ImGui.CalcTextSize(prefix);
         draw.AddText(new Vector2(min.X + padding, textY), ImGui.GetColorU32(channel.Config.Color), prefix);
 
         var nameColor = isActive || unread ? _theme.Text : _theme.MutedText;
-        draw.AddText(new Vector2(min.X + padding + prefixSize.X, textY), ImGui.GetColorU32(nameColor), channel.Config.Name);
+        var nameX = min.X + padding + prefixSize.X;
+        var name = _theme.Fit(channel.Config.Name, max.X - padding - BadgeSpace(channel) - nameX);
+        draw.AddText(new Vector2(nameX, textY), ImGui.GetColorU32(nameColor), name);
 
         DrawMentionBadge(draw, min, max, channel, BadgePlacement.MiddleRight, padding);
         DrawChannelContext(channel, hovered);
@@ -287,13 +287,14 @@ public sealed partial class ChatboxWindow
 
         var unread = HasUnread(channel);
         var badgeSpace = BadgeSpace(channel);
-        var textSize = ImGui.CalcTextSize(label);
+        var shown = _theme.Fit(label, width - badgeSpace - _theme.PadX(0.6f));
+        var textSize = ImGui.CalcTextSize(shown);
         var color = isActive || unread ? _theme.Text : _theme.MutedText;
         var textX = min.X + MathF.Max(_theme.PadX(0.3f), (width - badgeSpace - textSize.X) * 0.5f);
         draw.AddText(
             new Vector2(textX, min.Y + (height - textSize.Y) * 0.5f),
             ImGui.GetColorU32(color),
-            label);
+            shown);
 
         if (unread && Config.ShowUnreadDot && badgeSpace <= 0f)
         {

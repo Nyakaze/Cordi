@@ -7,7 +7,7 @@ namespace Cordi.Services.Chatbox;
 
 public sealed class ChatboxDatabase : IDisposable
 {
-    private const int SchemaVersion = 4;
+    private const int SchemaVersion = 5;
 
     private static bool _nativeReady;
     private static readonly object NativeGate = new();
@@ -137,7 +137,8 @@ public sealed class ChatboxDatabase : IDisposable
                 id        INTEGER PRIMARY KEY,
                 name      TEXT    NOT NULL,
                 animated  INTEGER NOT NULL DEFAULT 0,
-                last_seen INTEGER NOT NULL
+                last_seen INTEGER NOT NULL,
+                url       TEXT
             );
 
             CREATE INDEX IF NOT EXISTS idx_emotes_last_seen ON emotes(last_seen);
@@ -150,6 +151,7 @@ public sealed class ChatboxDatabase : IDisposable
             """);
 
         EnsureColumn("messages", "filtered_ad", "INTEGER NOT NULL DEFAULT 0");
+        EnsureColumn("emotes", "url", "TEXT");
 
         Execute(_connection, $"INSERT OR REPLACE INTO meta(key, value) VALUES ('schema', '{SchemaVersion}');");
     }

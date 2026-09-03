@@ -50,7 +50,7 @@ public sealed class DiscordSender
             if (channel?.Type is ChannelType.GuildForum && !string.IsNullOrEmpty(correspondentName))
                 targetId = await ResolveTellThreadAsync(context, targetId, correspondentName);
 
-            var converted = _plugin.Chatbox?.ConvertShortcodes(content) ?? content;
+            var converted = _plugin.Emoji.ToDiscord(content);
             var sanitized = DiscordTextSanitizer.Sanitize(converted);
 
             if (string.IsNullOrWhiteSpace(sanitized))
@@ -89,7 +89,7 @@ public sealed class DiscordSender
     {
         if (!IsConnected) return Task.FromResult(0UL);
 
-        var converted = _plugin.Chatbox?.ConvertShortcodes(content) ?? content;
+        var converted = _plugin.Emoji.ToDiscord(content);
         var sanitized = DiscordTextSanitizer.Sanitize(converted);
 
         if (string.IsNullOrWhiteSpace(sanitized)) return Task.FromResult(0UL);

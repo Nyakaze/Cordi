@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
+using Cordi.Services.Emojis;
 
 namespace Cordi.Services.Chatbox;
 
@@ -13,10 +14,10 @@ public sealed class ChatboxSeenEmote
     public string Name { get; set; } = string.Empty;
     public bool Animated { get; init; }
     public long LastSeen { get; set; }
+    public string? Url { get; set; }
 
     public string Token => $"<{(Animated ? "a" : string.Empty)}:{Name}:{Id}>";
-    public string ImageUrl => ChatboxContentParser.CustomEmoteUrl(Id, Animated);
-    public string ShareUrl => ChatboxContentParser.CustomEmoteLink(Id, Animated);
+    public string ImageUrl => string.IsNullOrEmpty(Url) ? EmojiTranslator.EmoteUrl(Id, Animated) : Url!;
 }
 
 public sealed class ChatboxEmoteLibrary
@@ -98,17 +99,19 @@ public sealed class ChatboxEmoteLibrary
         var name = nameMatch.Success ? nameMatch.Groups["name"].Value : "emote";
         var animated = string.Equals(match.Groups["ext"].Value, "gif", StringComparison.OrdinalIgnoreCase);
 
-        Record(id, name, animated);
+        Record(id, name, animated, imageUrl);
     }
 
-    public void Record(ulong id, string name, bool animated)
+    public void Record(ulong id, string name, bool animated, string? url = null)
     {
         var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
 
         if (_entries.TryGetValue(id, out var existing))
         {
             var renamed = !string.Equals(existing.Name, name, StringComparison.Ordinal) && name != "emote";
-            if (!renamed && now - existing.LastSeen < TouchIntervalSeconds) return;
+            var relinked = !string.IsNullOrEmpty(url) && !string.Equals(existing.Url, url, StringComparison.Ordinal);
+
+            if (!renamed && !relinked && now - existing.LastSeen < TouchIntervalSeconds) return;
 
             if (renamed)
             {
@@ -116,6 +119,8 @@ public sealed class ChatboxEmoteLibrary
                 existing.Name = name;
                 _byName[name] = id;
             }
+
+            if (relinked) existing.Url = url;
 
             existing.LastSeen = now;
 
@@ -130,6 +135,7 @@ public sealed class ChatboxEmoteLibrary
             Name = name,
             Animated = animated,
             LastSeen = now,
+            Url = string.IsNullOrEmpty(url) ? null : url,
         };
 
         if (!_entries.TryAdd(id, entry)) return;
@@ -206,7 +212,7 @@ public sealed class ChatboxEmoteLibrary
         _database.Read(connection =>
         {
             using var command = connection.CreateCommand();
-            command.CommandText = "SELECT id, name, animated, last_seen FROM emotes;";
+            command.CommandText = "SELECT id, name, animated, last_seen, url FROM emotes;";
 
             using var reader = command.ExecuteReader();
             while (reader.Read())
@@ -217,6 +223,7 @@ public sealed class ChatboxEmoteLibrary
                     Name = reader.GetString(1),
                     Animated = reader.GetInt32(2) != 0,
                     LastSeen = reader.GetInt64(3),
+                    Url = reader.IsDBNull(4) ? null : reader.GetString(4),
                 };
 
                 _entries[entry.Id] = entry;
@@ -233,18 +240,20 @@ public sealed class ChatboxEmoteLibrary
     {
         using var command = connection.CreateCommand();
         command.CommandText = """
-            INSERT INTO emotes(id, name, animated, last_seen)
-            VALUES ($id, $name, $animated, $lastSeen)
+            INSERT INTO emotes(id, name, animated, last_seen, url)
+            VALUES ($id, $name, $animated, $lastSeen, $url)
             ON CONFLICT(id) DO UPDATE SET
                 name      = excluded.name,
                 animated  = excluded.animated,
-                last_seen = excluded.last_seen;
+                last_seen = excluded.last_seen,
+                url       = COALESCE(excluded.url, emotes.url);
             """;
 
         command.Parameters.AddWithValue("$id", (long)entry.Id);
         command.Parameters.AddWithValue("$name", entry.Name);
         command.Parameters.AddWithValue("$animated", entry.Animated ? 1 : 0);
         command.Parameters.AddWithValue("$lastSeen", entry.LastSeen);
+        command.Parameters.AddWithValue("$url", (object?)entry.Url ?? DBNull.Value);
         command.ExecuteNonQuery();
     }, "store emote");
 

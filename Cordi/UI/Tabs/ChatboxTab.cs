@@ -16,11 +16,13 @@ public partial class ChatboxTab : ConfigTabBase
     private PageHeader? layoutRenderer;
     private Panel? panelRenderer;
     private ListPanel? listRenderer;
+    private ChipSelector? chipRenderer;
 
     private SettingsRow Row => rowRenderer ??= new SettingsRow(theme);
     private PageHeader Layout => layoutRenderer ??= new PageHeader(theme);
     private Panel Card => panelRenderer ??= new Panel(theme);
     private ListPanel List => listRenderer ??= new ListPanel(theme);
+    private ChipSelector Chips => chipRenderer ??= new ChipSelector(theme);
 
     private bool pendingScrollTop;
 

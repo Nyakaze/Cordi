@@ -233,13 +233,11 @@ public partial class ActivityTab
         float textX = min.X + theme.PadX(0.7f) + labelSize.X + theme.Gap(0.8f);
         float textWidth = max.X - theme.PadX(0.7f) - counterSize.X - theme.Gap(0.8f) - textX;
 
-        draw.PushClipRect(new Vector2(textX, min.Y), new Vector2(textX + textWidth, max.Y), true);
         using (ImRaii.PushColor(ImGuiCol.Text, empty ? theme.FaintText : active ? theme.Text : theme.MutedText))
         {
             ImGui.SetCursorScreenPos(new Vector2(textX, min.Y + (height - ImGui.GetTextLineHeight()) * 0.5f));
-            ImGui.TextUnformatted(empty ? "(empty step, nothing is shown)" : title);
+            theme.FittedText(empty ? "(empty step, nothing is shown)" : title, textWidth);
         }
-        draw.PopClipRect();
 
         ImGui.SetCursorScreenPos(min);
         ImGui.Dummy(new Vector2(width, height + theme.Gap(0.4f)));

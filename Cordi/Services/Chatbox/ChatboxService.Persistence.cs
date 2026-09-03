@@ -27,7 +27,6 @@ public sealed partial class ChatboxService
     private void Persist(ChatboxMessage entry, ChatboxChannelState target)
     {
         if (!target.Config.PersistHistory) return;
-        if (target.Id == CombinedChannelId) return;
 
         Store.Enqueue(entry);
     }
@@ -41,34 +40,6 @@ public sealed partial class ChatboxService
 
         var (divider, lastRead) = Store.LoadState(channel.Id);
         channel.Restore(history, divider, lastRead);
-    }
-
-    private void RestoreCombined()
-    {
-        if (!Config.ShowCombinedChannel) return;
-
-        var merged = Channels
-            .SelectMany(c => c.Snapshot())
-            .GroupBy(m => m.Seq)
-            .Select(g => g.First())
-            .OrderBy(m => m.Seq)
-            .ToList();
-
-        var directCombined = Store.Load(CombinedChannelId, LimitFor(CombinedChannelId));
-        if (directCombined.Count > 0)
-        {
-            merged = merged.Concat(directCombined)
-                .GroupBy(m => m.Seq)
-                .Select(g => g.First())
-                .OrderBy(m => m.Seq)
-                .ToList();
-        }
-
-        var cap = Config.MaxMessagesPerChannel;
-        if (cap > 0 && merged.Count > cap)
-            merged.RemoveRange(0, merged.Count - cap);
-
-        _combined.Restore(merged, 0, merged.Count > 0 ? merged[^1].Seq : 0);
     }
 
     public void EnsureSegments(ChatboxChannelState channel, ChatboxMessage message)
@@ -104,7 +75,7 @@ public sealed partial class ChatboxService
 
     internal void PersistState(ChatboxChannelState channel)
     {
-        if (!channel.Config.PersistHistory || channel.Id == CombinedChannelId) return;
+        if (!channel.Config.PersistHistory) return;
 
         Store.QueueState(channel.Id, channel.DividerSeq, channel.LastReadSeq);
     }
@@ -113,15 +84,6 @@ public sealed partial class ChatboxService
     {
         channel.ClearDivider();
         PersistState(channel);
-
-        if (channel.Id == CombinedChannelId)
-        {
-            foreach (var ch in Channels)
-            {
-                ch.ClearDivider();
-                PersistState(ch);
-            }
-        }
     }
 
     public void PersistAllState()

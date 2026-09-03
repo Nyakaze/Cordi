@@ -45,9 +45,42 @@ public sealed class SettingsRow
         Action? onRowItem = null)
     {
         var draw = ImGui.GetWindowDrawList();
-        float height = rowHeight > 0f ? theme.Scaled(rowHeight) : theme.Scaled(UiTheme.SettingsRowHeight);
+        float baseHeight = rowHeight > 0f ? theme.Scaled(rowHeight) : theme.Scaled(UiTheme.SettingsRowHeight);
         float width = rowWidth > 0f ? rowWidth : ImGui.GetContentRegionAvail().X;
         var min = ImGui.GetCursorScreenPos();
+
+        float tile = theme.Scaled(UiTheme.IconTileSize);
+        float chevronWidth = theme.Scaled(16f);
+        float textX = min.X + theme.PadX(0.8f) + tile + theme.Gap(1.2f);
+        float bandLeft = min.X + width - theme.PadX(0.8f);
+
+        if (showChevron)
+            bandLeft -= chevronWidth + theme.Gap();
+
+        if (toggleValue.HasValue)
+            bandLeft -= theme.ToggleSize().X + theme.Gap(1.5f);
+
+        if (drawControl != null)
+            bandLeft -= controlWidth > 0 ? theme.Scaled(controlWidth) : theme.Scaled(180f);
+
+        float textLimit = MathF.Max(theme.Scaled(48f), bandLeft - theme.Gap(0.8f) - textX);
+
+        bool hasSubtitle = !string.IsNullOrEmpty(subtitle);
+        var titleSize = theme.MeasureWrapped(title, textLimit);
+        var subtitleSize = Vector2.Zero;
+
+        if (hasSubtitle)
+        {
+            theme.ApplyFontScale(0.86f);
+            subtitleSize = theme.MeasureWrapped(subtitle, textLimit);
+            theme.ApplyFontScale();
+        }
+
+        float textBlock = hasSubtitle
+            ? titleSize.Y + theme.Scaled(4f) + subtitleSize.Y
+            : titleSize.Y;
+
+        float height = MathF.Max(baseHeight, textBlock + theme.PadY(0.9f) * 2f);
         var max = min + new Vector2(width, height);
 
         bool rowClicked = ImGui.InvisibleButton($"##row-{id}", new Vector2(width, height));
@@ -60,7 +93,6 @@ public sealed class SettingsRow
 
         draw.AddRectFilled(min, max, ImGui.GetColorU32(hovered ? theme.RowHover : theme.RowBg), theme.Radius());
 
-        float tile = theme.Scaled(UiTheme.IconTileSize);
         var tileMin = new Vector2(min.X + theme.PadX(0.8f), min.Y + (height - tile) * 0.5f);
         var tileBg = new Vector4(iconColor.X, iconColor.Y, iconColor.Z, 0.16f);
         draw.AddRectFilled(tileMin, tileMin + new Vector2(tile, tile), ImGui.GetColorU32(tileBg), theme.Radius());
@@ -88,42 +120,27 @@ public sealed class SettingsRow
             }
         }
 
-        float textX = tileMin.X + tile + theme.Gap(1.2f);
-        bool hasSubtitle = !string.IsNullOrEmpty(subtitle);
-        var titleSize = ImGui.CalcTextSize(title);
-        float titleTop;
+        float titleTop = min.Y + (height - textBlock) * 0.5f;
+
+        ImGui.SetCursorScreenPos(new Vector2(textX, titleTop));
+        theme.WrappedText(title, textLimit);
 
         if (hasSubtitle)
         {
-            float lineHeight = ImGui.GetTextLineHeight();
-            float blockHeight = lineHeight * 1.86f + theme.Scaled(4f);
-            titleTop = min.Y + (height - blockHeight) * 0.5f;
-
-            ImGui.SetCursorScreenPos(new Vector2(textX, titleTop));
-            ImGui.TextUnformatted(title);
-
             theme.ApplyFontScale(0.86f);
-            ImGui.SetCursorScreenPos(new Vector2(textX, titleTop + lineHeight + theme.Scaled(4f)));
+            ImGui.SetCursorScreenPos(new Vector2(textX, titleTop + titleSize.Y + theme.Scaled(4f)));
             using (ImRaii.PushColor(ImGuiCol.Text, theme.MutedText))
-                ImGui.TextUnformatted(subtitle);
+                theme.WrappedText(subtitle, textLimit);
             theme.ApplyFontScale();
         }
-        else
-        {
-            titleTop = min.Y + (height - titleSize.Y) * 0.5f;
 
-            ImGui.SetCursorScreenPos(new Vector2(textX, titleTop));
-            ImGui.TextUnformatted(title);
-        }
-
-        drawTitleBadge?.Invoke(new Vector2(textX + titleSize.X + theme.Gap(0.8f), titleTop), titleSize.Y);
+        drawTitleBadge?.Invoke(new Vector2(textX + titleSize.X + theme.Gap(0.8f), titleTop), ImGui.GetTextLineHeight());
 
         float cursorRight = max.X - theme.PadX(0.8f);
         bool chevronClicked = false;
 
         if (showChevron)
         {
-            float chevronWidth = theme.Scaled(16f);
             var chevronMin = new Vector2(cursorRight - chevronWidth, min.Y);
 
             ImGui.SetCursorScreenPos(chevronMin);

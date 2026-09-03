@@ -448,6 +448,56 @@ public sealed partial class UiTheme
             ImGui.TextUnformatted(text);
         }
     }
+
+    public string Fit(string text, float maxWidth)
+    {
+        if (string.IsNullOrEmpty(text)) return string.Empty;
+        if (maxWidth <= 0f) return string.Empty;
+        if (ImGui.CalcTextSize(text).X <= maxWidth) return text;
+
+        const string ellipsis = "...";
+        float ellipsisWidth = ImGui.CalcTextSize(ellipsis).X;
+        if (ellipsisWidth >= maxWidth) return string.Empty;
+
+        float budget = maxWidth - ellipsisWidth;
+        int low = 0;
+        int high = text.Length;
+
+        while (low < high)
+        {
+            int mid = (low + high + 1) / 2;
+            if (ImGui.CalcTextSize(text[..mid]).X <= budget) low = mid;
+            else high = mid - 1;
+        }
+
+        return low == 0 ? ellipsis : text[..low].TrimEnd() + ellipsis;
+    }
+
+    public void FittedText(string text, float maxWidth) => ImGui.TextUnformatted(Fit(text, maxWidth));
+
+    public Vector2 MeasureWrapped(string text, float maxWidth)
+    {
+        if (string.IsNullOrEmpty(text) || maxWidth <= 0f)
+            return Vector2.Zero;
+
+        return ImGui.CalcTextSize(text, false, maxWidth);
+    }
+
+    public void WrappedText(string text, float maxWidth)
+    {
+        if (string.IsNullOrEmpty(text))
+            return;
+
+        ImGui.PushTextWrapPos(ImGui.GetCursorPosX() + MathF.Max(maxWidth, 1f));
+        ImGui.TextUnformatted(text);
+        ImGui.PopTextWrapPos();
+    }
+
+    public void WrappedText(string text, float maxWidth, Vector4 color)
+    {
+        using (ImRaii.PushColor(ImGuiCol.Text, color))
+            WrappedText(text, maxWidth);
+    }
     public void SpacerY(float mul = 1f) => ImGui.Dummy(new Vector2(0, Gap(mul)));
     public void SpacerX(float mul = 1f) => ImGui.Dummy(new Vector2(Gap(mul), 0));
     public void SameLineGap(float mul = 1f) { ImGui.SameLine(); ImGui.Dummy(new Vector2(Gap(mul), 0)); ImGui.SameLine(); }

@@ -20,15 +20,16 @@ public sealed partial class ChatboxWindow
         if (!Chatbox.CanSend(channel))
         {
             Chatbox.InputActive = false;
-            _theme.MutedLabel(channel.Id == ChatboxService.CombinedChannelId
-                ? "Select a channel to send messages."
-                : "This channel is read-only.");
+            _theme.MutedLabel("This channel is read-only.");
             return;
         }
 
         var spacing = _theme.Gap(0.4f);
         var buttonWidth = ImGui.GetFrameHeight();
         var buttons = Config.ShowEmojiPicker ? 2 : 1;
+
+        ImGui.SetCursorPosY(ImGui.GetCursorPosY() + _theme.PickerCaptionHeight());
+
         DrawSendTargetPicker(channel, buttonWidth);
         ImGui.SameLine(0, spacing);
 
@@ -73,33 +74,37 @@ public sealed partial class ChatboxWindow
         if (submitted) Submit(channel);
     }
 
-    private void DrawSendTargetPicker(ChatboxChannelState channel, float height)
+    private void DrawSendTargetPicker(ChatboxChannelState channel, float size)
     {
         var pinned = Chatbox.IsSendTypePinned(channel.Config);
         var active = Chatbox.ResolveSendType(channel.Config);
 
-        var preview = active != XivChatType.None
+        var label = active != XivChatType.None
             ? ChatboxService.LabelFor(active)
-            : "Pick channel";
+            : "Pick a channel";
 
         var items = new List<DropdownItem>();
         foreach (var type in ChatboxService.SendableChatTypes)
         {
             if (!ChatboxService.IsSendTargetAvailable(type)) continue;
-            items.Add(new DropdownItem { Key = type.ToString(), Label = ChatboxService.LabelFor(type) });
+            items.Add(new DropdownItem
+            {
+                Key = type.ToString(),
+                Label = ChatboxService.LabelFor(type),
+                Group = ChatboxService.SendGroupFor(type),
+            });
         }
 
-        var width = _theme.CompactPickerWidth(preview, 70f, 170f);
-        var popupWidth = MathF.Max(width, _theme.Scaled(240f));
-
         var tooltip = pinned
-            ? $"Sending as {preview}\nFixed by this channel's \"Send as\" setting."
-            : $"Sending as {preview}\nPick the game chat channel to send in.";
+            ? $"Sending as {label}\nFixed by this channel's \"Send as\" setting."
+            : $"Sending as {label}\nPick the game chat channel to send in.";
 
-        _theme.CompactPicker(
+        _theme.IconPicker(
             "chatbox-send-target",
-            new Vector2(width, height),
-            preview,
+            new Vector2(size, size),
+            FontAwesomeIcon.CommentDots,
+            label,
+            MathF.Max(_theme.Scaled(120f), ImGui.GetContentRegionAvail().X * 0.5f),
             items,
             active.ToString(),
             key =>
@@ -109,7 +114,7 @@ public sealed partial class ChatboxWindow
                 Config.LastSendChatType = parsed;
                 _plugin.Config.Save();
             },
-            popupWidth,
+            _theme.Scaled(260f),
             !pinned,
             tooltip);
     }

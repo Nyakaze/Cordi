@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Text;
 using System.Text.RegularExpressions;
 using Cordi.Configuration;
+using Cordi.Services.Emojis;
 
 namespace Cordi.Services.Chatbox;
 
@@ -411,12 +412,7 @@ public sealed class ChatboxContentParser
     }
 
     public static string CustomEmoteUrl(ulong emoteId, bool animated = false) =>
-        $"https://cdn.discordapp.com/emojis/{emoteId}.{(animated ? "gif" : "png")}?size=48&quality=lossless";
-
-    public static string CustomEmoteLink(ulong emoteId, bool animated = false) =>
-        animated
-            ? $"https://cdn.discordapp.com/emojis/{emoteId}.webp?size=96&animated=true"
-            : $"https://cdn.discordapp.com/emojis/{emoteId}.webp?size=96";
+        EmojiTranslator.EmoteUrl(emoteId, animated);
 
     private static readonly Dictionary<string, uint> _itemNameCache = new(StringComparer.OrdinalIgnoreCase);
     private static bool _itemCacheInitialized;

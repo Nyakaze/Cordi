@@ -183,26 +183,6 @@ public partial class ChatboxTab
                 innerWidth, () => Cfg.AutoScroll, v => Cfg.AutoScroll = v);
         }, "Messages");
 
-        Card.Draw("chatbox-combined", innerWidth =>
-        {
-            DrawToggleRow(
-                "chatbox-show-combined", FontAwesomeIcon.LayerGroup,
-                "Show combined Channel", "Adds a channel that merges every other channel.",
-                innerWidth, () => Cfg.ShowCombinedChannel, v => Cfg.ShowCombinedChannel = v);
-
-            DrawTextRow(
-                "chatbox-combined-name", FontAwesomeIcon.Tag,
-                "Combined Channel Name", "Label used in the navigation.",
-                innerWidth,
-                () => Cfg.CombinedChannelName,
-                v =>
-                {
-                    Cfg.CombinedChannelName = v;
-                    plugin.Chatbox.RebuildChannels();
-                },
-                32, "All", 200f);
-        }, "Combined Channel");
-
         Card.Draw("chatbox-colours", innerWidth =>
         {
             DrawColorRow(

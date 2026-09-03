@@ -70,6 +70,7 @@ public partial class ChatsTab
                 anchor,
                 "Every chat type can be mapped to a Discord channel.\n" +
                 "The toggle enables the advertisement filter for that chat type.\n" +
+                "The smiley button controls whether Discord emoji are translated before they reach the game.\n" +
                 "Tell needs to be mapped to a forum channel to be relayed."));
 
         DrawLinkshellCards(textChannels, forumChannels);
@@ -150,14 +151,8 @@ public partial class ChatsTab
             iconColor: color,
             title: label,
             subtitle: description,
-            controlWidth: 240f,
-            drawControl: (_, width) => theme.ChannelPicker(
-                $"combo-{chatType}",
-                currentId,
-                targetChannels,
-                newId => ApplyMapping(chatType, newId, isTell),
-                showLabel: false,
-                width: width),
+            controlWidth: 282f,
+            drawControl: (pos, width) => DrawMappingControls(chatType, currentId, mapping, hasChannel, isTell, targetChannels, pos, width),
             toggleValue: hasChannel && mapping!.EnableAdvertisementFilter,
             onToggle: value =>
             {
@@ -171,6 +166,52 @@ public partial class ChatsTab
             toggleTooltip: "Filter advertisements for this chat type",
             toggleDisabledTooltip: "Map a Discord channel first",
             rowWidth: rowWidth);
+    }
+
+    private void DrawMappingControls(
+        XivChatType chatType,
+        string currentId,
+        ChannelMapping? mapping,
+        bool hasChannel,
+        bool isTell,
+        IReadOnlyList<DiscordChannel>? targetChannels,
+        Vector2 pos,
+        float width)
+    {
+        float action = theme.Scaled(UiTheme.ActionButtonSize);
+        float gap = theme.Gap();
+        float pickerWidth = MathF.Max(theme.Scaled(80f), width - action - gap);
+
+        ImGui.SetCursorScreenPos(pos);
+        theme.ChannelPicker(
+            $"combo-{chatType}",
+            currentId,
+            targetChannels,
+            newId => ApplyMapping(chatType, newId, isTell),
+            showLabel: false,
+            width: pickerWidth);
+
+        bool translate = mapping?.TranslateEmoji ?? true;
+        var color = hasChannel && translate ? UiTheme.TileAmber : theme.MutedText;
+
+        string tooltip = !hasChannel
+            ? "Map a Discord channel first"
+            : translate
+                ? "Emoji translation on — Discord emoji and server emotes become text the game can show"
+                : "Emoji translation off — Discord content is forwarded unchanged";
+
+        bool clicked = theme.IconAction(
+            $"emoji-{chatType}",
+            new Vector2(pos.X + pickerWidth + gap, pos.Y),
+            FontAwesomeIcon.Smile,
+            color,
+            tooltip,
+            restColor: color);
+
+        if (!clicked || !hasChannel || mapping == null) return;
+
+        mapping.TranslateEmoji = !mapping.TranslateEmoji;
+        plugin.Config.Save();
     }
 
     private void ApplyMapping(XivChatType chatType, string newId, bool isTell)
