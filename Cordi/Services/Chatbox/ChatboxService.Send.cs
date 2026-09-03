@@ -1,10 +1,6 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
+﻿using System.Collections.Generic;
 using Cordi.Configuration;
 using Cordi.Domain;
-using Cordi.Services.Discord;
 using Dalamud.Game.Text;
 
 namespace Cordi.Services.Chatbox;
@@ -14,14 +10,19 @@ public sealed partial class ChatboxService
     public bool CanSend(ChatboxChannelState? channel) =>
         channel != null
         && channel.Id != CombinedChannelId
-        && (SupportsGameSend(channel) || SupportsDiscordSend(channel));
+        && (ResolveSendType(channel.Config) != XivChatType.None || IsTellChannel(channel));
 
-    public static bool SupportsGameSend(ChatboxChannelState channel) =>
-        channel.Config.SendToGame
-        && (channel.Config.SendGameChatType != XivChatType.None || IsTellChannel(channel));
+    public XivChatType ResolveSendType(ChatboxChannelConfig config)
+    {
+        if (config.SendGameChatType != XivChatType.None)
+            return config.SendGameChatType;
 
-    public static bool SupportsDiscordSend(ChatboxChannelState channel) =>
-        !SupportsGameSend(channel) && ulong.TryParse(channel.Config.DiscordChannelId, out _);
+        var fallback = Config.LastSendChatType;
+        return IsSendTargetAvailable(fallback) ? fallback : XivChatType.None;
+    }
+
+    public bool IsSendTypePinned(ChatboxChannelConfig config) =>
+        config.SendGameChatType != XivChatType.None;
 
     private static bool IsTellChannel(ChatboxChannelState channel) =>
         channel.Config.GameChatTypes.Contains(XivChatType.TellIncoming)
@@ -41,23 +42,9 @@ public sealed partial class ChatboxService
 
         foreach (var part in SplitForSending(text))
         {
-            SendPart(channel, part, useReply ? reply : null);
+            SendToGame(channel, part, useReply ? reply : null);
             useReply = false;
         }
-    }
-
-    private void SendPart(ChatboxChannelState channel, string text, ChatboxReplyRef? reply)
-    {
-        var sentToGame = false;
-
-        if (SupportsGameSend(channel))
-            sentToGame = SendToGame(channel, text, reply);
-
-        if (SupportsDiscordSend(channel))
-            SendToDiscord(channel, text);
-
-        if (!sentToGame)
-            EchoLocally(channel, text, reply);
     }
 
     private List<string> SplitForSending(string text)
@@ -89,29 +76,33 @@ public sealed partial class ChatboxService
         return parts;
     }
 
-    private bool SendToGame(ChatboxChannelState channel, string text, ChatboxReplyRef? reply)
+    private void SendToGame(ChatboxChannelState channel, string text, ChatboxReplyRef? reply)
     {
         text = EncodeEmojiForGame(StripEmoteTokens(text));
 
         var body = reply != null ? FormatGameReply(reply, text) : text;
 
-        if (IsTellChannel(channel) && channel.Config.SendGameChatType == XivChatType.None)
+        if (reply != null && IsTellChannel(channel) && !IsSendTypePinned(channel.Config))
         {
             var target = ResolveTellTarget(channel, reply);
             if (string.IsNullOrEmpty(target))
             {
                 PostSystemMessage(channel.Id, "Reply to a tell to choose a recipient.");
-                return true;
+                return;
             }
 
             _ = _plugin._chat.SendTellAsync(target!, text);
-            return true;
+            return;
         }
 
-        if (channel.Config.SendGameChatType == XivChatType.None) return false;
+        var type = ResolveSendType(channel.Config);
+        if (type == XivChatType.None)
+        {
+            PostSystemMessage(channel.Id, "Pick a chat channel next to the input field first.");
+            return;
+        }
 
-        _ = _plugin._chat.SendAsync(channel.Config.SendGameChatType, body);
-        return true;
+        _ = _plugin._chat.SendAsync(type, body);
     }
 
     private string? ResolveTellTarget(ChatboxChannelState channel, ChatboxReplyRef? reply)
@@ -141,43 +132,4 @@ public sealed partial class ChatboxService
             .Replace("{message}", text);
     }
 
-    private void SendToDiscord(ChatboxChannelState channel, string text)
-    {
-        if (!ulong.TryParse(channel.Config.DiscordChannelId, out var discordChannelId)) return;
-
-        var content = ConvertShortcodesForDiscord(text);
-        var local = _plugin.cachedLocalPlayer;
-        var sender = (Player?)_plugin.LocalPlayer.Current
-                     ?? Player.FromNameWorld(
-                         local?.Name.TextValue ?? "Cordi",
-                         local?.HomeWorld.Value.Name.ExtractText() ?? string.Empty);
-
-        _ = _plugin.Discord.SendWebhookMessage(discordChannelId, content, sender);
-    }
-
-    private void EchoLocally(ChatboxChannelState channel, string text, ChatboxReplyRef? reply)
-    {
-        var local = _plugin.cachedLocalPlayer;
-        var resolver = BuildResolver(channel);
-        var parsed = _parser.Parse(text, resolver);
-
-        var entry = new ChatboxMessage
-        {
-            ChannelId = channel.Id,
-            Origin = SupportsDiscordSend(channel) ? ChatboxOrigin.Discord : ChatboxOrigin.Game,
-            AuthorName = local?.Name.TextValue ?? "You",
-            AuthorWorld = local?.HomeWorld.Value.Name.ExtractText() ?? string.Empty,
-            AuthorKey = "self",
-            RawContent = text,
-            Segments = parsed.Segments,
-            IsSelf = true,
-            AuthorColor = channel.Config.Color,
-            OnlyEmotes = parsed.OnlyEmotes,
-            Reply = reply,
-            GameChatType = channel.Config.SendGameChatType,
-        };
-
-        Publish(channel, entry, notify: false);
-        RequestGameAvatar(entry);
-    }
 }

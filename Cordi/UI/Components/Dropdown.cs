@@ -53,6 +53,75 @@ public sealed class Dropdown
         DrawPopup(popupId, min, max, width, items, isSelected, onToggle);
     }
 
+    public float MeasureCompact(string preview) =>
+        ImGui.CalcTextSize(preview).X + theme.PadX(0.7f) * 2f + theme.Scaled(14f);
+
+    public void DrawCompact(
+        string id,
+        Vector2 size,
+        string preview,
+        IReadOnlyList<DropdownItem> items,
+        string selectedKey,
+        Action<string> onSelect,
+        float popupWidth,
+        bool enabled = true,
+        string tooltip = "")
+    {
+        string popupId = $"##dropdown-popup-{id}";
+        var draw = ImGui.GetWindowDrawList();
+        var min = ImGui.GetCursorScreenPos();
+        var max = min + size;
+
+        bool open = ImGui.IsPopupOpen(popupId);
+        bool clicked = ImGui.InvisibleButton($"##dropdown-{id}", size) && enabled;
+        bool hovered = ImGui.IsItemHovered();
+        var afterButton = ImGui.GetCursorScreenPos();
+
+        if (hovered && enabled)
+            ImGui.SetMouseCursor(ImGuiMouseCursor.Hand);
+
+        float alpha = enabled ? 1f : 0.5f;
+        var fill = hovered && enabled || open ? theme.FrameBgHover : theme.FrameBg;
+
+        draw.AddRectFilled(min, max, Fade(fill, alpha), theme.Radius());
+        draw.AddRect(min, max, Fade(open ? theme.Accent : theme.Border, alpha), theme.Radius());
+
+        float chevronSpace = theme.Scaled(14f);
+        var textSize = ImGui.CalcTextSize(preview);
+        var textPos = new Vector2(min.X + theme.PadX(0.7f), min.Y + (size.Y - textSize.Y) * 0.5f);
+
+        draw.PushClipRect(min, new Vector2(max.X - chevronSpace, max.Y), true);
+        draw.AddText(textPos, Fade(theme.Text, alpha), preview);
+        draw.PopClipRect();
+
+        using (ImRaii.PushFont(UiBuilder.IconFont))
+        {
+            var glyph = FontAwesomeIcon.ChevronDown.ToIconString();
+            var glyphSize = ImGui.CalcTextSize(glyph);
+            draw.AddText(
+                new Vector2(max.X - theme.PadX(0.4f) - glyphSize.X, min.Y + (size.Y - glyphSize.Y) * 0.5f),
+                Fade(hovered && enabled || open ? theme.Text : theme.FaintText, alpha),
+                glyph);
+        }
+
+        if (!string.IsNullOrEmpty(tooltip) && hovered)
+            theme.Tooltip(tooltip);
+
+        if (clicked)
+            ImGui.OpenPopup(popupId);
+
+        ImGui.SetCursorScreenPos(afterButton);
+
+        DrawPopup(popupId, min, max, popupWidth, items, key => key == selectedKey, key =>
+        {
+            onSelect(key);
+            ImGui.CloseCurrentPopup();
+        }, above: true);
+    }
+
+    private static uint Fade(Vector4 color, float alpha) =>
+        ImGui.GetColorU32(new Vector4(color.X, color.Y, color.Z, color.W * alpha));
+
     private (string PopupId, Vector2 Min, Vector2 Max) DrawHeader(
         string id,
         float width,
@@ -107,14 +176,17 @@ public sealed class Dropdown
         float width,
         IReadOnlyList<DropdownItem> items,
         Func<string, bool> isSelected,
-        Action<string> onSelect)
+        Action<string> onSelect,
+        bool above = false)
     {
         float rowHeight = theme.Scaled(30f);
         float spacing = theme.Gap(0.2f);
         float wanted = items.Count * (rowHeight + spacing) + theme.PadY(1.2f);
         float capped = MathF.Min(wanted, theme.Scaled(320f));
 
-        ImGui.SetNextWindowPos(new Vector2(min.X, max.Y + theme.Gap(0.35f)));
+        ImGui.SetNextWindowPos(above
+            ? new Vector2(min.X, min.Y - capped - theme.Gap(0.35f))
+            : new Vector2(min.X, max.Y + theme.Gap(0.35f)));
         ImGui.SetNextWindowSize(new Vector2(width, capped));
 
         using (ImRaii.PushColor(ImGuiCol.PopupBg, theme.CardBg))

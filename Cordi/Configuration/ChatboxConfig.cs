@@ -59,9 +59,7 @@ public class ChatboxChannelConfig
     public int Order { get; set; }
 
     public List<XivChatType> GameChatTypes { get; set; } = new();
-    public string DiscordChannelId { get; set; } = string.Empty;
 
-    public bool SendToGame { get; set; } = true;
     public XivChatType SendGameChatType { get; set; } = XivChatType.None;
 
     public bool MuteNotifications { get; set; }
@@ -168,6 +166,7 @@ public class ChatboxConfig
     public bool KeepFocusAfterSend { get; set; } = true;
     public bool SplitLongMessages { get; set; } = true;
     public int MaxMessagesPerChannel { get; set; } = 5000;
+    public XivChatType LastSendChatType { get; set; } = XivChatType.Say;
 
     public bool ImageCacheEnabled { get; set; } = true;
     public int ImageCacheMaxEntries { get; set; } = 600;

@@ -455,6 +455,21 @@ public sealed partial class UiTheme
         Dropdown.Draw(id, pickerWidth, preview, true, items, currentKey, onSelect);
     }
 
+    public float CompactPickerWidth(string preview, float min, float max) =>
+        Math.Clamp(Dropdown.MeasureCompact(preview), Scaled(min), Scaled(max));
+
+    public void CompactPicker(
+        string id,
+        Vector2 size,
+        string preview,
+        IReadOnlyList<Cordi.UI.Components.DropdownItem> items,
+        string currentKey,
+        Action<string> onSelect,
+        float popupWidth,
+        bool enabled = true,
+        string tooltip = "") =>
+        Dropdown.DrawCompact(id, size, preview, items, currentKey, onSelect, popupWidth, enabled, tooltip);
+
     public void ThreadPicker(
         string id,
         string currentId,

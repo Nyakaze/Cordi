@@ -41,7 +41,8 @@ public sealed class SettingsRow
         IDalamudTextureWrap? iconTexture = null,
         Action<Vector2, float>? drawTitleBadge = null,
         bool toggleEnabled = true,
-        string toggleDisabledTooltip = "")
+        string toggleDisabledTooltip = "",
+        Action? onRowItem = null)
     {
         var draw = ImGui.GetWindowDrawList();
         float height = rowHeight > 0f ? theme.Scaled(rowHeight) : theme.Scaled(UiTheme.SettingsRowHeight);
@@ -54,6 +55,8 @@ public sealed class SettingsRow
         bool hovered = ImGui.IsItemHovered();
         if (hovered)
             ImGui.SetMouseCursor(ImGuiMouseCursor.Hand);
+
+        onRowItem?.Invoke();
 
         draw.AddRectFilled(min, max, ImGui.GetColorU32(hovered ? theme.RowHover : theme.RowBg), theme.Radius());
 

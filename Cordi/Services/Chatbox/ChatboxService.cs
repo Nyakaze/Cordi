@@ -5,6 +5,7 @@ using System.Numerics;
 using System.Threading;
 using Cordi.Configuration;
 using Cordi.Core;
+using Cordi.Services.Features;
 using Dalamud.Game.Text;
 
 namespace Cordi.Services.Chatbox;
@@ -45,7 +46,6 @@ public sealed partial class ChatboxService : IDisposable
             Id = CombinedChannelId,
             Name = plugin.Config.Chatbox.CombinedChannelName,
             ShortLabel = "ALL",
-            SendToGame = false,
         });
 
         RebuildChannels();
@@ -255,7 +255,36 @@ public sealed partial class ChatboxService : IDisposable
             Hydrate(channel);
     }
 
-    public static string LabelFor(XivChatType type) => type switch
+    public static readonly XivChatType[] SendableChatTypes =
+    {
+        XivChatType.Say,
+        XivChatType.Shout,
+        XivChatType.Yell,
+        XivChatType.Party,
+        XivChatType.Alliance,
+        XivChatType.FreeCompany,
+        XivChatType.Ls1,
+        XivChatType.Ls2,
+        XivChatType.Ls3,
+        XivChatType.Ls4,
+        XivChatType.Ls5,
+        XivChatType.Ls6,
+        XivChatType.Ls7,
+        XivChatType.Ls8,
+        XivChatType.CrossLinkShell1,
+        XivChatType.CrossLinkShell2,
+        XivChatType.CrossLinkShell3,
+        XivChatType.CrossLinkShell4,
+        XivChatType.CrossLinkShell5,
+        XivChatType.CrossLinkShell6,
+        XivChatType.CrossLinkShell7,
+        XivChatType.CrossLinkShell8,
+    };
+
+    public static bool IsSendTargetAvailable(XivChatType type) =>
+        Array.IndexOf(SendableChatTypes, type) >= 0 && LinkshellNameService.IsJoined(type);
+
+    public static string LabelFor(XivChatType type) => LinkshellNameService.LabelFor(type) ?? type switch
     {
         XivChatType.Say => "Say",
         XivChatType.Shout => "Shout",

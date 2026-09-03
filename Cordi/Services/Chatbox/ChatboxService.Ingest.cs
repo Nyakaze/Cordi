@@ -12,8 +12,6 @@ using Cordi.Services.Discord;
 using Dalamud.Game.Text;
 using Dalamud.Game.Text.SeStringHandling;
 using Dalamud.Game.Text.SeStringHandling.Payloads;
-using Crovus.Events;
-using Crovus.Models;
 
 namespace Cordi.Services.Chatbox;
 
@@ -293,96 +291,6 @@ public sealed partial class ChatboxService
         return segments;
     }
 
-    public void IngestDiscordMessage(MessageCreatedEvent e)
-    {
-        if (_disposed || !Config.Enabled || e == null) return;
-
-        var message = e.Message;
-        ulong channelId = e.ChannelId;
-        var channelKey = channelId.ToString();
-        var targets = Channels
-            .Where(c => c.Config.DiscordChannelId == channelKey)
-            .ToList();
-
-        if (targets.Count == 0) return;
-
-        var author = message.Author;
-        var selfId = ParseSelfDiscordId();
-        var isBot = _plugin.DiscordConnection.Session.IsSelf(author);
-        var isSelf = (selfId != 0 && author.Id == selfId) || isBot;
-
-        // Check if this Discord channel is bridged to in-game chat (standard, extra chat, or tell)
-        var isBridgedToGame = targets.Any(t => t.Config.GameChatTypes.Count > 0 || t.Config.SendToGame)
-                              || _plugin.Config.Chat.Mappings.Any(m => m.DiscordChannelId == channelKey)
-                              || _plugin.Config.Chat.ExtraChatMappings.Any(m => m.Value.DiscordChannelId == channelKey)
-                              || _plugin.Config.Chat.TellThreadMappings.ContainsValue(channelKey);
-
-        // 1. If this message is a Webhook message on a bridged channel, it's an echo of a game message already ingested by IngestGameMessage -> SKIP
-        if (message.IsWebhook && isBridgedToGame)
-            return;
-
-        // 2. If this Discord channel routes incoming Discord messages into the game chat via DiscordMessageRouter, skip ingesting it here because it will be ingested as an in-game message
-        var isRoutedToGame = _plugin.Config.Chat.Mappings.Any(m => m.DiscordChannelId == channelKey)
-                             || _plugin.Config.Chat.ExtraChatMappings.Any(m => m.Value.DiscordChannelId == channelKey)
-                             || _plugin.Config.Chat.TellThreadMappings.ContainsValue(channelKey);
-
-        if (isRoutedToGame)
-            return;
-
-        // 3. If this message was sent by the user from Discord on a bridged channel, DiscordMessageRouter routes it into game chat, so it will be ingested as an in-game message -> SKIP so only in-game message is shown
-        if (isSelf && isBridgedToGame)
-            return;
-
-        var displayName = (e.Guild != null && !string.IsNullOrEmpty(e.Member?.Nickname))
-            ? e.Member.Nickname
-            : author.DisplayName;
-
-        var avatarUrl = author.AvatarUrl;
-        var raw = message.Content ?? string.Empty;
-        var attachments = message.Attachments.Select(a => a.Url).Where(u => !string.IsNullOrEmpty(u)).ToList();
-
-        var explicitlyMentioned = message.MentionsEveryone
-                                  || (selfId != 0 && message.Mentions.Any(u => u.Id == selfId));
-
-        foreach (var target in targets)
-        {
-            var resolver = BuildResolver(target);
-            var parsed = _parser.Parse(raw, resolver);
-
-            var entry = new ChatboxMessage
-            {
-                ChannelId = target.Id,
-                Origin = ChatboxOrigin.Discord,
-                AuthorKey = author.Id.ToString(),
-                AuthorName = displayName,
-                AvatarUrl = avatarUrl,
-                DiscordMessageId = message.Id,
-                DiscordChannelId = channelId,
-                RawContent = raw,
-                Segments = parsed.Segments,
-                MentionsMe = explicitlyMentioned || parsed.MentionsMe || target.Config.TreatAllAsMention,
-                IsSelf = isSelf,
-                AuthorColor = target.Config.Color,
-                Attachments = attachments,
-                OnlyEmotes = parsed.OnlyEmotes,
-                Reply = BuildReplyRef(message.ReplyTo),
-            };
-
-            Publish(target, entry);
-        }
-    }
-
-    public void DeleteDiscordMessage(ulong discordMessageId)
-    {
-        if (discordMessageId == 0) return;
-
-        foreach (var channel in Channels)
-            channel.RemoveByDiscordId(discordMessageId);
-
-        _combined.RemoveByDiscordId(discordMessageId);
-        Store.DeleteByDiscordMessageId(discordMessageId);
-    }
-
     public void PostSystemMessage(string channelId, string text)
     {
         var target = GetChannel(channelId);
@@ -462,19 +370,6 @@ public sealed partial class ChatboxService
         if (string.IsNullOrEmpty(text)) return string.Empty;
         text = text.Replace('\n', ' ').Trim();
         return text.Length <= max ? text : text[..max] + "…";
-    }
-
-    private ChatboxReplyRef? BuildReplyRef(DiscordMessage? referenced)
-    {
-        if (referenced == null) return null;
-
-        return new ChatboxReplyRef
-        {
-            DiscordMessageId = referenced.Id,
-            AuthorName = referenced.Author.DisplayName,
-            AvatarUrl = referenced.Author.AvatarUrl,
-            Excerpt = Excerpt(referenced.Content ?? string.Empty, Config.ReplyExcerptLength),
-        };
     }
 
     public ChatboxReplyRef BuildReplyRef(ChatboxMessage message) => new()
@@ -722,6 +617,4 @@ public sealed partial class ChatboxService
             return EmojiIndex.TryGetShortcode(name, out var unicode) ? unicode : match.Value;
         });
     }
-
-    private string ConvertShortcodesForDiscord(string text) => ConvertShortcodes(text).Trim();
 }

@@ -94,11 +94,9 @@ public static class SettingsCatalog
             ("", "Split long Messages", "character limit truncate 480"));
 
         Page(index, PageIds.ChatboxChannels, "Channels", FontAwesomeIcon.Hashtag,
-            ("", "Channels", "add channel discord game chat"),
+            ("", "Channels", "add channel game chat reorder drag"),
             ("", "Game Chats", "chat type say shout linkshell party"),
-            ("", "Discord Channel", "discord channel id link"),
-            ("", "Send to Game", "relay outgoing"),
-            ("", "Send as", "outgoing chat type"),
+            ("", "Send as", "outgoing chat type linkshell pin"),
             ("", "Rail Label", "short label navigation"),
             ("", "Icon URL", "channel icon image"),
             ("", "Mute Notifications", "channel silent"),

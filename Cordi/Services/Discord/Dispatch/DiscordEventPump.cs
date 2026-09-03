@@ -47,7 +47,6 @@ public sealed class DiscordEventPump : IDisposable
         _bound = true;
 
         _connection.Register<MessageCreatedEvent>(OnMessageCreatedAsync);
-        _connection.Register<MessageDeletedEvent>(OnMessageDeletedAsync);
         _connection.Register<ReactionAddedEvent>(OnReactionAddedAsync);
     }
 
@@ -67,12 +66,6 @@ public sealed class DiscordEventPump : IDisposable
         _plugin.Config.Stats.IncrementTotal();
 
         await FanOutAsync(_registry.MessageHandlers, handler => handler.HandleAsync(e, ct));
-    }
-
-    private Task OnMessageDeletedAsync(MessageDeletedEvent e, CancellationToken ct)
-    {
-        _plugin.Chatbox?.DeleteDiscordMessage(e.Message.Id);
-        return Task.CompletedTask;
     }
 
     private async Task OnReactionAddedAsync(ReactionAddedEvent e, CancellationToken ct)
