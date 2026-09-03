@@ -51,17 +51,31 @@ public sealed class EmojiTranslator
         RegexOptions.Compiled);
 
     private readonly Func<ChatboxEmoteLibrary?> _library;
+    private readonly Func<bool> _useEmoticons;
 
-    public EmojiTranslator(GuildEmoteCache guilds, Func<ChatboxEmoteLibrary?> library)
+    public EmojiTranslator(GuildEmoteCache guilds, Func<ChatboxEmoteLibrary?> library, Func<bool> useEmoticons)
     {
         Guilds = guilds;
         _library = library;
+        _useEmoticons = useEmoticons;
     }
 
     public GuildEmoteCache Guilds { get; }
 
     public static string EmoteUrl(ulong id, bool animated) =>
         EmojiParser.ToUrl(new Snowflake(id), animated, EmoteSize);
+
+    public static string LabeledEmoteUrl(ulong id, bool animated, string? name) =>
+        WithName(EmoteUrl(id, animated), name);
+
+    private static string WithName(string url, string? name)
+    {
+        if (string.IsNullOrWhiteSpace(name) || name == "emote") return url;
+
+        var separator = url.Contains('?') ? '&' : '?';
+
+        return $"{url}{separator}name={Uri.EscapeDataString(name)}";
+    }
 
     public string ToGame(string? content, bool asUrls)
     {
@@ -72,10 +86,11 @@ public sealed class EmojiTranslator
             if (!ulong.TryParse(match.Groups["id"].Value, out var id)) return match.Value;
 
             var animated = IsAnimated(match.Groups["ext"].Value);
+            var name = CleanName(match.Groups["name"].Value);
 
             return asUrls
-                ? $" {EmoteUrl(id, animated)} "
-                : $":{CleanName(match.Groups["name"].Value)}:";
+                ? $" {LabeledEmoteUrl(id, animated, name)} "
+                : $":{name}:";
         });
 
         text = MentionRegex.Replace(text, match =>
@@ -84,7 +99,7 @@ public sealed class EmojiTranslator
                 return match.Value;
 
             return asUrls
-                ? $" {EmoteUrl(id.Value, emoji.Animated)} "
+                ? $" {LabeledEmoteUrl(id.Value, emoji.Animated, emoji.Name)} "
                 : $":{emoji.Name}:";
         });
 
@@ -104,7 +119,7 @@ public sealed class EmojiTranslator
 
                 return Guilds.Contains(id.Value)
                     ? match.Value
-                    : $" {EmoteUrl(id.Value, emoji.Animated)} ";
+                    : $" {LabeledEmoteUrl(id.Value, emoji.Animated, emoji.Name)} ";
             }
 
             var name = match.Groups["code"].Value;
@@ -112,7 +127,7 @@ public sealed class EmojiTranslator
             if (Guilds.TryByName(name, out var guildEmote)) return guildEmote.Token;
 
             var seen = _library()?.FindByName(name);
-            if (seen != null) return $" {seen.ImageUrl} ";
+            if (seen != null) return $" {WithName(seen.ImageUrl, seen.Name)} ";
 
             return EmojiIndex.TryGetShortcode(name, out var unicode) ? unicode : match.Value;
         });
@@ -201,6 +216,8 @@ public sealed class EmojiTranslator
 
     private string? ShortcodeFor(string cluster)
     {
+        if (_useEmoticons() && EmojiIndex.TryGetEmoticon(cluster, out var emoticon)) return emoticon;
+
         var indexed = EmojiIndex.TryGetShortcodeName(cluster, out var name) ? name : null;
         var catalog = EmojiCatalog.Find(cluster)?.Shortcode;
 

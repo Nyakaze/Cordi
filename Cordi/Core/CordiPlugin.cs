@@ -167,7 +167,8 @@ public class CordiPlugin : IDalamudPlugin
 
         Emoji = new EmojiTranslator(
             new GuildEmoteCache(() => Channels?.Guilds),
-            () => Chatbox?.Emotes);
+            () => Chatbox?.Emotes,
+            () => Config.Chatbox.UseEmoticonsInGameChat);
 
         Chatbox = new ChatboxService(this);
 

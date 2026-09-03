@@ -84,6 +84,12 @@ public partial class ChatboxTab
                 "Rewrites custom emotes into their image link before forwarding to game chat. Off forwards the shorter :name: form.",
                 innerWidth, () => Cfg.RelayEmotesAsUrls, v => Cfg.RelayEmotesAsUrls = v);
 
+            DrawToggleRow(
+                "chatbox-emoticons", FontAwesomeIcon.Smile,
+                "Send Emoticons to Game Chat",
+                "Writes common emoji as :P or :) instead of :stuck_out_tongue: when forwarding to game chat.",
+                innerWidth, () => Cfg.UseEmoticonsInGameChat, v => Cfg.UseEmoticonsInGameChat = v);
+
             DrawActionRow(
                 "chatbox-clear-favorites", FontAwesomeIcon.Star, UiTheme.TileAmber,
                 "Favourites & Recents", $"{Cfg.FavoriteEmojis.Count} favourites, {Cfg.RecentEmojis.Count} recent.",

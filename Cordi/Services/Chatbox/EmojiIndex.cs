@@ -300,6 +300,41 @@ public static class EmojiIndex
         { "poo", "\U0001F4A9" },
     };
 
+    private static readonly Dictionary<string, string> UnicodeToEmoticon = new(StringComparer.Ordinal)
+    {
+        { "\U0001F642", ":)" },
+        { "\U0001F603", ":D" },
+        { "\U0001F600", ":D" },
+        { "\U0001F61B", ":P" },
+        { "\U0001F61C", ";P" },
+        { "\U0001F609", ";)" },
+        { "\U0001F641", ":(" },
+        { "\U0001F622", ":'(" },
+        { "\U0001F62E", ":o" },
+        { "\U0001F610", ":|" },
+        { "\U0001F611", ":|" },
+        { "\U0001F60E", "B)" },
+        { "\U0001F61D", "XP" },
+        { "\U0001F620", ">:(" },
+        { "\U0001F615", ":/" },
+        { "\U0001F617", ":*" },
+        { "\U0001F60A", "^_^" },
+        { "❤", "<3" },
+        { "❤️", "<3" },
+        { "\U0001F494", "</3" },
+    };
+
+    public static bool TryGetEmoticon(string cluster, out string emoticon)
+    {
+        if (UnicodeToEmoticon.TryGetValue(cluster, out emoticon!)) return true;
+
+        if (cluster.EndsWith('️')
+            && UnicodeToEmoticon.TryGetValue(cluster[..^1], out emoticon!)) return true;
+
+        emoticon = string.Empty;
+        return false;
+    }
+
     public static bool TryGetShortcode(string name, out string unicode)
     {
         if (ShortcodeToUnicode.TryGetValue(name, out unicode!)) return true;

@@ -79,7 +79,7 @@ public class ChatMessenger : IAsyncDisposable
         {
             if (!_clientState.IsLoggedIn)
             {
-                _chat.PrintError("Nicht eingeloggt – Nachricht nicht gesendet.", "Cordi");
+                _chat.PrintError("Not logged in — message not sent.", "Cordi");
                 return;
             }
 
@@ -113,7 +113,7 @@ public class ChatMessenger : IAsyncDisposable
 
             if (cmd is null)
             {
-                _chat.PrintError($"{type} ist kein sendbarer Kanal.", "Cordi");
+                _chat.PrintError($"{type} is not a sendable channel.", "Cordi");
                 return;
             }
 

@@ -300,7 +300,7 @@ public sealed class ChatboxContentParser
             }
         }
 
-        if (!cfg.RenderUnicodeEmoji || !EmojiIndex.TryGetShortcode(name, out var unicode))
+        if (!EmojiIndex.TryGetShortcode(name, out var unicode))
             return false;
 
         var codepoints = EmojiIndex.ToCodePointName(unicode);
