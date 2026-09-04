@@ -23,7 +23,17 @@ public sealed partial class ChatboxWindow : Window, IDisposable
     private readonly ChatboxEmojiPicker _picker;
     private readonly ChatboxEmojiAutocomplete _autocomplete;
 
+    private readonly ChatboxEmoteFont _emoteFont = new();
+    private readonly ImGui.ImGuiInputTextCallbackPtrDelegate _inputCallback;
+
     private string _input = string.Empty;
+    private string? _pendingToken;
+    private int _pendingStart;
+    private int _pendingLength;
+    private bool _inputWasActive;
+    private bool _clearSelection;
+    private Vector2 _inputMin;
+    private float _inputWidth;
     private ChatboxReplyRef? _replyTarget;
     private long _highlightSeq;
     private DateTime _highlightUntil = DateTime.MinValue;
@@ -37,6 +47,7 @@ public sealed partial class ChatboxWindow : Window, IDisposable
         _plugin = plugin;
         _picker = new ChatboxEmojiPicker(plugin, _theme);
         _autocomplete = new ChatboxEmojiAutocomplete(plugin, _theme);
+        _inputCallback = InputCallback;
 
         SizeConstraints = new WindowSizeConstraints
         {
@@ -267,7 +278,11 @@ public sealed partial class ChatboxWindow : Window, IDisposable
 
         using (var list = ImRaii.Child($"##chatbox-messages-{channel.Id}", new Vector2(0, -inputHeight), false))
         {
-            if (list) DrawMessages(channel);
+            if (list)
+            {
+                DrawMessages(channel);
+                DrawAutocomplete();
+            }
         }
 
         DrawInputBar(channel);
@@ -311,5 +326,6 @@ public sealed partial class ChatboxWindow : Window, IDisposable
 
     public void Dispose()
     {
+        _emoteFont.Dispose();
     }
 }

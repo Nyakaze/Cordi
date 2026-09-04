@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Numerics;
+using System.Text;
 using Cordi.Configuration;
 using Cordi.Services.Chatbox;
 using Cordi.UI.Components;
@@ -26,26 +27,16 @@ public sealed partial class ChatboxWindow
 
         var spacing = _theme.Gap(0.4f);
         var buttonWidth = ImGui.GetFrameHeight();
-        var buttons = Config.ShowEmojiPicker ? 2 : 1;
+        var buttons = Config.ShowEmojiPicker ? 1 : 0;
 
         ImGui.SetCursorPosY(ImGui.GetCursorPosY() + _theme.PickerCaptionHeight());
 
         var escapeConsumed = false;
 
-        if (_autocomplete.IsOpen)
+        if (_autocomplete.IsOpen && ImGui.IsKeyPressed(ImGuiKey.Escape))
         {
-            if (ImGui.IsKeyPressed(ImGuiKey.DownArrow)) _autocomplete.MoveSelection(1);
-            if (ImGui.IsKeyPressed(ImGuiKey.UpArrow)) _autocomplete.MoveSelection(-1);
-
-            if (ImGui.IsKeyPressed(ImGuiKey.Escape))
-            {
-                _autocomplete.Dismiss();
-                escapeConsumed = true;
-            }
-            else if (ImGui.IsKeyPressed(ImGuiKey.Tab))
-            {
-                ApplyCompletion(_autocomplete.Accept());
-            }
+            _autocomplete.Dismiss();
+            escapeConsumed = true;
         }
 
         DrawSendTargetPicker(channel, buttonWidth);
@@ -59,7 +50,10 @@ public sealed partial class ChatboxWindow
         {
             ImGui.SetKeyboardFocusHere();
             _focusInput = false;
+            _clearSelection = true;
         }
+
+        using var emoteFont = _emoteFont.Push();
 
         _theme.PushInputScope();
         var submitted = ImGui.InputTextWithHint(
@@ -67,19 +61,26 @@ public sealed partial class ChatboxWindow
             $"Message {channel.Config.Name}",
             ref _input,
             ChatboxConfig.InputBufferLength,
-            ImGuiInputTextFlags.EnterReturnsTrue);
+            ImGuiInputTextFlags.EnterReturnsTrue
+            | ImGuiInputTextFlags.CallbackAlways
+            | ImGuiInputTextFlags.CallbackCompletion
+            | ImGuiInputTextFlags.CallbackHistory,
+            _inputCallback);
         _theme.PopInputScope();
 
         var inputMin = ImGui.GetItemRectMin();
-        var inputWidth = ImGui.GetItemRectSize().X;
+        var inputMax = ImGui.GetItemRectMax();
         var inputActive = ImGui.IsItemActive();
         var pickerOpen = false;
 
-        _autocomplete.Update(_input);
+        _inputMin = inputMin;
+        _inputWidth = ImGui.GetItemRectSize().X;
+
+        DrawInlineEmotes(inputMin, inputMax);
 
         if (submitted && _autocomplete.IsOpen)
         {
-            ApplyCompletion(_autocomplete.Accept());
+            QueueCompletion(_autocomplete.Accept());
             submitted = false;
         }
 
@@ -94,14 +95,12 @@ public sealed partial class ChatboxWindow
 
         Chatbox.InputActive = inputActive || pickerOpen;
 
-        ImGui.SameLine(0, spacing);
-        if (_theme.IconButton("##chatbox-send", FontAwesomeIcon.PaperPlane, "Send")) submitted = true;
-
         if (inputActive && !pickerOpen && !escapeConsumed && _replyTarget != null && ImGui.IsKeyPressed(ImGuiKey.Escape))
             CancelReply();
 
-        var picked = _autocomplete.Draw(inputMin, inputWidth);
-        if (picked != null) ApplyCompletion(picked);
+        if (!inputActive && !_inputWasActive && _pendingToken == null) _autocomplete.Reset();
+
+        _inputWasActive = inputActive;
 
         if (submitted) Submit(channel);
     }
@@ -179,31 +178,148 @@ public sealed partial class ChatboxWindow
     {
         if (string.IsNullOrWhiteSpace(_input)) return;
 
-        Chatbox.Send(channel.Id, _input, _replyTarget);
+        Chatbox.Send(channel.Id, _emoteFont.Expand(_input), _replyTarget);
 
         _autocomplete.Reset();
+        _pendingToken = null;
         _replyTarget = null;
         _input = string.Empty;
         if (Config.KeepFocusAfterSend) _focusInput = true;
         _scrollToBottomFrames = ScrollSettleFrames;
     }
 
-    private void ApplyCompletion(string? token)
+    private void DrawAutocomplete()
     {
-        if (string.IsNullOrEmpty(token)) return;
+        if (!_autocomplete.IsOpen || _inputWidth <= 0f) return;
 
-        var caret = Math.Clamp(_autocomplete.Caret, 0, _input.Length);
-        var start = caret - _autocomplete.ReplaceLength;
-        if (start < 0) return;
+        var bottom = ImGui.GetWindowPos().Y + ImGui.GetWindowSize().Y - _theme.Gap(0.3f);
+        QueueCompletion(_autocomplete.Draw(_inputMin.X, _inputWidth, bottom));
+    }
 
-        _input = _input[..start] + token + " " + _input[caret..];
-        _autocomplete.Sync(_input, start + token.Length + 1);
+    private void QueueCompletion(EmojiSuggestion? suggestion)
+    {
+        if (suggestion == null) return;
+
+        _pendingToken = SlotFor(suggestion.Token, suggestion.ImageUrl);
+        _pendingStart = _autocomplete.FragmentStart;
+        _pendingLength = _autocomplete.ReplaceLength;
+        _autocomplete.Reset();
         _focusInput = true;
     }
 
-    public void InsertText(string text)
+    private void DrawInlineEmotes(Vector2 inputMin, Vector2 inputMax)
     {
-        if (string.IsNullOrEmpty(text)) return;
+        if (_input.Length == 0) return;
+
+        var slots = 0;
+        foreach (var c in _input)
+            if (ChatboxEmoteFont.IsSlot(c)) slots++;
+
+        if (slots == 0) return;
+
+        var state = ImGuiP.GetInputTextState(ImGui.GetID("##chatbox-input"));
+        var scrollX = state.IsNull ? 0f : state.ScrollX;
+
+        var padding = ImGui.GetStyle().FramePadding;
+        var glyph = ImGui.GetTextLineHeight();
+        var origin = new Vector2(inputMin.X + padding.X - scrollX, inputMin.Y + padding.Y);
+
+        var draw = ImGui.GetWindowDrawList();
+        draw.PushClipRect(inputMin, inputMax, true);
+
+        for (var i = 0; i < _input.Length; i++)
+        {
+            if (!_emoteFont.TryResolve(_input[i], out _, out var url)) continue;
+            if (string.IsNullOrEmpty(url)) continue;
+
+            var offset = i == 0 ? 0f : ImGui.CalcTextSize(_input[..i]).X;
+            var min = new Vector2(origin.X + offset, origin.Y);
+            if (min.X > inputMax.X || min.X + glyph < inputMin.X) continue;
+
+            Chatbox.ImageCache.Request(url);
+            var texture = Chatbox.ImageCache.Get(url);
+            if (texture == null) continue;
+
+            var max = min + new Vector2(glyph, glyph);
+            AnimatedTextureWrap.MarkVisible(texture, min, max);
+            draw.AddImage(texture.Handle, min, max);
+        }
+
+        draw.PopClipRect();
+    }
+
+    private string SlotFor(string token, string? url)
+    {
+        if (string.IsNullOrEmpty(url) || !_emoteFont.Available) return token;
+
+        return _emoteFont.Reserve(token, url).ToString();
+    }
+
+    private unsafe int InputCallback(ImGuiInputTextCallbackDataPtr data)
+    {
+        if (_pendingToken != null)
+        {
+            ApplyPending(data);
+            return 0;
+        }
+
+        if (data.EventFlag == ImGuiInputTextFlags.CallbackHistory)
+        {
+            if (_autocomplete.IsOpen)
+                _autocomplete.MoveSelection(data.EventKey == ImGuiKey.UpArrow ? -1 : 1);
+
+            return 0;
+        }
+
+        if (data.EventFlag == ImGuiInputTextFlags.CallbackCompletion)
+        {
+            var token = _autocomplete.Accept();
+            if (token == null) return 0;
+
+            _pendingToken = SlotFor(token.Token, token.ImageUrl);
+            _pendingStart = _autocomplete.FragmentStart;
+            _pendingLength = _autocomplete.ReplaceLength;
+            _autocomplete.Reset();
+            ApplyPending(data);
+
+            return 0;
+        }
+
+        if (_clearSelection)
+        {
+            _clearSelection = false;
+            data.CursorPos = data.BufTextLen;
+            data.ClearSelection();
+        }
+
+        _autocomplete.Update(data.BufTextSpan, data.CursorPos);
+
+        return 0;
+    }
+
+    private unsafe void ApplyPending(ImGuiInputTextCallbackDataPtr data)
+    {
+        var token = _pendingToken!;
+        _pendingToken = null;
+        _clearSelection = false;
+
+        var start = Math.Clamp(_pendingStart, 0, data.BufTextLen);
+        var length = Math.Clamp(_pendingLength, 0, data.BufTextLen - start);
+        var text = token + " ";
+
+        data.DeleteChars(start, length);
+        data.InsertChars(start, text);
+        data.CursorPos = start + Encoding.UTF8.GetByteCount(text);
+        data.ClearSelection();
+
+        _autocomplete.Reset();
+    }
+
+    public void InsertText(string token, string? url = null)
+    {
+        if (string.IsNullOrEmpty(token)) return;
+
+        var text = SlotFor(token, url);
 
         if (string.IsNullOrEmpty(_input))
         {

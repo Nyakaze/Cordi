@@ -56,7 +56,7 @@ public sealed class ChatboxEmojiPicker
 
     public void Open() => _requestOpen = true;
 
-    public void Draw(Action<string> insert)
+    public void Draw(Action<string, string?> insert)
     {
         if (_requestOpen)
         {
@@ -85,7 +85,7 @@ public sealed class ChatboxEmojiPicker
         }
     }
 
-    private void DrawEmojiGrid(Action<string> insert)
+    private void DrawEmojiGrid(Action<string, string?> insert)
     {
         DrawSearch("##chatbox-emoji-search", "Search emoji", ref _emojiQuery);
 
@@ -143,7 +143,7 @@ public sealed class ChatboxEmojiPicker
         EndGrid();
     }
 
-    private void DrawEmojiSearchResults(Action<string> insert, string query)
+    private void DrawEmojiSearchResults(Action<string, string?> insert, string query)
     {
         var any = false;
 
@@ -188,7 +188,7 @@ public sealed class ChatboxEmojiPicker
         if (!any) ImGui.TextDisabled("No emoji found.");
     }
 
-    private void DrawTokenCell(Action<string> insert, string token, string? name = null)
+    private void DrawTokenCell(Action<string, string?> insert, string token, string? name = null)
     {
         var custom = CustomToken.Match(token);
         var animated = custom.Success && custom.Groups["a"].Value.Length > 0;
@@ -211,7 +211,7 @@ public sealed class ChatboxEmojiPicker
 
         if (!clicked) return;
 
-        insert(token);
+        insert(token, url);
         PushRecent(token);
 
         if (!ImGui.GetIO().KeyShift) ImGui.CloseCurrentPopup();

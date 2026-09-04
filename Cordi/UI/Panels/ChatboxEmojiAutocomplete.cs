@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Numerics;
+using System.Text;
 using Cordi.Configuration;
 using Cordi.Core;
 using Cordi.Services.Chatbox;
@@ -28,9 +29,10 @@ public sealed class ChatboxEmojiAutocomplete
     private readonly List<EmojiCatalogEntry> _catalog = new();
 
     private string _fragment = string.Empty;
-    private string _previousInput = string.Empty;
     private int _selected;
     private bool _dismissed;
+    private Vector2 _boundsMin;
+    private Vector2 _boundsMax;
 
     public ChatboxEmojiAutocomplete(CordiPlugin plugin, UiTheme theme)
     {
@@ -42,7 +44,7 @@ public sealed class ChatboxEmojiAutocomplete
 
     public int ReplaceLength => _fragment.Length + 1;
 
-    public int Caret { get; private set; }
+    public int FragmentStart { get; private set; }
 
     private ChatboxConfig Config => _plugin.Config.Chatbox;
 
@@ -53,19 +55,7 @@ public sealed class ChatboxEmojiAutocomplete
         _matches.Clear();
         _catalog.Clear();
         _fragment = string.Empty;
-        _previousInput = string.Empty;
-        Caret = 0;
-        _selected = 0;
-        _dismissed = false;
-    }
-
-    public void Sync(string? input, int caret)
-    {
-        _previousInput = input ?? string.Empty;
-        Caret = Math.Clamp(caret, 0, _previousInput.Length);
-        _matches.Clear();
-        _catalog.Clear();
-        _fragment = string.Empty;
+        FragmentStart = 0;
         _selected = 0;
         _dismissed = false;
     }
@@ -76,25 +66,18 @@ public sealed class ChatboxEmojiAutocomplete
         _dismissed = true;
     }
 
-    public void Update(string input)
+    public void Update(ReadOnlySpan<byte> buffer, int caret)
     {
-        input ??= string.Empty;
-
-        if (!string.Equals(input, _previousInput, StringComparison.Ordinal))
-        {
-            Caret = CaretFromDiff(_previousInput, input);
-            _previousInput = input;
-        }
-
-        var fragment = FragmentAt(input, Caret);
-
-        if (fragment == null)
+        if (!TryFragment(buffer, caret, out var start, out var fragment))
         {
             _matches.Clear();
             _fragment = string.Empty;
+            FragmentStart = 0;
             _dismissed = false;
             return;
         }
+
+        FragmentStart = start;
 
         if (string.Equals(fragment, _fragment, StringComparison.Ordinal))
         {
@@ -117,14 +100,19 @@ public sealed class ChatboxEmojiAutocomplete
         if (_selected < 0) _selected += _matches.Count;
     }
 
-    public string? Accept()
+    public EmojiSuggestion? Accept()
     {
         if (_matches.Count == 0) return null;
 
-        return _matches[Math.Clamp(_selected, 0, _matches.Count - 1)].Token;
+        return _matches[Math.Clamp(_selected, 0, _matches.Count - 1)];
     }
 
-    public string? Draw(Vector2 inputMin, float width)
+    public bool Covers(Vector2 point) =>
+        _matches.Count > 0
+        && point.X >= _boundsMin.X && point.X <= _boundsMax.X
+        && point.Y >= _boundsMin.Y && point.Y <= _boundsMax.Y;
+
+    public EmojiSuggestion? Draw(float x, float width, float bottom)
     {
         if (_matches.Count == 0) return null;
 
@@ -132,8 +120,11 @@ public sealed class ChatboxEmojiAutocomplete
         var padding = _theme.PadY(0.3f);
         var height = _matches.Count * rowHeight + padding * 2f;
 
-        var min = new Vector2(inputMin.X, inputMin.Y - _theme.Gap(0.3f) - height);
-        var max = new Vector2(inputMin.X + width, min.Y + height);
+        var min = new Vector2(x, bottom - height);
+        var max = new Vector2(x + width, bottom);
+
+        _boundsMin = min;
+        _boundsMax = max;
 
         var draw = ImGui.GetWindowDrawList();
         var radius = _theme.Radius(0.5f);
@@ -141,29 +132,26 @@ public sealed class ChatboxEmojiAutocomplete
         draw.AddRectFilled(min, max, ImGui.GetColorU32(_theme.PanelBg), radius);
         draw.AddRect(min, max, ImGui.GetColorU32(_theme.Border), radius);
 
-        var restore = ImGui.GetCursorScreenPos();
-        string? chosen = null;
+        var windowHovered = ImGui.IsWindowHovered(ImGuiHoveredFlags.ChildWindows);
+        EmojiSuggestion? chosen = null;
 
         for (var i = 0; i < _matches.Count; i++)
         {
             var rowMin = new Vector2(min.X + padding, min.Y + padding + i * rowHeight);
             var rowMax = new Vector2(max.X - padding, rowMin.Y + rowHeight);
 
-            ImGui.SetCursorScreenPos(rowMin);
-            ImGui.PushID(i);
-            ImGui.InvisibleButton("##row", new Vector2(MathF.Max(1f, rowMax.X - rowMin.X), rowHeight));
-            ImGui.PopID();
-
-            if (ImGui.IsItemHovered()) _selected = i;
-            if (ImGui.IsItemClicked(ImGuiMouseButton.Left)) chosen = _matches[i].Token;
+            if (windowHovered && ImGui.IsMouseHoveringRect(rowMin, rowMax))
+            {
+                _selected = i;
+                ImGui.SetMouseCursor(ImGuiMouseCursor.Hand);
+                if (ImGui.IsMouseClicked(ImGuiMouseButton.Left)) chosen = _matches[i];
+            }
 
             if (i == _selected)
                 draw.AddRectFilled(rowMin, rowMax, ImGui.GetColorU32(_theme.AccentSelected), _theme.Radius(0.35f));
 
             DrawRow(draw, _matches[i], rowMin, rowHeight);
         }
-
-        ImGui.SetCursorScreenPos(restore);
 
         return chosen;
     }
@@ -235,40 +223,39 @@ public sealed class ChatboxEmojiAutocomplete
         return _matches.Count < MaxResults;
     }
 
-    private static int CaretFromDiff(string previous, string current)
+    private static bool TryFragment(ReadOnlySpan<byte> buffer, int caret, out int start, out string fragment)
     {
-        var max = Math.Min(previous.Length, current.Length);
+        start = 0;
+        fragment = string.Empty;
 
-        var prefix = 0;
-        while (prefix < max && previous[prefix] == current[prefix]) prefix++;
+        if (caret <= 0 || caret > buffer.Length) return false;
 
-        var suffix = 0;
-        while (suffix < max - prefix && previous[^(suffix + 1)] == current[^(suffix + 1)]) suffix++;
-
-        return current.Length - suffix;
-    }
-
-    private static string? FragmentAt(string input, int caret)
-    {
-        if (string.IsNullOrEmpty(input)) return null;
-
-        caret = Math.Clamp(caret, 0, input.Length);
-
-        var start = caret;
-        while (start > 0 && caret - start < MaxFragment)
+        var first = caret;
+        while (first > 0 && caret - first < MaxFragment)
         {
-            var c = input[start - 1];
-            if (c == ':') break;
-            if (!char.IsLetterOrDigit(c) && c != '_' && c != '+' && c != '-') return null;
-            start--;
+            var b = buffer[first - 1];
+            if (b == (byte)':') break;
+            if (!IsFragmentByte(b)) return false;
+            first--;
         }
 
-        if (start == 0 || input[start - 1] != ':') return null;
-        if (start == caret) return null;
+        if (first == 0 || buffer[first - 1] != (byte)':') return false;
+        if (first == caret) return false;
 
-        var colon = start - 1;
-        if (colon > 0 && !char.IsWhiteSpace(input[colon - 1])) return null;
+        var colon = first - 1;
+        if (colon > 0 && !IsBoundaryByte(buffer[colon - 1])) return false;
 
-        return input[start..caret];
+        start = colon;
+        fragment = Encoding.ASCII.GetString(buffer[first..caret]);
+
+        return true;
     }
+
+    private static bool IsFragmentByte(byte b) =>
+        b is >= (byte)'a' and <= (byte)'z'
+            or >= (byte)'A' and <= (byte)'Z'
+            or >= (byte)'0' and <= (byte)'9'
+            or (byte)'_' or (byte)'+' or (byte)'-';
+
+    private static bool IsBoundaryByte(byte b) => b is (byte)' ' or (byte)'\t' or (byte)'\n';
 }

@@ -20,6 +20,11 @@ public sealed partial class ChatboxWindow
     private bool _stickToBottom = true;
     private readonly System.Collections.Generic.HashSet<long> _revealedAds = new();
 
+    private bool HoveringRect(Vector2 min, Vector2 max) =>
+        ImGui.IsWindowHovered(ImGuiHoveredFlags.ChildWindows)
+        && ImGui.IsMouseHoveringRect(min, max)
+        && !_autocomplete.Covers(ImGui.GetIO().MousePos);
+
     private void DrawMessages(ChatboxChannelState channel)
     {
         var messages = channel.Snapshot();
@@ -141,7 +146,7 @@ public sealed partial class ChatboxWindow
         var end = ImGui.GetCursorScreenPos();
         var rowMin = new Vector2(origin.X - _theme.PadX(0.3f), origin.Y - 1f);
         var rowMax = new Vector2(origin.X + width, MathF.Max(end.Y, origin.Y + ImGui.GetTextLineHeight()) + 1f);
-        var hovered = ImGui.IsWindowHovered(ImGuiHoveredFlags.ChildWindows) && ImGui.IsMouseHoveringRect(rowMin, rowMax);
+        var hovered = HoveringRect(rowMin, rowMax);
 
         if (Chatbox.ImageCache.HasUnloaded && ImGui.IsRectVisible(rowMin, rowMax)) RequestRowMedia(message);
 
@@ -396,12 +401,12 @@ public sealed partial class ChatboxWindow
             AnimatedTextureWrap.MarkVisible(texture, size);
             ImGui.Image(texture.Handle, size);
             var imageMax = origin + size;
-            var hovered = ImGui.IsWindowHovered(ImGuiHoveredFlags.ChildWindows) && ImGui.IsMouseHoveringRect(origin, imageMax);
+            var hovered = HoveringRect(origin, imageMax);
 
             var btnSize = 18f * ImGuiHelpers.GlobalScale;
             var btnPos = new Vector2(origin.X + size.X - btnSize - 3f * ImGuiHelpers.GlobalScale, origin.Y + 3f * ImGuiHelpers.GlobalScale);
             var btnMax = btnPos + new Vector2(btnSize, btnSize);
-            var btnHovered = ImGui.IsWindowHovered(ImGuiHoveredFlags.ChildWindows) && ImGui.IsMouseHoveringRect(btnPos, btnMax);
+            var btnHovered = HoveringRect(btnPos, btnMax);
 
             if (hovered || btnHovered)
             {
@@ -465,7 +470,7 @@ public sealed partial class ChatboxWindow
         var excerpt = reply.Excerpt.Replace('\n', ' ');
         ImGui.TextColored(_theme.MutedText, $"↰ {reply.AuthorName}: {excerpt}");
 
-        if (!ImGui.IsItemHovered()) return;
+        if (!ImGui.IsItemHovered() || _autocomplete.Covers(ImGui.GetIO().MousePos)) return;
 
         ImGui.SetMouseCursor(ImGuiMouseCursor.Hand);
         if (ImGui.IsMouseClicked(ImGuiMouseButton.Left)) JumpTo(channel, reply.Seq);
