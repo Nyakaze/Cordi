@@ -48,6 +48,8 @@ public sealed partial class ChatboxWindow
             previous = message;
         }
 
+        DrawLinkPopup();
+
         if (pendingJump != 0 && _scrollToSeq == pendingJump) _scrollToSeq = 0;
 
         ImGui.Dummy(new Vector2(0f, 4f * ImGuiHelpers.GlobalScale));
@@ -213,16 +215,8 @@ public sealed partial class ChatboxWindow
                     _flow.Pill(segment.Text, DimColor(_theme.Accent, 0.25f), _theme.Accent, _theme.Radius(0.4f));
                     break;
 
-                case SegmentKind.ItemLink:
-                    DrawItemSegment(segment);
-                    break;
-
-                case SegmentKind.StatusLink:
-                    DrawStatusSegment(segment);
-                    break;
-
-                case SegmentKind.MapLink:
-                    DrawMapLinkSegment(segment);
+                case SegmentKind.GameLink:
+                    DrawGameLink(message, segment);
                     break;
 
                 case SegmentKind.AutoTranslate:
@@ -238,7 +232,7 @@ public sealed partial class ChatboxWindow
                 }
 
                 default:
-                    _flow.Text(segment.Text, textColor);
+                    _flow.Text(segment.Text, segment.Color ?? textColor);
                     break;
             }
         }
@@ -270,7 +264,7 @@ public sealed partial class ChatboxWindow
             : null;
 
         if (texture != null) _flow.Image(texture, emoteSize, segment.Text);
-        else _flow.Text(segment.Text, textColor);
+        else _flow.Text(segment.Text, segment.Color ?? textColor);
     }
 
     private void DrawMentionSegment(ContentSegment segment)
@@ -278,100 +272,6 @@ public sealed partial class ChatboxWindow
         var background = DimColor(Config.MentionColor, segment.TargetsMe ? 0.75f : 0.30f);
         var foreground = segment.TargetsMe ? new Vector4(1f, 1f, 1f, 1f) : Lighten(Config.MentionColor);
         _flow.Pill(segment.Text, background, foreground, _theme.Radius(0.4f));
-    }
-
-    private void DrawItemSegment(ContentSegment segment)
-    {
-        var color = segment.IsHq ? new Vector4(0.55f, 0.85f, 1f, 1f) : new Vector4(0.80f, 0.90f, 1f, 1f);
-        var bg = DimColor(color, 0.20f);
-        _flow.Pill(segment.Text, bg, color, _theme.Radius(0.35f), out var hovered);
-        if (hovered)
-        {
-            ImGui.SetMouseCursor(ImGuiMouseCursor.Hand);
-            if (segment.ItemId > 0)
-            {
-                var hoverVal = (ulong)segment.ItemId;
-                if (segment.IsHq) hoverVal |= 0x1_0000_0000UL;
-                Service.GameGui.HoveredItem = hoverVal;
-            }
-            if (ImGui.IsMouseClicked(ImGuiMouseButton.Right))
-                InsertText(segment.Text);
-        }
-    }
-
-    private void DrawStatusSegment(ContentSegment segment)
-    {
-        var color = new Vector4(0.50f, 0.95f, 0.65f, 1f);
-        var bg = DimColor(color, 0.20f);
-        _flow.Pill(segment.Text, bg, color, _theme.Radius(0.35f), out var hovered);
-        if (hovered)
-        {
-            ImGui.SetMouseCursor(ImGuiMouseCursor.Hand);
-            if (ImGui.IsMouseClicked(ImGuiMouseButton.Right))
-                InsertText(segment.Text);
-            DrawStatusTooltip(segment);
-        }
-    }
-
-    private void DrawStatusTooltip(ContentSegment segment)
-    {
-        var statusSheet = Service.DataManager.GetExcelSheet<Lumina.Excel.Sheets.Status>();
-        var status = statusSheet?.GetRowOrDefault(segment.StatusId);
-        if (status == null)
-        {
-            if (!string.IsNullOrEmpty(segment.TooltipText)) ImGui.SetTooltip(segment.TooltipText);
-            return;
-        }
-
-        using (ImRaii.Tooltip())
-        {
-            var statusName = status.Value.Name.ExtractText();
-            var desc = status.Value.Description.ExtractText();
-
-            if (segment.IconId > 0)
-            {
-                var iconWrap = Service.TextureProvider.GetFromGameIcon(new Dalamud.Interface.Textures.GameIconLookup(segment.IconId)).GetWrapOrDefault();
-                if (iconWrap != null)
-                {
-                    ImGui.Image(iconWrap.Handle, new Vector2(28f * ImGuiHelpers.GlobalScale, 28f * ImGuiHelpers.GlobalScale));
-                    ImGui.SameLine(0, 8f);
-                }
-            }
-
-            ImGui.BeginGroup();
-            ImGui.TextColored(new Vector4(0.5f, 1f, 0.6f, 1f), statusName);
-            ImGui.TextColored(new Vector4(0.7f, 0.7f, 0.7f, 1f), "Status Effect / Buff");
-            ImGui.EndGroup();
-
-            if (!string.IsNullOrWhiteSpace(desc))
-            {
-                ImGui.Separator();
-                ImGui.PushTextWrapPos(320f * ImGuiHelpers.GlobalScale);
-                ImGui.TextColored(new Vector4(0.85f, 0.85f, 0.85f, 1f), desc);
-                ImGui.PopTextWrapPos();
-            }
-
-            ImGui.Spacing();
-            ImGui.TextDisabled("Right-click to link in chat input");
-        }
-    }
-
-    private void DrawMapLinkSegment(ContentSegment segment)
-    {
-        var color = new Vector4(1f, 0.85f, 0.40f, 1f);
-        var bg = DimColor(color, 0.20f);
-        var clicked = _flow.Pill(segment.Text, bg, color, _theme.Radius(0.35f), out var hovered);
-        if (hovered)
-        {
-            ImGui.SetMouseCursor(ImGuiMouseCursor.Hand);
-            if (ImGui.IsMouseClicked(ImGuiMouseButton.Right))
-                InsertText(segment.Text);
-            ImGui.SetTooltip("Left-click to open map\nRight-click to link in chat input");
-        }
-        if (clicked && segment.MapLink != null)
-        {
-            Service.GameGui.OpenMapWithMapLink(segment.MapLink);
-        }
     }
 
     private void DrawAttachments(ChatboxMessage message, float width)

@@ -118,6 +118,7 @@ public sealed partial class ChatboxWindow : Window, IDisposable
     public override void Draw()
     {
         _theme.ApplyFontScale();
+        UpdateItemTooltip();
         Chatbox.WindowFocused = ImGui.IsWindowFocused(ImGuiFocusedFlags.RootAndChildWindows);
         if (Chatbox.WindowFocused) Chatbox.MarkActiveRead();
 

@@ -4,6 +4,7 @@ using System.Text;
 using System.Text.RegularExpressions;
 using Cordi.Configuration;
 using Cordi.Services.Emojis;
+using Dalamud.Game.Text.SeStringHandling.Payloads;
 
 namespace Cordi.Services.Chatbox;
 
@@ -462,10 +463,11 @@ public sealed class ChatboxContentParser
 
         segment = new ContentSegment
         {
-            Kind = SegmentKind.ItemLink,
+            Kind = SegmentKind.GameLink,
             Text = fullText,
-            ItemId = itemId,
-            IsHq = isHq,
+            LinkKind = GameLinkKind.Item,
+            LinkId = itemId + (isHq ? 1_000_000u : 0u),
+            Link = itemId == 0 ? null : new ItemPayload(itemId, isHq),
         };
         return true;
     }

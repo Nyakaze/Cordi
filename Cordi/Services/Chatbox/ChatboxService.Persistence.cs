@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using Dalamud.Game.Text.SeStringHandling;
 
 namespace Cordi.Services.Chatbox;
 
@@ -48,6 +49,15 @@ public sealed partial class ChatboxService
 
         message.SegmentsReady = true;
 
+        var source = RestoreSource(message);
+        if (source != null)
+        {
+            message.Segments = ParseGameContent(source, CachedResolver(channel), out var sourceOnlyEmotes, out _);
+            message.OnlyEmotes = sourceOnlyEmotes;
+            Emotes.Record(message);
+            return;
+        }
+
         if (string.IsNullOrEmpty(message.RawContent)) return;
 
         var parsed = _parser.Parse(message.RawContent, CachedResolver(channel));
@@ -55,6 +65,24 @@ public sealed partial class ChatboxService
         message.OnlyEmotes = parsed.OnlyEmotes;
 
         Emotes.Record(message);
+    }
+
+    private static SeString? RestoreSource(ChatboxMessage message)
+    {
+        if (message.Source != null) return message.Source;
+        if (message.SourcePayload == null || message.SourcePayload.Length == 0) return null;
+
+        try
+        {
+            message.Source = SeString.Parse(message.SourcePayload);
+        }
+        catch (Exception ex)
+        {
+            message.SourcePayload = null;
+            Service.Log.Debug($"[Chatbox] Failed to restore SeString for seq {message.Seq}: {ex.Message}");
+        }
+
+        return message.Source;
     }
 
     private MentionResolver CachedResolver(ChatboxChannelState channel)

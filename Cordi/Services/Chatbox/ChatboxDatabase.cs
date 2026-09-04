@@ -151,6 +151,7 @@ public sealed class ChatboxDatabase : IDisposable
             """);
 
         EnsureColumn("messages", "filtered_ad", "INTEGER NOT NULL DEFAULT 0");
+        EnsureColumn("messages", "source", "BLOB");
         EnsureColumn("emotes", "url", "TEXT");
 
         Execute(_connection, $"INSERT OR REPLACE INTO meta(key, value) VALUES ('schema', '{SchemaVersion}');");

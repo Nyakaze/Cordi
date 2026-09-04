@@ -2,8 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Numerics;
 using Dalamud.Game.Text;
-
-using Dalamud.Game.Text.SeStringHandling.Payloads;
+using Dalamud.Game.Text.SeStringHandling;
 
 namespace Cordi.Services.Chatbox;
 
@@ -22,10 +21,22 @@ public enum SegmentKind
     ChannelRef,
     Link,
     LineBreak,
-    ItemLink,
-    StatusLink,
-    MapLink,
+    GameLink,
     AutoTranslate,
+}
+
+public enum GameLinkKind
+{
+    None,
+    Item,
+    Status,
+    Map,
+    Quest,
+    Player,
+    Plugin,
+    PartyFinder,
+    PartyFinderNotification,
+    Achievement,
 }
 
 public sealed class ContentSegment
@@ -36,12 +47,11 @@ public sealed class ContentSegment
     public string? Url { get; init; }
     public bool TargetsMe { get; init; }
 
-    public uint ItemId { get; init; }
-    public bool IsHq { get; init; }
-    public uint StatusId { get; init; }
-    public uint IconId { get; init; }
-    public string? TooltipText { get; init; }
-    public MapLinkPayload? MapLink { get; init; }
+    public Vector4? Color { get; set; }
+
+    public GameLinkKind LinkKind { get; init; }
+    public uint LinkId { get; init; }
+    public Payload? Link { get; init; }
 
     public static ContentSegment PlainText(string text) => new() { Kind = SegmentKind.Text, Text = text };
     public static ContentSegment Break() => new() { Kind = SegmentKind.LineBreak };
@@ -74,6 +84,8 @@ public sealed class ChatboxMessage
     public ulong DiscordChannelId { get; init; }
 
     public string RawContent { get; init; } = string.Empty;
+    public byte[]? SourcePayload { get; set; }
+    public SeString? Source { get; set; }
     public IReadOnlyList<ContentSegment> Segments { get; set; } = Array.Empty<ContentSegment>();
     public IReadOnlyList<string> Attachments { get; init; } = Array.Empty<string>();
 

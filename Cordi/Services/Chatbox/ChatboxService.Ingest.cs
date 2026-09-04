@@ -1,6 +1,8 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Numerics;
+using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
@@ -49,7 +51,7 @@ public sealed partial class ChatboxService
         foreach (var target in targets)
         {
             var resolver = BuildResolver(target);
-            var segments = ParseGameContent(message, resolver, out var onlyEmotes, out var parsedMentionsMe);
+            var segments = ParseGameContent(message.Message, resolver, out var onlyEmotes, out var parsedMentionsMe);
             var blocked = filtered && FilterAdvertisementsFor(target);
             var mentionsMe = !blocked && !isSelf
                              && (parsedMentionsMe || target.Config.TreatAllAsMention
@@ -65,6 +67,8 @@ public sealed partial class ChatboxService
                 AuthorWorld = world,
                 GameChatType = message.ChatType,
                 RawContent = raw,
+                Source = message.Message,
+                SourcePayload = EncodeSource(message.Message),
                 Segments = segments,
                 MentionsMe = mentionsMe,
                 IsSelf = isSelf,
@@ -77,142 +81,174 @@ public sealed partial class ChatboxService
         }
     }
 
-    private IReadOnlyList<ContentSegment> ParseGameContent(ChatMessage message, MentionResolver resolver, out bool onlyEmotes, out bool mentionsMe)
+    private static byte[]? EncodeSource(SeString? content)
+    {
+        if (content == null || content.Payloads.Count == 0) return null;
+
+        try
+        {
+            return content.Encode();
+        }
+        catch (Exception ex)
+        {
+            Service.Log.Debug($"[Chatbox] Failed to encode SeString: {ex.Message}");
+            return null;
+        }
+    }
+
+    internal IReadOnlyList<ContentSegment> ParseGameContent(SeString? content, MentionResolver resolver, out bool onlyEmotes, out bool mentionsMe)
     {
         onlyEmotes = false;
         mentionsMe = false;
 
-        if (message.Message == null || message.Message.Payloads.Count == 0)
+        if (content == null || content.Payloads.Count == 0)
         {
-            var p = _parser.Parse(message.Message?.TextValue ?? string.Empty, resolver);
+            var p = _parser.Parse(content?.TextValue ?? string.Empty, resolver);
             onlyEmotes = p.OnlyEmotes;
             mentionsMe = p.MentionsMe;
             return p.Segments;
         }
 
         var segments = new List<ContentSegment>();
-        var itemSheet = Service.DataManager.GetExcelSheet<Lumina.Excel.Sheets.Item>();
-        var statusSheet = Service.DataManager.GetExcelSheet<Lumina.Excel.Sheets.Status>();
+        var foreground = new Stack<uint>();
+        var glow = new Stack<uint>();
 
-        var payloads = message.Message.Payloads;
-        for (var i = 0; i < payloads.Count; i++)
+        var linkKind = GameLinkKind.None;
+        Payload? link = null;
+        uint linkId = 0;
+        Vector4? linkColor = null;
+        var linkText = new StringBuilder();
+
+        void FlushLink()
         {
-            var p = payloads[i];
+            var kind = linkKind;
+            var payload = link;
+            var id = linkId;
+            var color = linkColor;
+            var captured = linkText.ToString();
 
-            if (p is ItemPayload itemPayload)
+            linkKind = GameLinkKind.None;
+            link = null;
+            linkId = 0;
+            linkColor = null;
+            linkText.Clear();
+
+            if (kind == GameLinkKind.None) return;
+
+            var text = LinkDisplayText(kind, payload, id, captured);
+            if (text.Length == 0) return;
+
+            segments.Add(new ContentSegment
             {
-                var itemId = itemPayload.ItemId;
-                var isHq = itemPayload.IsHQ;
-                var item = itemSheet?.GetRowOrDefault(itemId);
-                var itemName = item?.Name.ExtractText();
-                if (string.IsNullOrEmpty(itemName)) itemName = "Item";
+                Kind = SegmentKind.GameLink,
+                Text = text,
+                LinkKind = kind,
+                LinkId = id,
+                Link = payload,
+                Color = color,
+            });
+        }
 
-                segments.Add(new ContentSegment
-                {
-                    Kind = SegmentKind.ItemLink,
-                    Text = $"[{itemName}{(isHq ? " " : "")}]",
-                    ItemId = itemId,
-                    IsHq = isHq,
-                    IconId = item?.Icon ?? 0,
-                    TooltipText = item?.Description.ExtractText(),
-                });
+        void BeginLink(GameLinkKind kind, Payload? payload, uint id)
+        {
+            FlushLink();
+            linkKind = kind;
+            link = payload;
+            linkId = id;
+        }
 
-                while (i + 1 < payloads.Count)
+        foreach (var payload in content.Payloads)
+        {
+            switch (payload)
+            {
+                case UIForegroundPayload fgPayload:
+                    if (fgPayload.IsEnabled) foreground.Push(fgPayload.UIColor.Value.Dark);
+                    else if (foreground.Count > 0) foreground.Pop();
+                    continue;
+
+                case UIGlowPayload glowPayload:
+                    if (glowPayload.IsEnabled) glow.Push(glowPayload.UIColor.Value.Light);
+                    else if (glow.Count > 0) glow.Pop();
+                    continue;
+
+                case ItemPayload itemPayload:
+                    BeginLink(GameLinkKind.Item, itemPayload, itemPayload.RawItemId);
+                    continue;
+
+                case StatusPayload statusPayload:
+                    BeginLink(GameLinkKind.Status, statusPayload, statusPayload.Status.RowId);
+                    continue;
+
+                case MapLinkPayload mapPayload:
+                    BeginLink(GameLinkKind.Map, mapPayload, 0);
+                    continue;
+
+                case QuestPayload questPayload:
+                    BeginLink(GameLinkKind.Quest, questPayload, questPayload.Quest.RowId);
+                    continue;
+
+                case PlayerPayload playerPayload:
+                    BeginLink(GameLinkKind.Player, playerPayload, playerPayload.World.RowId);
+                    continue;
+
+                case DalamudLinkPayload pluginPayload:
+                    BeginLink(GameLinkKind.Plugin, pluginPayload, pluginPayload.CommandId);
+                    continue;
+
+                case PartyFinderPayload pfPayload:
+                    BeginLink(
+                        pfPayload.LinkType == PartyFinderPayload.PartyFinderLinkType.PartyFinderNotification
+                            ? GameLinkKind.PartyFinderNotification
+                            : GameLinkKind.PartyFinder,
+                        pfPayload,
+                        pfPayload.ListingId);
+                    continue;
+
+                case AutoTranslatePayload atPayload:
+                    FlushLink();
+                    segments.Add(new ContentSegment
+                    {
+                        Kind = SegmentKind.AutoTranslate,
+                        Text = $" {atPayload.Text} ",
+                    });
+                    continue;
+
+                case RawPayload rawPayload:
+                    if (IsLinkTerminator(rawPayload)) FlushLink();
+                    else if (TryReadRawLink(rawPayload, out var rawKind, out var rawId)) BeginLink(rawKind, rawPayload, rawId);
+                    else ApplyRawColor(rawPayload, foreground, glow);
+                    continue;
+
+                case TextPayload textPayload:
                 {
-                    var next = payloads[i + 1];
-                    if (next is ItemPayload || next is RawPayload { Data: { Length: 1 } and [0xCF] })
+                    if (string.IsNullOrEmpty(textPayload.Text)) continue;
+
+                    if (linkKind != GameLinkKind.None)
                     {
-                        i++;
-                        break;
-                    }
-                    if (next is TextPayload tp && (tp.Text.Contains(itemName) || tp.Text.StartsWith('')))
-                    {
-                        i++;
+                        linkColor = PeekColor(foreground) ?? linkColor;
+                        linkText.Append(textPayload.Text);
                         continue;
                     }
-                    if (next is UIForegroundPayload or UIGlowPayload)
-                    {
-                        i++;
-                        continue;
-                    }
-                    break;
+
+                    var parsed = _parser.Parse(textPayload.Text, resolver);
+                    if (parsed.MentionsMe) mentionsMe = true;
+
+                    var color = PeekColor(foreground);
+                    if (color != null)
+                        foreach (var segment in parsed.Segments)
+                            segment.Color ??= color;
+
+                    segments.AddRange(parsed.Segments);
+                    continue;
                 }
-                continue;
-            }
-
-            if (p is StatusPayload statusPayload)
-            {
-                var status = statusPayload.Status.Value;
-                var statusId = statusPayload.Status.RowId;
-                var statusName = status.Name.ExtractText();
-                if (string.IsNullOrEmpty(statusName)) statusName = "Status";
-
-                segments.Add(new ContentSegment
-                {
-                    Kind = SegmentKind.StatusLink,
-                    Text = $"[{statusName}]",
-                    StatusId = statusId,
-                    IconId = status.Icon,
-                    TooltipText = status.Description.ExtractText(),
-                });
-
-                while (i + 1 < payloads.Count)
-                {
-                    var next = payloads[i + 1];
-                    if (next is StatusPayload)
-                    {
-                        i++;
-                        break;
-                    }
-                    if (next is TextPayload tp && tp.Text.Contains(statusName))
-                    {
-                        i++;
-                        continue;
-                    }
-                    if (next is UIForegroundPayload or UIGlowPayload)
-                    {
-                        i++;
-                        continue;
-                    }
-                    break;
-                }
-                continue;
-            }
-
-            if (p is MapLinkPayload mapPayload)
-            {
-                segments.Add(new ContentSegment
-                {
-                    Kind = SegmentKind.MapLink,
-                    Text = $"{mapPayload.PlaceName} ({mapPayload.XCoord:F1}, {mapPayload.YCoord:F1})",
-                    MapLink = mapPayload,
-                });
-                continue;
-            }
-
-            if (p is AutoTranslatePayload atPayload)
-            {
-                segments.Add(new ContentSegment
-                {
-                    Kind = SegmentKind.AutoTranslate,
-                    Text = $" {atPayload.Text} ",
-                });
-                continue;
-            }
-
-            if (p is TextPayload textPayload)
-            {
-                if (string.IsNullOrEmpty(textPayload.Text)) continue;
-                var parsed = _parser.Parse(textPayload.Text, resolver);
-                if (parsed.MentionsMe) mentionsMe = true;
-                segments.AddRange(parsed.Segments);
-                continue;
             }
         }
 
+        FlushLink();
+
         if (segments.Count == 0)
         {
-            var p = _parser.Parse(message.Message?.TextValue ?? string.Empty, resolver);
+            var p = _parser.Parse(content.TextValue, resolver);
             onlyEmotes = p.OnlyEmotes;
             mentionsMe = p.MentionsMe;
             return p.Segments;
