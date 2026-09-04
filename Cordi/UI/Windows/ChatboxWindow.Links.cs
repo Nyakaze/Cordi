@@ -1,7 +1,10 @@
+using System;
 using System.Linq;
 using System.Numerics;
+using Cordi.Domain;
 using Cordi.Services.Chatbox;
 using Dalamud.Bindings.ImGui;
+using Dalamud.Game.Text;
 using Dalamud.Game.Text.SeStringHandling;
 using Dalamud.Game.Text.SeStringHandling.Payloads;
 using Dalamud.Interface.Textures;
@@ -19,6 +22,8 @@ public sealed partial class ChatboxWindow
     private const string LinkPopupId = "##cordi-link-popup";
 
     private ContentSegment? _linkPopupSegment;
+    private Player? _linkPopupPlayer;
+    private XivChatType _linkPopupChatType;
     private bool _openLinkPopup;
 
     private bool _itemTooltipOpen;
@@ -29,21 +34,25 @@ public sealed partial class ChatboxWindow
     private void DrawGameLink(ChatboxMessage message, ContentSegment segment)
     {
         var color = segment.Color ?? DefaultLinkColor(segment.LinkKind);
-        var clicked = _flow.Pill(segment.Text, DimColor(color, 0.20f), color, _theme.Radius(0.35f), out var hovered);
+        var clicked = _flow.Pill(
+            segment.Text, DimColor(color, 0.28f), color, _theme.Radius(0.35f), out var hovered, true);
 
         if (!hovered || !ImGui.IsWindowHovered(ImGuiHoveredFlags.ChildWindows)) return;
 
         ImGui.SetMouseCursor(ImGuiMouseCursor.Hand);
         HoverGameLink(segment);
 
-        if (ImGui.IsMouseClicked(ImGuiMouseButton.Right))
+        if (HasLinkPopup(segment.LinkKind) && ImGui.IsMouseClicked(ImGuiMouseButton.Right))
         {
-            OpenLinkPopup(segment);
+            OpenLinkPopup(message, segment);
             return;
         }
 
         if (clicked) LeftClickGameLink(message, segment);
     }
+
+    private static bool HasLinkPopup(GameLinkKind kind) =>
+        kind is not (GameLinkKind.PartyFinder or GameLinkKind.PartyFinderNotification);
 
     private Vector4 DefaultLinkColor(GameLinkKind kind) => kind switch
     {
@@ -84,14 +93,46 @@ public sealed partial class ChatboxWindow
                 break;
 
             default:
-                OpenLinkPopup(segment);
+                OpenLinkPopup(message, segment);
                 break;
         }
     }
 
-    private void OpenLinkPopup(ContentSegment segment)
+    private void OpenLinkPopup(ChatboxMessage message, ContentSegment segment)
     {
         _linkPopupSegment = segment;
+        _linkPopupChatType = message.GameChatType;
+        _linkPopupPlayer = segment.Link is PlayerPayload payload ? ResolvePayloadPlayer(message, payload) : null;
+
+        _openLinkPopup = true;
+    }
+
+    private static Player ResolvePayloadPlayer(ChatboxMessage message, PlayerPayload payload)
+    {
+        var sameAuthor = string.Equals(message.AuthorName, payload.PlayerName, StringComparison.Ordinal);
+
+        return Player.FromChatSource(
+            payload.PlayerName,
+            payload.World.ValueNullable?.Name.ExtractText() ?? string.Empty,
+            (ushort)payload.World.RowId,
+            sameAuthor ? message.SenderContentId : 0,
+            sameAuthor ? message.SenderAccountId : 0);
+    }
+
+    private void OpenPlayerPopup(ChatboxMessage message)
+    {
+        var player = Player.FromChatSource(
+            message.AuthorName,
+            message.AuthorWorld,
+            message.SenderWorldId,
+            message.SenderContentId,
+            message.SenderAccountId);
+
+        if (player.Name.Length == 0) return;
+
+        _linkPopupSegment = null;
+        _linkPopupChatType = message.GameChatType;
+        _linkPopupPlayer = player;
         _openLinkPopup = true;
     }
 
@@ -120,7 +161,7 @@ public sealed partial class ChatboxWindow
 
             case GameLinkKind.PartyFinder:
             case GameLinkKind.PartyFinderNotification:
-                ImGui.SetTooltip("Left-click to open Party Finder\nRight-click for more options");
+                ImGui.SetTooltip("Left-click to open Party Finder");
                 break;
 
             case GameLinkKind.Achievement:
@@ -247,25 +288,20 @@ public sealed partial class ChatboxWindow
         }
 
         var segment = _linkPopupSegment;
-        if (segment == null) return;
+        var player = _linkPopupPlayer;
+        if (segment == null && player == null) return;
 
         using var popup = ImRaii.Popup(LinkPopupId);
         if (!popup) return;
 
-        switch (segment.Link)
+        if (player != null)
         {
-            case ItemPayload item:
-                DrawItemPopup(segment, item);
-                break;
-
-            case PlayerPayload player:
-                DrawPlayerPopup(player);
-                break;
-
-            default:
-                DrawGenericLinkPopup(segment);
-                break;
+            DrawPlayerPopup(player);
+            return;
         }
+
+        if (segment!.Link is ItemPayload item) DrawItemPopup(segment, item);
+        else DrawGenericLinkPopup(segment);
     }
 
     private void DrawItemPopup(ContentSegment segment, ItemPayload payload)
@@ -300,18 +336,6 @@ public sealed partial class ChatboxWindow
         if (ImGui.Selectable("Link in Game Chat")) LinkItem(payload.RawItemId);
         if (ImGui.Selectable("Insert in Input")) InsertText(name);
         if (ImGui.Selectable("Copy Item Name")) ImGui.SetClipboardText(name);
-    }
-
-    private void DrawPlayerPopup(PlayerPayload payload)
-    {
-        var world = payload.World.ValueNullable?.Name.ExtractText() ?? string.Empty;
-        var full = string.IsNullOrEmpty(world) ? payload.PlayerName : $"{payload.PlayerName}@{world}";
-
-        PopupHeader(full, DefaultLinkColor(GameLinkKind.Player), 0, false);
-
-        if (ImGui.Selectable("Send Tell")) InsertText($"/tell {full} ");
-        if (ImGui.Selectable("Insert in Input")) InsertText(payload.PlayerName);
-        if (ImGui.Selectable("Copy Name")) ImGui.SetClipboardText(full);
     }
 
     private void DrawGenericLinkPopup(ContentSegment segment)

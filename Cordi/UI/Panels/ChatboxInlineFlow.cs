@@ -170,7 +170,13 @@ public sealed class ChatboxInlineFlow
     public bool Pill(string text, Vector4 background, Vector4 foreground, float rounding) =>
         Pill(text, background, foreground, rounding, out _);
 
-    public bool Pill(string text, Vector4 background, Vector4 foreground, float rounding, out bool hovered)
+    public bool Pill(
+        string text,
+        Vector4 background,
+        Vector4 foreground,
+        float rounding,
+        out bool hovered,
+        bool backgroundOnHover = false)
     {
         hovered = false;
         if (!_active) return false;
@@ -185,12 +191,15 @@ public sealed class ChatboxInlineFlow
         var draw = ImGui.GetWindowDrawList();
         var min = new Vector2(position.X, position.Y + (_lineHeight - textSize.Y) * 0.5f - 1f);
         var max = new Vector2(position.X + width, min.Y + textSize.Y + 2f);
-        draw.AddRectFilled(min, max, ImGui.GetColorU32(background), rounding);
+
+        hovered = ImGui.IsMouseHoveringRect(min, max);
+
+        if (!backgroundOnHover || hovered)
+            draw.AddRectFilled(min, max, ImGui.GetColorU32(background), rounding);
 
         ImGui.SetCursorScreenPos(new Vector2(position.X + padding, min.Y + 1f));
         ImGui.TextColored(foreground, text);
 
-        hovered = ImGui.IsMouseHoveringRect(min, max);
         if (hovered) AnyHovered = true;
         return hovered && ImGui.IsMouseClicked(ImGuiMouseButton.Left);
     }

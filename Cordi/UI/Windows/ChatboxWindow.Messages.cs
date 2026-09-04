@@ -4,6 +4,7 @@ using Cordi.Configuration;
 using Cordi.Services.Chatbox;
 using Cordi.UI.Themes;
 using Dalamud.Bindings.ImGui;
+using Dalamud.Game.Text;
 using Dalamud.Interface;
 using Dalamud.Interface.Utility;
 using Dalamud.Interface.Utility.Raii;
@@ -13,12 +14,19 @@ namespace Cordi.UI.Windows;
 public sealed partial class ChatboxWindow
 {
     private const int ScrollSettleFrames = 3;
+    private const float CullMargin = 240f;
+
+    private readonly record struct RowMetrics(float Height, bool Grouped);
 
     private long _scrollToSeq;
     private float _lastScrollY;
     private float _lastScrollMax;
     private bool _stickToBottom = true;
+    private ChatboxChannelConfig? _drawChannel;
     private readonly System.Collections.Generic.HashSet<long> _revealedAds = new();
+    private readonly System.Collections.Generic.List<ChatboxMessage> _drawBuffer = new();
+    private readonly System.Collections.Generic.Dictionary<long, RowMetrics> _rowMetrics = new();
+    private int _rowMetricsKey;
 
     private bool HoveringRect(Vector2 min, Vector2 max) =>
         ImGui.IsWindowHovered(ImGuiHoveredFlags.ChildWindows)
@@ -27,8 +35,10 @@ public sealed partial class ChatboxWindow
 
     private void DrawMessages(ChatboxChannelState channel)
     {
-        var messages = channel.Snapshot();
-        if (messages.Length == 0)
+        _drawChannel = channel.Config;
+
+        channel.SnapshotInto(_drawBuffer);
+        if (_drawBuffer.Count == 0)
         {
             ImGui.Dummy(new Vector2(0, _theme.Gap()));
             _theme.MutedLabel($"No messages in {channel.Config.Name} yet.");
@@ -39,14 +49,33 @@ public sealed partial class ChatboxWindow
         var dividerSeq = Config.ShowNewMessageDivider ? channel.DividerSeq : 0;
         var pendingJump = _scrollToSeq;
 
+        SyncRowMetrics(MathF.Max(ImGui.GetContentRegionAvail().X, 80f), _drawBuffer.Count);
+
+        var scrollY = ImGui.GetScrollY();
+        var viewTop = scrollY - CullMargin;
+        var viewBottom = scrollY + ImGui.GetWindowHeight() + CullMargin;
+        var spacing = ImGui.GetStyle().ItemSpacing.Y;
+
+        var draw = ImGui.GetWindowDrawList();
+        draw.ChannelsSplit(3);
+        draw.ChannelsSetCurrent(2);
+
         ChatboxMessage? previous = null;
-        foreach (var message in messages)
+        foreach (var message in _drawBuffer)
         {
             if (dividerSeq != 0 && message.Seq == dividerSeq) DrawNewMessageDivider();
 
-            DrawMessage(channel, message, ShouldGroup(previous, message));
+            var grouped = ShouldGroup(previous, message);
             previous = message;
+
+            var top = ImGui.GetCursorPosY();
+            if (TryCullRow(message, grouped, top, viewTop, viewBottom, spacing)) continue;
+
+            DrawMessage(draw, channel, message, grouped);
+            _rowMetrics[message.Seq] = new RowMetrics(ImGui.GetCursorPosY() - top, grouped);
         }
+
+        draw.ChannelsMerge();
 
         DrawLinkPopup();
 
@@ -68,6 +97,50 @@ public sealed partial class ChatboxWindow
         {
             Chatbox.ClearDivider(channel);
         }
+    }
+
+    private void SyncRowMetrics(float width, int count)
+    {
+        var key = HashCode.Combine(
+            HashCode.Combine(
+                (int)(width * 4f),
+                (int)Config.Layout,
+                Config.ShowAvatars,
+                Config.AvatarSize,
+                Config.MessageSpacing,
+                Config.LineSpacing,
+                Config.EmoteScale,
+                Config.JumboEmoteScale),
+            HashCode.Combine(
+                (int)Config.Timestamps,
+                (int)Config.NameStyle,
+                Config.ShowReplyPreview,
+                Config.GroupConsecutive,
+                Config.CompactSystemMessages,
+                Config.JumboLoneEmotes,
+                ImGuiHelpers.GlobalScale,
+                ImGui.GetTextLineHeight()));
+
+        if (key != _rowMetricsKey)
+        {
+            _rowMetricsKey = key;
+            _rowMetrics.Clear();
+            return;
+        }
+
+        if (_rowMetrics.Count > count * 2 + 64) _rowMetrics.Clear();
+    }
+
+    private bool TryCullRow(
+        ChatboxMessage message, bool grouped, float top, float viewTop, float viewBottom, float spacing)
+    {
+        if (message.Seq == _scrollToSeq || message.Seq == _highlightSeq) return false;
+        if (!_rowMetrics.TryGetValue(message.Seq, out var metrics)) return false;
+        if (metrics.Grouped != grouped) return false;
+        if (top + metrics.Height >= viewTop && top <= viewBottom) return false;
+
+        ImGui.Dummy(new Vector2(0f, MathF.Max(metrics.Height - spacing, 0f)));
+        return true;
     }
 
     private void UpdateStickToBottom()
@@ -107,17 +180,18 @@ public sealed partial class ChatboxWindow
         return (message.Timestamp - previous.Timestamp).TotalSeconds <= Config.GroupWindowSeconds;
     }
 
-    private void DrawMessage(ChatboxChannelState channel, ChatboxMessage message, bool grouped)
+    private void DrawMessage(
+        ImDrawListPtr draw, ChatboxChannelState channel, ChatboxMessage message, bool grouped)
     {
         Chatbox.EnsureSegments(channel, message);
         PrepareEmbeds(message);
 
         ImGui.PushID(unchecked((int)message.Seq));
 
-        if (!grouped) ImGui.Dummy(new Vector2(0, Config.MessageSpacing * ImGuiHelpers.GlobalScale));
+        var systemLine = message.IsSystemLine && Config.CompactSystemMessages;
 
-        var draw = ImGui.GetWindowDrawList();
-        draw.ChannelsSplit(3);
+        if (!grouped && !systemLine) ImGui.Dummy(new Vector2(0, Config.MessageSpacing * ImGuiHelpers.GlobalScale));
+
         draw.ChannelsSetCurrent(2);
 
         var origin = ImGui.GetCursorScreenPos();
@@ -131,6 +205,10 @@ public sealed partial class ChatboxWindow
         if (concealed)
         {
             DrawBlockedNotice(message);
+        }
+        else if (systemLine)
+        {
+            DrawSystemLine(message, width);
         }
         else
         {
@@ -154,7 +232,7 @@ public sealed partial class ChatboxWindow
 
         draw.ChannelsSetCurrent(0);
         DrawRowBackground(draw, message, rowMin, rowMax, hovered);
-        draw.ChannelsMerge();
+        draw.ChannelsSetCurrent(2);
 
         if (hovered && Config.ShowHoverToolbar && !message.IsSystem && !concealed)
             DrawHoverToolbar(message, rowMin, rowMax);
@@ -439,9 +517,14 @@ public sealed partial class ChatboxWindow
     private Vector4 TextColorFor(ChatboxMessage message) =>
         message.IsSystem ? _theme.MutedText : _theme.Text;
 
+    private Vector4? AuthorColorFor(ChatboxMessage message) =>
+        _drawChannel != null && message.GameChatType != XivChatType.None
+            ? Chatbox.ColorFor(_drawChannel, message.GameChatType)
+            : message.AuthorColor;
+
     private Vector4 NameColorFor(ChatboxMessage message) =>
-        Config.ColorNamesByChannel && message.AuthorColor.HasValue
-            ? message.AuthorColor.Value
+        Config.ColorNamesByChannel && AuthorColorFor(message) is { } color
+            ? color
             : _theme.Accent;
 
     private string FormatTimestamp(DateTime timestamp) => Config.Timestamps switch
@@ -483,7 +566,7 @@ public sealed partial class ChatboxWindow
             return;
         }
 
-        var accent = message.AuthorColor ?? _theme.Accent;
+        var accent = AuthorColorFor(message) ?? _theme.Accent;
         draw.AddRectFilled(min, max, ImGui.GetColorU32(DimColor(accent, 0.8f)), rounding);
 
         var initials = Initials(message.AuthorName);

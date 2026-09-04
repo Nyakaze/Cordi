@@ -1,4 +1,5 @@
 using Cordi.Configuration;
+using Cordi.UI.Themes;
 using Dalamud.Interface;
 
 namespace Cordi.UI.Tabs;
@@ -168,6 +169,11 @@ public partial class ChatboxTab
                 innerWidth, () => Cfg.ColorNamesByChannel, v => Cfg.ColorNamesByChannel = v);
 
             DrawToggleRow(
+                "chatbox-compact-system", FontAwesomeIcon.Compress,
+                "Compact System Messages", "System lines drop the portrait and the name and stay on one row.",
+                innerWidth, () => Cfg.CompactSystemMessages, v => Cfg.CompactSystemMessages = v);
+
+            DrawToggleRow(
                 "chatbox-divider", FontAwesomeIcon.GripLines,
                 "Show \"New Messages\" Divider", "Marks where you stopped reading.",
                 innerWidth, () => Cfg.ShowNewMessageDivider, v => Cfg.ShowNewMessageDivider = v);
@@ -210,5 +216,37 @@ public partial class ChatboxTab
                 "Outline Links", "The outline keeps links readable when the window is transparent.",
                 innerWidth, () => Cfg.OutlineLinks, v => Cfg.OutlineLinks = v);
         }, "Colours");
+
+        Card.Draw("chatbox-chat-colours", innerWidth =>
+        {
+            theme.WrappedText(
+                "Every channel uses these colours unless it overrides them with its own colour.",
+                innerWidth,
+                theme.MutedText);
+            theme.SpacerY(0.6f);
+
+            foreach (var group in ChatboxConfig.ChatColorGroups)
+            {
+                var applies = group.Applies;
+                var fallback = ChatboxConfig.FromRgba(group.Default);
+
+                DrawColorRow(
+                    $"chatbox-chat-colour-{group.Key}",
+                    group.Label, $"Colour of {group.Label} messages.",
+                    innerWidth,
+                    () => Cfg.ChatTypeColor(group.Key) ?? fallback,
+                    v => Cfg.SetChatTypeColor(applies, v));
+            }
+
+            DrawActionRow(
+                "chatbox-chat-colour-reset", FontAwesomeIcon.Undo, UiTheme.TileAmber,
+                "Reset Chat Colours", "Restores the built-in colour for every chat type.",
+                "Reset", innerWidth,
+                () =>
+                {
+                    Cfg.ChatTypeColors = ChatboxConfig.DefaultChatTypeColors();
+                    Save();
+                });
+        }, "Chat Colours");
     }
 }

@@ -421,6 +421,11 @@ public partial class ChatboxTab
                 $"chatbox-color-{channel.Id}",
                 "Colour", "Tints the channel entry and its names.",
                 innerWidth, () => channel.Color, v => channel.Color = v);
+
+            DrawToggleRow(
+                $"chatbox-override-color-{channel.Id}", FontAwesomeIcon.Palette,
+                "Override Chat Colours", "Messages take this channel's colour instead of the global colour of their chat type.",
+                innerWidth, () => channel.OverrideChatColor, v => channel.OverrideChatColor = v);
         }, "Identity");
 
     private void DrawChannelSources(ChatboxChannelConfig channel) =>

@@ -147,7 +147,8 @@ public sealed partial class ChatboxWindow
             },
             _theme.Scaled(260f),
             !pinned,
-            tooltip);
+            tooltip,
+            active == XivChatType.None ? null : Chatbox.ColorFor(channel.Config, active));
     }
 
     private void DrawReplyStrip()

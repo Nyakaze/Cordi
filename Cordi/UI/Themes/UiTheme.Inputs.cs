@@ -468,8 +468,9 @@ public sealed partial class UiTheme
         Action<string> onSelect,
         float popupWidth,
         bool enabled = true,
-        string tooltip = "") =>
-        Dropdown.DrawIconPicker(id, size, icon, caption, captionWidth, items, currentKey, onSelect, popupWidth, enabled, tooltip);
+        string tooltip = "",
+        Vector4? accent = null) =>
+        Dropdown.DrawIconPicker(id, size, icon, caption, captionWidth, items, currentKey, onSelect, popupWidth, enabled, tooltip, accent);
 
     public void ThreadPicker(
         string id,

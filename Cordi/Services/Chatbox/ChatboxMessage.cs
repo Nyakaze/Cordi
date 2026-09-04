@@ -68,6 +68,8 @@ public sealed class ChatboxReplyRef
 
 public sealed class ChatboxMessage
 {
+    public const string SystemSender = "System";
+
     public long Seq { get; set; }
     public string ChannelId { get; init; } = string.Empty;
     public ChatboxOrigin Origin { get; init; }
@@ -76,6 +78,9 @@ public sealed class ChatboxMessage
     public string AuthorKey { get; init; } = string.Empty;
     public string AuthorName { get; init; } = string.Empty;
     public string AuthorWorld { get; init; } = string.Empty;
+    public ulong SenderContentId { get; set; }
+    public ulong SenderAccountId { get; set; }
+    public ushort SenderWorldId { get; set; }
     public string? AvatarUrl { get; set; }
     public Vector4? AuthorColor { get; init; }
 
@@ -93,6 +98,12 @@ public sealed class ChatboxMessage
     public bool IsSelf { get; init; }
     public bool IsSystem => Origin == ChatboxOrigin.System;
     public ChatboxReplyRef? Reply { get; init; }
+
+    public bool IsSystemLine =>
+        IsSystem
+        || (Origin == ChatboxOrigin.Game
+            && string.IsNullOrEmpty(AuthorWorld)
+            && string.Equals(AuthorName, SystemSender, StringComparison.Ordinal));
 
     public bool OnlyEmotes { get; set; }
     public bool SegmentsReady { get; set; }

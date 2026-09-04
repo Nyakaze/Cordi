@@ -76,18 +76,20 @@ public sealed class Dropdown
         Action<string> onSelect,
         float popupWidth,
         bool enabled = true,
-        string tooltip = "")
+        string tooltip = "",
+        Vector4? accent = null)
     {
         string popupId = $"##dropdown-popup-{id}";
         var draw = ImGui.GetWindowDrawList();
         var min = ImGui.GetCursorScreenPos();
         var max = min + size;
         float alpha = enabled ? 1f : 0.5f;
+        var captionColor = accent ?? theme.MutedText;
 
         if (!string.IsNullOrEmpty(caption))
         {
             theme.ApplyFontScale(CaptionFontScale);
-            using (ImRaii.PushColor(ImGuiCol.Text, new Vector4(theme.MutedText.X, theme.MutedText.Y, theme.MutedText.Z, theme.MutedText.W * alpha)))
+            using (ImRaii.PushColor(ImGuiCol.Text, new Vector4(captionColor.X, captionColor.Y, captionColor.Z, captionColor.W * alpha)))
             {
                 ImGui.SetCursorScreenPos(new Vector2(min.X, min.Y - ImGui.GetTextLineHeight() - theme.Scaled(3f)));
                 theme.FittedText(caption, captionWidth);
@@ -108,7 +110,7 @@ public sealed class Dropdown
         var fill = (hovered && enabled) || open ? theme.FrameBgHover : theme.FrameBg;
 
         draw.AddRectFilled(min, max, Fade(fill, alpha), theme.Radius());
-        draw.AddRect(min, max, Fade(open ? theme.Accent : theme.Border, alpha), theme.Radius());
+        draw.AddRect(min, max, Fade(open ? theme.Accent : accent ?? theme.Border, alpha), theme.Radius());
 
         using (ImRaii.PushFont(UiBuilder.IconFont))
         {
@@ -116,7 +118,7 @@ public sealed class Dropdown
             var glyphSize = ImGui.CalcTextSize(glyph);
             draw.AddText(
                 min + (size - glyphSize) * 0.5f,
-                Fade((hovered && enabled) || open ? theme.Text : theme.MutedText, alpha),
+                Fade((hovered && enabled) || open ? accent ?? theme.Text : captionColor, alpha),
                 glyph);
         }
 

@@ -7,6 +7,7 @@ namespace Cordi.Services.Chatbox;
 public sealed partial class ChatboxService
 {
     private const int VkReturn = 0x0D;
+    private const string GameLinkMarker = "\ue0bb";
 
     private static readonly string[] GameChatAddons =
     {
@@ -39,28 +40,26 @@ public sealed partial class ChatboxService
     {
         if (!Config.Enabled || !Service.ClientState.IsLoggedIn) return;
 
-        var addon = (AtkUnitBase*)Service.GameGui.GetAddonByName("ChatLog").Address;
-        if (addon == null || !addon->IsReady) return;
+        var window = _plugin.ChatboxWindow;
+        if (window == null) return;
 
-        for (var i = 0; i < addon->UldManager.NodeListCount; i++)
-        {
-            var node = addon->UldManager.NodeList[i];
-            if (node == null || node->Type != NodeType.Text) continue;
+        var addon = (AddonChatLog*)Service.GameGui.GetAddonByName("ChatLog").Address;
+        if (addon == null || !addon->AtkUnitBase.IsReady) return;
 
-            var textNode = (AtkTextNode*)node;
-            var text = textNode->NodeText.ToString();
-            if (string.IsNullOrWhiteSpace(text)) continue;
+        var input = addon->TextInput;
+        if (input == null) return;
 
-            // When game links an item, it contains the item link character '' or brackets '['
-            if (text.Contains('') || text.StartsWith('['))
-            {
-                _plugin.ChatboxWindow?.InsertText(text);
-                textNode->SetText(string.Empty);
-                if (_plugin.ChatboxWindow != null && !_plugin.ChatboxWindow.IsOpen)
-                    _plugin.ChatboxWindow.IsOpen = true;
-                break;
-            }
-        }
+        var textNode = input->AtkComponentInputBase.AtkTextNode;
+        if (textNode == null) return;
+
+        var text = textNode->NodeText.ToString();
+        if (string.IsNullOrWhiteSpace(text) || !text.Contains(GameLinkMarker, StringComparison.Ordinal)) return;
+
+        window.InsertText(text.Trim());
+        input->SetText(string.Empty);
+        textNode->SetText(string.Empty);
+
+        if (!window.IsOpen) window.IsOpen = true;
     }
 
     private void UpdateGameChatVisibility()

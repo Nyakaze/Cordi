@@ -14,6 +14,9 @@ public class Player : IEquatable<Player>
     public string? AvatarUrl { get; set; }
     public ulong? GameObjectId { get; private set; }
     public ulong? ContentId { get; private set; }
+    public ulong? AccountId { get; private set; }
+    public ushort? WorldId { get; private set; }
+    public uint? EntityId { get; private set; }
 
     public byte? RaceId { get; private set; }
     public byte? TribeId { get; private set; }
@@ -40,6 +43,8 @@ public class Player : IEquatable<Player>
 
         player.PopulateContentIdAndCustomize(pc);
         player.PopulateCompanyTag(pc);
+        player.EntityId = pc.EntityId;
+        player.WorldId = (ushort)pc.HomeWorld.RowId;
         return player;
     }
 
@@ -50,6 +55,62 @@ public class Player : IEquatable<Player>
         return player;
     }
 
+    public static Player FromChatSource(
+        string name, string world, ushort worldId = 0, ulong contentId = 0, ulong accountId = 0)
+    {
+        var player = new Player(name.Trim(), world);
+        player.ApplyGameIds(contentId, accountId, worldId);
+        player.EnrichFromWorld();
+        return player;
+    }
+
+    public void ApplyGameIds(ulong contentId, ulong accountId, ushort worldId)
+    {
+        if (contentId != 0) ContentId = contentId;
+        if (accountId != 0) AccountId = accountId;
+        if (worldId != 0) WorldId = worldId;
+    }
+
+    public bool EnrichFromWorld()
+    {
+        if (!TryResolveInWorld(out var pc) || pc == null) return false;
+
+        PopulateContentIdAndCustomize(pc);
+        EntityId = pc.EntityId;
+        WorldId ??= (ushort)pc.HomeWorld.RowId;
+        return true;
+    }
+
+    public ushort ResolveWorldId()
+    {
+        if (WorldId is { } known && known != 0) return known;
+        if (string.IsNullOrEmpty(World)) return 0;
+
+        var sheet = Service.DataManager.GetExcelSheet<Lumina.Excel.Sheets.World>();
+        if (sheet == null) return 0;
+
+        foreach (var row in sheet)
+        {
+            if (!string.Equals(row.Name.ExtractText(), World, StringComparison.OrdinalIgnoreCase)) continue;
+
+            WorldId = (ushort)row.RowId;
+            return WorldId.Value;
+        }
+
+        return 0;
+    }
+
+    public string ResolveWorldName()
+    {
+        if (!string.IsNullOrEmpty(World)) return World;
+        if (WorldId is not { } id || id == 0) return string.Empty;
+
+        return Service.DataManager.GetExcelSheet<Lumina.Excel.Sheets.World>()
+            ?.GetRowOrDefault(id)?.Name.ExtractText() ?? string.Empty;
+    }
+
+    public bool IsNearby => EntityId is { } id && id != 0;
+
     protected unsafe void PopulateContentIdAndCustomize(IPlayerCharacter pc)
     {
         try
@@ -59,6 +120,9 @@ public class Player : IEquatable<Player>
 
             var cid = character->ContentId;
             if (cid != 0) ContentId = cid;
+
+            var aid = character->AccountId;
+            if (aid != 0) AccountId = aid;
 
             var customize = character->DrawData.CustomizeData;
             RaceId = customize.Race;
@@ -94,7 +158,7 @@ public class Player : IEquatable<Player>
             }
         }
 
-        pc = Service.ObjectTable.FindPlayerByName(Name, World);
+        pc = Service.ObjectTable.FindPlayerByName(Name, string.IsNullOrEmpty(World) ? null : World);
         if (pc != null)
         {
             GameObjectId = pc.GameObjectId;

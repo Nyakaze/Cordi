@@ -34,6 +34,18 @@ public sealed partial class ChatboxWindow
         ImGui.EndGroup();
     }
 
+    private void DrawSystemLine(ChatboxMessage message, float width)
+    {
+        DrawContent(message, width, AuthorColorFor(message) ?? _theme.MutedText, () =>
+        {
+            var stamp = FormatTimestamp(message.Timestamp);
+            if (stamp.Length > 0) _flow.Text(stamp + " ", _theme.FaintText);
+        });
+
+        DrawAttachments(message, width);
+        DrawEmbeds(message, width);
+    }
+
     private void DrawCompact(ChatboxMessage message, float width)
     {
         DrawContent(message, width, TextColorFor(message), () =>
@@ -41,7 +53,7 @@ public sealed partial class ChatboxWindow
             var stamp = FormatTimestamp(message.Timestamp);
             if (stamp.Length > 0) _flow.Text(stamp + " ", _theme.MutedText);
             DrawTellDirectionInline(message);
-            _flow.Text(message.DisplayName(Config.NameStyle) + ": ", NameColorFor(message));
+            DrawAuthorNameInline(message);
         });
         DrawAttachments(message, width);
         DrawEmbeds(message, width);
@@ -109,6 +121,63 @@ public sealed partial class ChatboxWindow
         if (clicked) _revealedAds.Add(message.Seq);
     }
 
+    private static bool CanOpenPlayerMenu(ChatboxMessage message) =>
+        message.Origin == ChatboxOrigin.Game
+        && !message.IsSystemLine
+        && message.AuthorName.Length > 0;
+
+    private void DrawAuthorName(ChatboxMessage message)
+    {
+        var color = NameColorFor(message);
+        var text = message.DisplayName(Config.NameStyle);
+
+        if (!CanOpenPlayerMenu(message))
+        {
+            ImGui.TextColored(color, text);
+            return;
+        }
+
+        var origin = ImGui.GetCursorScreenPos();
+        var size = ImGui.CalcTextSize(text);
+        var pad = _theme.PadX(0.25f);
+        var min = new Vector2(origin.X - pad, origin.Y - 1f);
+        var max = new Vector2(origin.X + size.X + pad, origin.Y + size.Y + 1f);
+
+        var hovered = ImGui.IsWindowHovered(ImGuiHoveredFlags.ChildWindows)
+                      && ImGui.IsMouseHoveringRect(min, max);
+
+        if (hovered)
+        {
+            ImGui.GetWindowDrawList().AddRectFilled(
+                min, max, ImGui.GetColorU32(DimColor(color, 0.28f)), _theme.Radius(0.35f));
+            ImGui.SetMouseCursor(ImGuiMouseCursor.Hand);
+        }
+
+        ImGui.TextColored(color, text);
+
+        if (hovered && ImGui.IsMouseClicked(ImGuiMouseButton.Right)) OpenPlayerPopup(message);
+    }
+
+    private void DrawAuthorNameInline(ChatboxMessage message)
+    {
+        var color = NameColorFor(message);
+        var text = message.DisplayName(Config.NameStyle);
+
+        if (!CanOpenPlayerMenu(message))
+        {
+            _flow.Text(text + ": ", color);
+            return;
+        }
+
+        _flow.Pill(text + ":", DimColor(color, 0.28f), color, _theme.Radius(0.35f), out var hovered, true);
+        _flow.Text(" ", color);
+
+        if (!hovered || !ImGui.IsWindowHovered(ImGuiHoveredFlags.ChildWindows)) return;
+
+        ImGui.SetMouseCursor(ImGuiMouseCursor.Hand);
+        if (ImGui.IsMouseClicked(ImGuiMouseButton.Right)) OpenPlayerPopup(message);
+    }
+
     private void DrawHeaderLine(ChatboxMessage message)
     {
         if (message.IsSystem)
@@ -118,7 +187,7 @@ public sealed partial class ChatboxWindow
         else
         {
             if (DrawTellDirectionIcon(message)) ImGui.SameLine(0, _theme.Gap(0.35f));
-            ImGui.TextColored(NameColorFor(message), message.DisplayName(Config.NameStyle));
+            DrawAuthorName(message);
         }
 
         var stamp = FormatTimestamp(message.Timestamp);

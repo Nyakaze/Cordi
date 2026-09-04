@@ -29,6 +29,8 @@ public sealed partial class ChatboxService
     {
         if (_disposed || !Config.Enabled) return;
 
+        BeginSourceCapture();
+
         var gameMaster = IsGameMasterChatType(message.ChatType);
 
         var targets = Channels
@@ -72,10 +74,11 @@ public sealed partial class ChatboxService
                 Segments = segments,
                 MentionsMe = mentionsMe,
                 IsSelf = isSelf,
-                AuthorColor = target.Config.Color,
+                AuthorColor = ColorFor(target.Config, message.ChatType),
                 OnlyEmotes = onlyEmotes,
             };
 
+            AwaitSource(entry);
             Publish(target, entry, notify: !blocked);
             RequestGameAvatar(entry);
         }
@@ -359,7 +362,7 @@ public sealed partial class ChatboxService
     }
 
     private static string StripSenderMarkers(string sender) =>
-        string.IsNullOrEmpty(sender) ? "System" : sender.Trim();
+        string.IsNullOrEmpty(sender) ? ChatboxMessage.SystemSender : sender.Trim();
 
     private void RequestGameAvatar(ChatboxMessage entry)
     {

@@ -125,6 +125,14 @@ public sealed class ChatboxChannelState
             return _messages.ToArray();
     }
 
+    public void SnapshotInto(List<ChatboxMessage> buffer)
+    {
+        buffer.Clear();
+
+        lock (_gate)
+            buffer.AddRange(_messages);
+    }
+
     public ChatboxMessage? FindBySeq(long seq)
     {
         lock (_gate)

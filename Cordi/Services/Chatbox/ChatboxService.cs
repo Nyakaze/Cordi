@@ -40,6 +40,7 @@ public sealed partial class ChatboxService : IDisposable
 
         RebuildChannels();
         LoadHiddenEmbeds();
+        InitializeSourceHook();
     }
 
     private readonly System.Collections.Concurrent.ConcurrentDictionary<(long Seq, string Url), byte> _hiddenEmbeds = new();
@@ -109,6 +110,9 @@ public sealed partial class ChatboxService : IDisposable
             }
         }
     }
+
+    public Vector4 ColorFor(ChatboxChannelConfig config, XivChatType type) =>
+        config.OverrideChatColor ? config.Color : Config.ChatTypeColor(type) ?? config.Color;
 
     public int TotalUnread => Channels.Where(c => !c.Config.MuteNotifications).Sum(c => c.UnreadCount);
 
@@ -358,6 +362,7 @@ public sealed partial class ChatboxService : IDisposable
         if (_disposed) return;
         _disposed = true;
 
+        DisposeSourceHook();
         RestoreGameChat();
         PersistAllState();
         EmbedCache.Dispose();
