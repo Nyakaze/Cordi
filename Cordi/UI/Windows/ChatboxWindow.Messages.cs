@@ -16,8 +16,9 @@ public sealed partial class ChatboxWindow
     private const int ScrollSettleFrames = 3;
     private const float CullMargin = 240f;
 
-    private readonly record struct RowMetrics(float Height, bool Grouped);
+    private readonly record struct RowMetrics(float Height, bool Grouped, int Repeats);
 
+    private int _rowRepeats = 1;
     private long _scrollToSeq;
     private float _lastScrollY;
     private float _lastScrollMax;
@@ -61,18 +62,37 @@ public sealed partial class ChatboxWindow
         draw.ChannelsSetCurrent(2);
 
         ChatboxMessage? previous = null;
-        foreach (var message in _drawBuffer)
+        var repeats = 1;
+        var dividerPending = false;
+
+        for (var index = 0; index < _drawBuffer.Count; index++)
         {
-            if (dividerSeq != 0 && message.Seq == dividerSeq) DrawNewMessageDivider();
+            var message = _drawBuffer[index];
+            if (dividerSeq != 0 && message.Seq == dividerSeq) dividerPending = true;
+
+            if (index + 1 < _drawBuffer.Count && CollapsesInto(message, _drawBuffer[index + 1]))
+            {
+                repeats++;
+                continue;
+            }
+
+            if (dividerPending)
+            {
+                DrawNewMessageDivider();
+                dividerPending = false;
+            }
 
             var grouped = ShouldGroup(previous, message);
             previous = message;
 
             var top = ImGui.GetCursorPosY();
-            if (TryCullRow(message, grouped, top, viewTop, viewBottom, spacing)) continue;
+            if (!TryCullRow(message, grouped, repeats, top, viewTop, viewBottom, spacing))
+            {
+                DrawMessage(draw, channel, message, grouped, repeats);
+                _rowMetrics[message.Seq] = new RowMetrics(ImGui.GetCursorPosY() - top, grouped, repeats);
+            }
 
-            DrawMessage(draw, channel, message, grouped);
-            _rowMetrics[message.Seq] = new RowMetrics(ImGui.GetCursorPosY() - top, grouped);
+            repeats = 1;
         }
 
         draw.ChannelsMerge();
@@ -131,12 +151,27 @@ public sealed partial class ChatboxWindow
         if (_rowMetrics.Count > count * 2 + 64) _rowMetrics.Clear();
     }
 
+    private bool CollapsesInto(ChatboxMessage message, ChatboxMessage next)
+    {
+        if (!Config.CollapseRepeats) return false;
+        if (message.Seq == _scrollToSeq || message.Seq == _highlightSeq) return false;
+        if (message.FilteredAsAd || next.FilteredAsAd) return false;
+        if (message.Reply != null || next.Reply != null) return false;
+        if (message.Attachments.Count > 0 || next.Attachments.Count > 0) return false;
+        if (message.Origin != next.Origin || message.GameChatType != next.GameChatType) return false;
+        if (!string.Equals(message.AuthorKey, next.AuthorKey, StringComparison.Ordinal)) return false;
+        if (message.RawContent.Length == 0) return false;
+        if (!string.Equals(message.RawContent, next.RawContent, StringComparison.Ordinal)) return false;
+
+        return (next.Timestamp - message.Timestamp).TotalSeconds <= Config.CollapseWindowSeconds;
+    }
+
     private bool TryCullRow(
-        ChatboxMessage message, bool grouped, float top, float viewTop, float viewBottom, float spacing)
+        ChatboxMessage message, bool grouped, int repeats, float top, float viewTop, float viewBottom, float spacing)
     {
         if (message.Seq == _scrollToSeq || message.Seq == _highlightSeq) return false;
         if (!_rowMetrics.TryGetValue(message.Seq, out var metrics)) return false;
-        if (metrics.Grouped != grouped) return false;
+        if (metrics.Grouped != grouped || metrics.Repeats != repeats) return false;
         if (top + metrics.Height >= viewTop && top <= viewBottom) return false;
 
         ImGui.Dummy(new Vector2(0f, MathF.Max(metrics.Height - spacing, 0f)));
@@ -181,10 +216,12 @@ public sealed partial class ChatboxWindow
     }
 
     private void DrawMessage(
-        ImDrawListPtr draw, ChatboxChannelState channel, ChatboxMessage message, bool grouped)
+        ImDrawListPtr draw, ChatboxChannelState channel, ChatboxMessage message, bool grouped, int repeats)
     {
         Chatbox.EnsureSegments(channel, message);
         PrepareEmbeds(message);
+
+        _rowRepeats = repeats;
 
         ImGui.PushID(unchecked((int)message.Seq));
 
@@ -268,6 +305,9 @@ public sealed partial class ChatboxWindow
         _flow.Begin(MathF.Max(wrapWidth, 60f), MeasureLineHeight(message), Config.LineSpacing * ImGuiHelpers.GlobalScale);
         prefix?.Invoke();
         DrawSegments(message, textColor, EmoteSizeFor(message));
+
+        if (_rowRepeats > 1) _flow.Text($"  ({_rowRepeats}x)", _theme.FaintText);
+
         return _flow.End();
     }
 
@@ -298,7 +338,11 @@ public sealed partial class ChatboxWindow
                     break;
 
                 case SegmentKind.AutoTranslate:
-                    _flow.Pill(segment.Text, DimColor(_theme.Accent, 0.18f), Lighten(_theme.Accent), _theme.Radius(0.35f));
+                    _flow.Text(segment.Text, segment.Color ?? textColor);
+                    break;
+
+                case SegmentKind.GameIcon:
+                    DrawGameIconSegment(segment, textColor);
                     break;
 
                 case SegmentKind.Link:
@@ -343,6 +387,18 @@ public sealed partial class ChatboxWindow
 
         if (texture != null) _flow.Image(texture, emoteSize, segment.Text);
         else _flow.Text(segment.Text, segment.Color ?? textColor);
+    }
+
+    private void DrawGameIconSegment(ContentSegment segment, Vector4 textColor)
+    {
+        if (GameFontIcons.TryResolve(
+                segment.IconId, ImGui.GetTextLineHeight(), out var texture, out var size, out var uv0, out var uv1))
+        {
+            _flow.Icon(texture, size, uv0, uv1);
+            return;
+        }
+
+        if (segment.Text.Length > 0) _flow.Text(segment.Text, segment.Color ?? textColor);
     }
 
     private void DrawMentionSegment(ContentSegment segment)
@@ -535,6 +591,29 @@ public sealed partial class ChatboxWindow
         ChatboxTimestampStyle.Relative => RelativeTime(timestamp),
         _ => string.Empty,
     };
+
+    private float TimestampGutter()
+    {
+        var sample = Config.Timestamps switch
+        {
+            ChatboxTimestampStyle.Time => "00:00",
+            ChatboxTimestampStyle.TimeWithSeconds => "00:00:00",
+            ChatboxTimestampStyle.DateAndTime => "00.00. 00:00",
+            ChatboxTimestampStyle.Relative => "00m ago",
+            _ => string.Empty,
+        };
+
+        return sample.Length == 0 ? 0f : ImGui.CalcTextSize(sample).X + _theme.Gap(0.75f);
+    }
+
+    private void DrawTimestampGutter(ChatboxMessage message, Vector4 color)
+    {
+        var stamp = FormatTimestamp(message.Timestamp);
+        if (stamp.Length == 0) return;
+
+        _flow.Text(stamp + " ", color);
+        _flow.Indent(TimestampGutter());
+    }
 
     private static string RelativeTime(DateTime timestamp)
     {

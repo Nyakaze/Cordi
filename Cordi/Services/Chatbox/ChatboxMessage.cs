@@ -23,6 +23,7 @@ public enum SegmentKind
     LineBreak,
     GameLink,
     AutoTranslate,
+    GameIcon,
 }
 
 public enum GameLinkKind
@@ -51,6 +52,7 @@ public sealed class ContentSegment
 
     public GameLinkKind LinkKind { get; init; }
     public uint LinkId { get; init; }
+    public uint IconId { get; init; }
     public Payload? Link { get; init; }
 
     public static ContentSegment PlainText(string text) => new() { Kind = SegmentKind.Text, Text = text };

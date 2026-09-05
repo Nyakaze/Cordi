@@ -36,11 +36,8 @@ public sealed partial class ChatboxWindow
 
     private void DrawSystemLine(ChatboxMessage message, float width)
     {
-        DrawContent(message, width, AuthorColorFor(message) ?? _theme.MutedText, () =>
-        {
-            var stamp = FormatTimestamp(message.Timestamp);
-            if (stamp.Length > 0) _flow.Text(stamp + " ", _theme.FaintText);
-        });
+        DrawContent(message, width, AuthorColorFor(message) ?? _theme.MutedText,
+            () => DrawTimestampGutter(message, _theme.FaintText));
 
         DrawAttachments(message, width);
         DrawEmbeds(message, width);
@@ -50,8 +47,7 @@ public sealed partial class ChatboxWindow
     {
         DrawContent(message, width, TextColorFor(message), () =>
         {
-            var stamp = FormatTimestamp(message.Timestamp);
-            if (stamp.Length > 0) _flow.Text(stamp + " ", _theme.MutedText);
+            DrawTimestampGutter(message, _theme.MutedText);
             DrawTellDirectionInline(message);
             DrawAuthorNameInline(message);
         });

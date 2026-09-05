@@ -1,5 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
+using System;
 using System.Numerics;
 using Cordi.Services.Chatbox;
 using Dalamud.Bindings.ImGui;
@@ -9,12 +8,16 @@ namespace Cordi.UI.Panels;
 
 public sealed class ChatboxInlineFlow
 {
+    private ImDrawListPtr _draw;
     private Vector2 _origin;
     private float _wrapWidth;
     private float _lineHeight;
     private float _lineSpacing;
+    private float _indent;
     private float _x;
     private float _y;
+    private float _clipTop;
+    private float _clipBottom;
     private bool _active;
     private bool _placed;
 
@@ -22,21 +25,35 @@ public sealed class ChatboxInlineFlow
 
     public void Begin(float wrapWidth, float lineHeight, float lineSpacing)
     {
+        _draw = ImGui.GetWindowDrawList();
         _origin = ImGui.GetCursorScreenPos();
         _wrapWidth = MathF.Max(wrapWidth, 32f);
         _lineHeight = MathF.Max(lineHeight, ImGui.GetTextLineHeight());
         _lineSpacing = lineSpacing;
+        _indent = 0f;
         _x = 0f;
         _y = 0f;
         _active = true;
         _placed = false;
         AnyHovered = false;
+
+        var top = ImGui.GetWindowPos().Y;
+        _clipTop = top;
+        _clipBottom = top + ImGui.GetWindowSize().Y;
+    }
+
+    public void Indent(float offset)
+    {
+        if (!_active) return;
+
+        _indent = Math.Clamp(offset, 0f, _wrapWidth * 0.5f);
+        if (_x < _indent) _x = _indent;
     }
 
     public void NewLine()
     {
         if (!_active) return;
-        _x = 0f;
+        _x = _indent;
         _y += _lineHeight + _lineSpacing;
     }
 
@@ -56,7 +73,7 @@ public sealed class ChatboxInlineFlow
 
     private void EnsureRoom(float width)
     {
-        if (_x > 0f && _x + width > _wrapWidth)
+        if (_x > _indent && _x + width > _wrapWidth)
             NewLine();
     }
 
@@ -68,15 +85,49 @@ public sealed class ChatboxInlineFlow
         return position;
     }
 
+    private void Emit(ReadOnlySpan<char> text, Vector4 color, Vector2 size)
+    {
+        var position = Place(size.X, size.Y);
+        if (position.Y + size.Y < _clipTop || position.Y > _clipBottom) return;
+
+        _draw.AddText(position, ImGui.GetColorU32(color), text);
+    }
+
     public void Text(string text, Vector4 color)
     {
         if (!_active || string.IsNullOrEmpty(text)) return;
 
-        foreach (var token in Tokenize(text))
-            DrawToken(token, color);
+        var span = text.AsSpan();
+        if (_x <= _indent) span = span.TrimStart();
+        if (span.IsEmpty) return;
+
+        var size = ImGui.CalcTextSize(span);
+        if (_x + size.X <= _wrapWidth)
+        {
+            Emit(span, color, size);
+            return;
+        }
+
+        var start = 0;
+        while (start < span.Length)
+        {
+            var end = TokenEnd(span, start);
+            DrawToken(span[start..end], color);
+            start = end;
+        }
     }
 
-    private void DrawToken(string token, Vector4 color)
+    private static int TokenEnd(ReadOnlySpan<char> text, int start)
+    {
+        var isSpace = char.IsWhiteSpace(text[start]);
+        var end = start + 1;
+        while (end < text.Length && char.IsWhiteSpace(text[end]) == isSpace)
+            end++;
+
+        return end;
+    }
+
+    private void DrawToken(ReadOnlySpan<char> token, Vector4 color)
     {
         var size = ImGui.CalcTextSize(token);
 
@@ -86,38 +137,50 @@ public sealed class ChatboxInlineFlow
             return;
         }
 
-        if (token.Trim().Length == 0 && _x == 0f) return;
+        if (_x <= _indent && token.IsWhiteSpace()) return;
 
         EnsureRoom(size.X);
-        var position = Place(size.X, size.Y);
-
-        ImGui.SetCursorScreenPos(position);
-        ImGui.TextColored(color, token);
+        Emit(token, color, size);
     }
 
-    private void DrawOversizedToken(string token, Vector4 color)
+    private void DrawOversizedToken(ReadOnlySpan<char> token, Vector4 color)
     {
-        var start = 0;
-        while (start < token.Length)
+        while (!token.IsEmpty)
         {
-            var length = 1;
-            while (start + length <= token.Length)
-            {
-                var candidate = ImGui.CalcTextSize(token.Substring(start, length)).X;
-                if (_x + candidate > _wrapWidth) break;
-                length++;
-            }
+            var length = FitLength(token, _wrapWidth - _x);
+            var slice = token[..length];
 
-            length = Math.Max(1, length - 1);
-            var slice = token.Substring(start, length);
-            var size = ImGui.CalcTextSize(slice);
-            var position = Place(size.X, size.Y);
-            ImGui.SetCursorScreenPos(position);
-            ImGui.TextColored(color, slice);
+            Emit(slice, color, ImGui.CalcTextSize(slice));
 
-            start += length;
-            if (start < token.Length) NewLine();
+            token = token[length..];
+            if (!token.IsEmpty) NewLine();
         }
+    }
+
+    private static int FitLength(ReadOnlySpan<char> token, float available)
+    {
+        var low = 1;
+        var high = token.Length;
+        var best = 1;
+
+        while (low <= high)
+        {
+            var mid = low + (high - low) / 2;
+            if (ImGui.CalcTextSize(token[..mid]).X <= available)
+            {
+                best = mid;
+                low = mid + 1;
+            }
+            else
+            {
+                high = mid - 1;
+            }
+        }
+
+        if (best < token.Length && char.IsHighSurrogate(token[best - 1]))
+            best = Math.Max(1, best - 1);
+
+        return best;
     }
 
     public void Image(IDalamudTextureWrap texture, float size, string tooltip)
@@ -137,6 +200,17 @@ public sealed class ChatboxInlineFlow
         if (!string.IsNullOrEmpty(tooltip)) ImGui.SetTooltip(tooltip);
     }
 
+    public void Icon(IDalamudTextureWrap texture, Vector2 size, Vector2 uv0, Vector2 uv1)
+    {
+        if (!_active) return;
+
+        EnsureRoom(size.X);
+        var position = Place(size.X, size.Y);
+        if (position.Y + size.Y < _clipTop || position.Y > _clipBottom) return;
+
+        _draw.AddImage(texture.Handle, position, position + size, uv0, uv1);
+    }
+
     public void Placeholder(string text, float size, Vector4 color)
     {
         if (!_active) return;
@@ -144,16 +218,17 @@ public sealed class ChatboxInlineFlow
         var textSize = ImGui.CalcTextSize(text);
         var width = MathF.Min(textSize.X, size * 3f);
         EnsureRoom(width);
-        var position = Place(width, textSize.Y);
 
-        ImGui.SetCursorScreenPos(position);
-        ImGui.TextColored(color, text);
+        var position = Place(width, textSize.Y);
+        if (position.Y + textSize.Y < _clipTop || position.Y > _clipBottom) return;
+
+        _draw.AddText(position, ImGui.GetColorU32(color), text);
     }
 
     private static uint OutlineColor(float alpha) =>
         ImGui.GetColorU32(new Vector4(0f, 0f, 0f, Math.Clamp(alpha, 0f, 1f) * 0.9f));
 
-    private static void DrawOutline(ImDrawListPtr draw, Vector2 position, string token, float alpha)
+    private static void DrawOutline(ImDrawListPtr draw, Vector2 position, ReadOnlySpan<char> token, float alpha)
     {
         var shade = OutlineColor(alpha);
 
@@ -188,17 +263,17 @@ public sealed class ChatboxInlineFlow
         EnsureRoom(width);
         var position = Place(width, _lineHeight);
 
-        var draw = ImGui.GetWindowDrawList();
         var min = new Vector2(position.X, position.Y + (_lineHeight - textSize.Y) * 0.5f - 1f);
         var max = new Vector2(position.X + width, min.Y + textSize.Y + 2f);
 
         hovered = ImGui.IsMouseHoveringRect(min, max);
 
-        if (!backgroundOnHover || hovered)
-            draw.AddRectFilled(min, max, ImGui.GetColorU32(background), rounding);
+        if (min.Y > _clipBottom || max.Y < _clipTop) return false;
 
-        ImGui.SetCursorScreenPos(new Vector2(position.X + padding, min.Y + 1f));
-        ImGui.TextColored(foreground, text);
+        if (!backgroundOnHover || hovered)
+            _draw.AddRectFilled(min, max, ImGui.GetColorU32(background), rounding);
+
+        _draw.AddText(new Vector2(position.X + padding, min.Y + 1f), ImGui.GetColorU32(foreground), text);
 
         if (hovered) AnyHovered = true;
         return hovered && ImGui.IsMouseClicked(ImGuiMouseButton.Left);
@@ -208,51 +283,47 @@ public sealed class ChatboxInlineFlow
     {
         if (!_active) return false;
 
+        var span = text.AsSpan();
         var clicked = false;
-        foreach (var token in Tokenize(text))
+        var start = 0;
+
+        while (start < span.Length)
         {
-            var size = ImGui.CalcTextSize(token);
-            EnsureRoom(size.X);
-            var position = Place(size.X, size.Y);
-
-            var draw = ImGui.GetWindowDrawList();
-            if (outlined) DrawOutline(draw, position, token, color.W);
-
-            ImGui.SetCursorScreenPos(position);
-            ImGui.TextColored(color, token);
-
-            var min = ImGui.GetItemRectMin();
-            var max = ImGui.GetItemRectMax();
-            var underlineStart = new Vector2(min.X, max.Y - 1f);
-            var underlineEnd = new Vector2(max.X, max.Y - 1f);
-
-            if (outlined)
-                draw.AddLine(underlineStart + Vector2.One, underlineEnd + Vector2.One, OutlineColor(color.W));
-
-            draw.AddLine(underlineStart, underlineEnd, ImGui.GetColorU32(color));
-
-            if (!ImGui.IsItemHovered()) continue;
-
-            AnyHovered = true;
-            ImGui.SetMouseCursor(ImGuiMouseCursor.Hand);
-            if (ImGui.IsMouseClicked(ImGuiMouseButton.Left)) clicked = true;
+            var end = TokenEnd(span, start);
+            if (DrawLinkToken(span[start..end], color, outlined)) clicked = true;
+            start = end;
         }
 
         return clicked;
     }
 
-    private static IEnumerable<string> Tokenize(string text)
+    private bool DrawLinkToken(ReadOnlySpan<char> token, Vector4 color, bool outlined)
     {
-        var start = 0;
-        while (start < text.Length)
-        {
-            var isSpace = char.IsWhiteSpace(text[start]);
-            var end = start + 1;
-            while (end < text.Length && char.IsWhiteSpace(text[end]) == isSpace)
-                end++;
+        var size = ImGui.CalcTextSize(token);
+        EnsureRoom(size.X);
+        var position = Place(size.X, size.Y);
 
-            yield return text[start..end];
-            start = end;
-        }
+        if (position.Y + size.Y < _clipTop || position.Y > _clipBottom) return false;
+
+        if (outlined) DrawOutline(_draw, position, token, color.W);
+
+        ImGui.SetCursorScreenPos(position);
+        ImGui.TextColored(color, token);
+
+        var min = ImGui.GetItemRectMin();
+        var max = ImGui.GetItemRectMax();
+        var underlineStart = new Vector2(min.X, max.Y - 1f);
+        var underlineEnd = new Vector2(max.X, max.Y - 1f);
+
+        if (outlined)
+            _draw.AddLine(underlineStart + Vector2.One, underlineEnd + Vector2.One, OutlineColor(color.W));
+
+        _draw.AddLine(underlineStart, underlineEnd, ImGui.GetColorU32(color));
+
+        if (!ImGui.IsItemHovered()) return false;
+
+        AnyHovered = true;
+        ImGui.SetMouseCursor(ImGuiMouseCursor.Hand);
+        return ImGui.IsMouseClicked(ImGuiMouseButton.Left);
     }
 }

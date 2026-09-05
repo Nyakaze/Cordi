@@ -132,6 +132,18 @@ public partial class ChatboxTab
                 innerWidth, 30, 1800,
                 () => Cfg.GroupWindowSeconds, v => Cfg.GroupWindowSeconds = v, " s");
 
+            DrawToggleRow(
+                "chatbox-collapse-repeats", FontAwesomeIcon.Clone,
+                "Collapse repeated Messages",
+                "Identical messages that arrive back to back become one row with a counter.",
+                innerWidth, () => Cfg.CollapseRepeats, v => Cfg.CollapseRepeats = v);
+
+            DrawIntSliderRow(
+                "chatbox-collapse-window", FontAwesomeIcon.Stopwatch,
+                "Repeat Window", "Seconds between identical messages that still collapse into one row.",
+                innerWidth, 5, 300,
+                () => Cfg.CollapseWindowSeconds, v => Cfg.CollapseWindowSeconds = v, " s");
+
             DrawSliderRow(
                 "chatbox-message-spacing", FontAwesomeIcon.ArrowsAltV,
                 "Message Spacing", "Vertical gap between message blocks.",

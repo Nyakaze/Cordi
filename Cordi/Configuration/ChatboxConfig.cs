@@ -103,6 +103,8 @@ public class ChatboxConfig
 
     public bool GroupConsecutive { get; set; } = true;
     public int GroupWindowSeconds { get; set; } = 420;
+    public bool CollapseRepeats { get; set; } = true;
+    public int CollapseWindowSeconds { get; set; } = 60;
     public float MessageSpacing { get; set; } = 6f;
     public float LineSpacing { get; set; } = 2f;
 

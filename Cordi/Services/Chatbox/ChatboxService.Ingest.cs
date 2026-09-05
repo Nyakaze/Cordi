@@ -12,6 +12,7 @@ using Cordi.Domain;
 using Cordi.Packets.Handler.Chat;
 using Cordi.Services.Discord;
 using Cordi.Services.Emojis;
+using Dalamud.Game.ClientState.Objects.SubKinds;
 using Dalamud.Game.Text;
 using Dalamud.Game.Text.SeStringHandling;
 using Dalamud.Game.Text.SeStringHandling.Payloads;
@@ -121,6 +122,7 @@ public sealed partial class ChatboxService
         uint linkId = 0;
         Vector4? linkColor = null;
         var linkText = new StringBuilder();
+        string? absorbedWorld = null;
 
         void FlushLink()
         {
@@ -141,6 +143,16 @@ public sealed partial class ChatboxService
             var text = LinkDisplayText(kind, payload, id, captured);
             if (text.Length == 0) return;
 
+            if (kind == GameLinkKind.Player)
+            {
+                var world = PayloadWorldName(payload as PlayerPayload);
+                if (world.Length > 0)
+                {
+                    absorbedWorld = world;
+                    text = $"{text}@{world}";
+                }
+            }
+
             segments.Add(new ContentSegment
             {
                 Kind = SegmentKind.GameLink,
@@ -155,9 +167,20 @@ public sealed partial class ChatboxService
         void BeginLink(GameLinkKind kind, Payload? payload, uint id)
         {
             FlushLink();
+            absorbedWorld = null;
             linkKind = kind;
             link = payload;
             linkId = id;
+        }
+
+        void AddIcon(uint icon, string fallback)
+        {
+            segments.Add(new ContentSegment
+            {
+                Kind = SegmentKind.GameIcon,
+                IconId = icon,
+                Text = fallback,
+            });
         }
 
         foreach (var payload in content.Payloads)
@@ -209,11 +232,21 @@ public sealed partial class ChatboxService
 
                 case AutoTranslatePayload atPayload:
                     FlushLink();
+                    absorbedWorld = null;
+                    AddIcon((uint)BitmapFontIcon.AutoTranslateBegin, ((char)SeIconChar.AutoTranslateOpen).ToString());
                     segments.Add(new ContentSegment
                     {
                         Kind = SegmentKind.AutoTranslate,
-                        Text = $" {atPayload.Text} ",
+                        Text = TrimAutoTranslate(atPayload.Text),
                     });
+                    AddIcon((uint)BitmapFontIcon.AutoTranslateEnd, ((char)SeIconChar.AutoTranslateClose).ToString());
+                    continue;
+
+                case IconPayload iconPayload:
+                    if (absorbedWorld != null && iconPayload.Icon == BitmapFontIcon.CrossWorld) continue;
+                    FlushLink();
+                    absorbedWorld = null;
+                    AddIcon((uint)iconPayload.Icon, string.Empty);
                     continue;
 
                 case RawPayload rawPayload:
@@ -233,7 +266,10 @@ public sealed partial class ChatboxService
                         continue;
                     }
 
-                    var parsed = _parser.Parse(textPayload.Text, resolver);
+                    var text = StripAbsorbedWorld(textPayload.Text, ref absorbedWorld);
+                    if (text.Length == 0) continue;
+
+                    var parsed = _parser.Parse(text, resolver);
                     if (parsed.MentionsMe) mentionsMe = true;
 
                     var color = PeekColor(foreground);
@@ -348,17 +384,78 @@ public sealed partial class ChatboxService
         Excerpt = Excerpt(message.RawContent, Config.ReplyExcerptLength),
     };
 
+    private static string TrimAutoTranslate(string? text)
+    {
+        if (string.IsNullOrEmpty(text)) return string.Empty;
+
+        return text
+            .Trim((char)SeIconChar.AutoTranslateOpen, (char)SeIconChar.AutoTranslateClose)
+            .Trim();
+    }
+
+    private static string StripAbsorbedWorld(string text, ref string? absorbedWorld)
+    {
+        var world = absorbedWorld;
+        if (world == null) return text;
+
+        absorbedWorld = null;
+
+        var trimmed = text.TrimStart();
+        return trimmed.StartsWith(world, StringComparison.Ordinal)
+            ? trimmed[world.Length..]
+            : text;
+    }
+
+    private static string PayloadWorldName(PlayerPayload? payload)
+    {
+        if (payload == null || payload.World.RowId == 0) return string.Empty;
+
+        return payload.World.ValueNullable?.Name.ExtractText() ?? string.Empty;
+    }
+
     private static (string Name, string World) ResolveGameSender(ChatMessage message)
     {
         if (message.Sender?.Payloads.FirstOrDefault(p => p.Type == PayloadType.Player) is PlayerPayload player)
-            return (player.PlayerName, player.World.Value.Name.ExtractText());
+        {
+            var world = PayloadWorldName(player);
+            return (player.PlayerName, world.Length > 0 ? world : ResolveWorldForName(player.PlayerName));
+        }
 
         var fallback = message.Sender?.TextValue ?? string.Empty;
         var localName = CordiPlugin.Plugin.cachedLocalPlayer?.Name.TextValue;
         if (!string.IsNullOrEmpty(localName) && fallback.EndsWith(localName, StringComparison.Ordinal))
             return (localName, CordiPlugin.Plugin.cachedLocalPlayer!.HomeWorld.Value.Name.ExtractText());
 
-        return (StripSenderMarkers(fallback), string.Empty);
+        var name = StripSenderMarkers(fallback);
+
+        if (message.Message?.Payloads.FirstOrDefault(p => p.Type == PayloadType.Player) is PlayerPayload mentioned
+            && string.Equals(mentioned.PlayerName, name, StringComparison.Ordinal))
+        {
+            var world = PayloadWorldName(mentioned);
+            if (world.Length > 0) return (name, world);
+        }
+
+        return (name, ResolveWorldForName(name));
+    }
+
+    private static string ResolveWorldForName(string name)
+    {
+        if (string.IsNullOrEmpty(name) || string.Equals(name, ChatboxMessage.SystemSender, StringComparison.Ordinal))
+            return string.Empty;
+
+        var local = CordiPlugin.Plugin.cachedLocalPlayer;
+        if (local != null && string.Equals(local.Name.TextValue, name, StringComparison.Ordinal))
+            return local.HomeWorld.ValueNullable?.Name.ExtractText() ?? string.Empty;
+
+        foreach (var obj in Service.ObjectTable)
+        {
+            if (obj is not IPlayerCharacter character) continue;
+            if (!string.Equals(character.Name.TextValue, name, StringComparison.Ordinal)) continue;
+
+            return character.HomeWorld.ValueNullable?.Name.ExtractText() ?? string.Empty;
+        }
+
+        return string.Empty;
     }
 
     private static string StripSenderMarkers(string sender) =>
