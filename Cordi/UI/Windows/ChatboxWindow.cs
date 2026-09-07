@@ -13,12 +13,11 @@ using Dalamud.Interface.Windowing;
 
 namespace Cordi.UI.Windows;
 
-public sealed partial class ChatboxWindow : Window, IDisposable
+public sealed partial class ChatboxWindow : ThemedWindow, IDisposable
 {
     private const string WindowId = "###CordiChatbox";
 
     private readonly CordiPlugin _plugin;
-    private readonly UiTheme _theme = new();
     private readonly ChatboxInlineFlow _flow = new();
     private readonly ChatboxEmojiPicker _picker;
     private readonly ChatboxEmojiAutocomplete _autocomplete;
@@ -31,6 +30,7 @@ public sealed partial class ChatboxWindow : Window, IDisposable
     private int _pendingStart;
     private int _pendingLength;
     private bool _inputWasActive;
+    private float _measuredInputHeight;
     private bool _clearSelection;
     private Vector2 _inputMin;
     private float _inputWidth;
@@ -39,10 +39,9 @@ public sealed partial class ChatboxWindow : Window, IDisposable
     private DateTime _highlightUntil = DateTime.MinValue;
     private int _scrollToBottomFrames = ScrollSettleFrames;
     private bool _focusInput;
-    private ImRaii.ColorDisposable? _opacityScope;
-    private ImRaii.StyleDisposable? _borderScope;
 
-    public ChatboxWindow(CordiPlugin plugin) : base("Chatbox" + WindowId, ImGuiWindowFlags.None)
+    public ChatboxWindow(CordiPlugin plugin) : base(
+        "Chatbox" + WindowId, ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse)
     {
         _plugin = plugin;
         _picker = new ChatboxEmojiPicker(plugin, _theme);
@@ -61,6 +60,8 @@ public sealed partial class ChatboxWindow : Window, IDisposable
     private ChatboxConfig Config => _plugin.Config.Chatbox;
     private ChatboxService Chatbox => _plugin.Chatbox;
 
+    protected override IWindowChromeConfig Chrome => Config;
+
     public override bool DrawConditions()
     {
         if (!Config.Enabled) return false;
@@ -68,37 +69,10 @@ public sealed partial class ChatboxWindow : Window, IDisposable
         return true;
     }
 
-    public override void PreDraw()
+    protected override void OnPreDraw()
     {
-        Flags = ImGuiWindowFlags.None;
-        if (Config.WindowLockPosition) Flags |= ImGuiWindowFlags.NoMove;
-        if (Config.WindowLockSize) Flags |= ImGuiWindowFlags.NoResize;
-        if (Config.HideTitleBar) Flags |= ImGuiWindowFlags.NoTitleBar;
-
-        RespectCloseHotkey = !Config.IgnoreEsc;
         AllowClickthrough = Config.ClickThroughWhenUnfocused;
-
         UpdateTitle();
-        _theme.PushWindow();
-
-        if (Config.BackgroundOpacity < 1.0f)
-        {
-            var background = _theme.WindowBg;
-            background.W *= Config.BackgroundOpacity;
-            _opacityScope = ImRaii.PushColor(ImGuiCol.WindowBg, background);
-        }
-
-        if (Config.HideTitleBar)
-            _borderScope = ImRaii.PushStyle(ImGuiStyleVar.WindowBorderSize, 0f);
-    }
-
-    public override void PostDraw()
-    {
-        _borderScope?.Dispose();
-        _borderScope = null;
-        _opacityScope?.Dispose();
-        _opacityScope = null;
-        _theme.PopWindow();
     }
 
     private void UpdateTitle()
@@ -119,8 +93,17 @@ public sealed partial class ChatboxWindow : Window, IDisposable
     {
         _theme.ApplyFontScale();
         UpdateItemTooltip();
-        Chatbox.WindowFocused = ImGui.IsWindowFocused(ImGuiFocusedFlags.RootAndChildWindows);
-        if (Chatbox.WindowFocused) Chatbox.MarkActiveRead();
+        var focused = ImGui.IsWindowFocused(ImGuiFocusedFlags.RootAndChildWindows);
+
+        if (focused && !Chatbox.WindowFocused)
+        {
+            var active = Chatbox.ActiveChannel;
+            if (active != null && active.UnreadCount > 0)
+                ScrollToUnread(active, Chatbox.BeginViewingActive());
+        }
+
+        Chatbox.WindowFocused = focused;
+        if (focused) Chatbox.MarkActiveRead();
 
         Chatbox.ImageCache.Tick(
             ImGui.GetIO().DeltaTime,
@@ -306,6 +289,8 @@ public sealed partial class ChatboxWindow : Window, IDisposable
 
     private float MeasureInputHeight()
     {
+        if (_measuredInputHeight > 0f) return _measuredInputHeight;
+
         var height = ImGui.GetFrameHeightWithSpacing();
         if (_replyTarget != null && Config.EnableReplies)
             height += ImGui.GetTextLineHeightWithSpacing() + _theme.Gap(0.5f);

@@ -3,8 +3,11 @@ using System;
 namespace Cordi.Configuration;
 
 [Serializable]
-public class CombinedWindowConfig
+public class CombinedWindowConfig : IWindowChromeConfig
 {
+    bool IWindowChromeConfig.LockPosition => WindowLocked;
+    bool IWindowChromeConfig.LockSize => WindowNoResize;
+
     public bool Enabled { get; set; } = false;
     public bool SwapPanels { get; set; } = false;
     public bool OpenOnLogin { get; set; } = false;

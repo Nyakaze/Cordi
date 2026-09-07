@@ -20,12 +20,6 @@ public class SettingsTab : ConfigTabBase
     private Vector3 _accentEdit;
     private bool _accentDirty;
 
-    private SettingsRow? rowRenderer;
-    private Panel? panelRenderer;
-
-    private SettingsRow Row => rowRenderer ??= new SettingsRow(theme);
-    private Panel Card => panelRenderer ??= new Panel(theme);
-
     public override string Label => "Settings";
 
     public SettingsTab(CordiPlugin plugin, UiTheme theme) : base(plugin, theme)

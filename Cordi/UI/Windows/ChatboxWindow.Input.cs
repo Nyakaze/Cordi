@@ -16,6 +16,13 @@ public sealed partial class ChatboxWindow
 {
     private void DrawInputBar(ChatboxChannelState channel)
     {
+        var startY = ImGui.GetCursorPosY();
+        DrawInputBarContent(channel);
+        _measuredInputHeight = MathF.Max(0f, ImGui.GetCursorPosY() - startY);
+    }
+
+    private void DrawInputBarContent(ChatboxChannelState channel)
+    {
         if (_replyTarget != null && Config.EnableReplies) DrawReplyStrip();
 
         if (!Chatbox.CanSend(channel))

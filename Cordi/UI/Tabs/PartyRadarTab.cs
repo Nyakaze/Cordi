@@ -13,14 +13,6 @@ namespace Cordi.UI.Tabs;
 
 public partial class PartyRadarTab : ConfigTabBase
 {
-    private SettingsRow? rowRenderer;
-    private PageHeader? layoutRenderer;
-    private Panel? panelRenderer;
-
-    private SettingsRow Row => rowRenderer ??= new SettingsRow(theme);
-    private PageHeader Layout => layoutRenderer ??= new PageHeader(theme);
-    private Panel Card => panelRenderer ??= new Panel(theme);
-
     private ExcelSheet<ClassJob>? jobSheet;
 
     private string? expandedKey;
@@ -42,8 +34,6 @@ public partial class PartyRadarTab : ConfigTabBase
 
     private RememberMeConfig Memory => plugin.Config.RememberMe;
 
-    private void Save() => plugin.Config.Save();
-
     public override void Draw()
     {
         DrawHero();
@@ -53,39 +43,6 @@ public partial class PartyRadarTab : ConfigTabBase
         DrawTrackingCard();
         DrawMemoryCard();
         DrawArchiveCard();
-    }
-
-    private void DrawToggleRow(
-        string id,
-        FontAwesomeIcon icon,
-        Vector4 iconColor,
-        string title,
-        string subtitle,
-        float rowWidth,
-        Func<bool> get,
-        Action<bool> set)
-    {
-        bool value = get();
-
-        var result = Row.Draw(
-            id: id,
-            icon: icon,
-            iconColor: iconColor,
-            title: title,
-            subtitle: subtitle,
-            toggleValue: value,
-            onToggle: newValue =>
-            {
-                set(newValue);
-                Save();
-            },
-            rowWidth: rowWidth);
-
-        if (result.RowClicked && !result.ToggleChanged)
-        {
-            set(!value);
-            Save();
-        }
     }
 
     private string JobAbbreviation(uint jobId)

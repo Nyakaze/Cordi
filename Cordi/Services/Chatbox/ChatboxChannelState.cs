@@ -114,7 +114,7 @@ public sealed class ChatboxChannelState
                 if (message.MentionsMe) MentionCount++;
             }
 
-            if (DividerSeq == 0) DividerSeq = FirstUnreadSeq;
+            if (DividerSeq == 0 || DividerSeq <= lastReadSeq) DividerSeq = FirstUnreadSeq;
             if (_messages.Count > 0) LastActivity = _messages[^1].Timestamp;
         }
     }

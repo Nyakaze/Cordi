@@ -191,6 +191,12 @@ public partial class ChatboxTab
                 innerWidth, () => Cfg.ShowNewMessageDivider, v => Cfg.ShowNewMessageDivider = v);
 
             DrawToggleRow(
+                "chatbox-scroll-unread", FontAwesomeIcon.LevelUpAlt,
+                "Jump to first unread Message",
+                "Opening a tab scrolls up to where you stopped reading instead of to the newest message.",
+                innerWidth, () => Cfg.ScrollToFirstUnread, v => Cfg.ScrollToFirstUnread = v);
+
+            DrawToggleRow(
                 "chatbox-hover-toolbar", FontAwesomeIcon.Tools,
                 "Show Hover Toolbar", "Reply and copy actions appear when hovering a message.",
                 innerWidth, () => Cfg.ShowHoverToolbar, v => Cfg.ShowHoverToolbar = v);

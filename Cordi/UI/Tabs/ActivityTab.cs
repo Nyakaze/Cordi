@@ -53,14 +53,8 @@ public partial class ActivityTab : ConfigTabBase
 
     private string? draggedPlaceholder;
 
-    private SettingsRow? rowRenderer;
-    private PageHeader? layoutRenderer;
-    private Panel? panelRenderer;
     private ListPanel? listRenderer;
 
-    private SettingsRow Row => rowRenderer ??= new SettingsRow(theme);
-    private PageHeader Layout => layoutRenderer ??= new PageHeader(theme);
-    private Panel Card => panelRenderer ??= new Panel(theme);
     private ListPanel Lists => listRenderer ??= new ListPanel(theme);
 
     private string newGameName = string.Empty;
@@ -83,8 +77,6 @@ public partial class ActivityTab : ConfigTabBase
     };
 
     private DiscordActivityConfig Config => plugin.Config.ActivityConfig;
-
-    private void Save() => plugin.Config.Save();
 
     private static string[] PlaceholdersFor(ActivityType type) =>
         PlaceholdersByType.TryGetValue(type, out var placeholders) ? placeholders : DefaultPlaceholders;
@@ -110,70 +102,6 @@ public partial class ActivityTab : ConfigTabBase
         Save();
 
         return created;
-    }
-
-    private void DrawToggleRow(
-        string id,
-        FontAwesomeIcon icon,
-        Vector4 iconColor,
-        string title,
-        string subtitle,
-        float rowWidth,
-        Func<bool> get,
-        Action<bool> set)
-    {
-        bool value = get();
-
-        var result = Row.Draw(
-            id: id,
-            icon: icon,
-            iconColor: iconColor,
-            title: title,
-            subtitle: subtitle,
-            toggleValue: value,
-            onToggle: newValue =>
-            {
-                set(newValue);
-                Save();
-            },
-            rowWidth: rowWidth);
-
-        if (result.RowClicked && !result.ToggleChanged)
-        {
-            set(!value);
-            Save();
-        }
-    }
-
-    private void DrawNumberRow(
-        string id,
-        FontAwesomeIcon icon,
-        Vector4 iconColor,
-        string title,
-        string subtitle,
-        float rowWidth,
-        int min,
-        int max,
-        Func<int> get,
-        Action<int> set)
-    {
-        Row.Draw(
-            id: id,
-            icon: icon,
-            iconColor: iconColor,
-            title: title,
-            subtitle: subtitle,
-            controlWidth: 90f,
-            drawControl: (pos, width) =>
-            {
-                int value = get();
-                if (theme.NumberInput($"##{id}-value", pos, width, ref value, min, max))
-                {
-                    set(value);
-                    Save();
-                }
-            },
-            rowWidth: rowWidth);
     }
 
     private void DrawColorRow(

@@ -20,6 +20,9 @@ public sealed partial class ChatboxWindow
 
     private int _rowRepeats = 1;
     private long _scrollToSeq;
+    private float _scrollToAlign = 0.5f;
+    private long _anchorSeq;
+    private float _anchorTop;
     private float _lastScrollY;
     private float _lastScrollMax;
     private bool _stickToBottom = true;
@@ -64,11 +67,19 @@ public sealed partial class ChatboxWindow
         ChatboxMessage? previous = null;
         var repeats = 1;
         var dividerPending = false;
+        var dividerDone = false;
+        var anchorTop = float.NaN;
+        var nextAnchorSeq = 0L;
+        var nextAnchorTop = 0f;
 
         for (var index = 0; index < _drawBuffer.Count; index++)
         {
             var message = _drawBuffer[index];
-            if (dividerSeq != 0 && message.Seq == dividerSeq) dividerPending = true;
+            if (dividerSeq != 0 && !dividerDone && message.Seq >= dividerSeq)
+            {
+                dividerPending = true;
+                dividerDone = true;
+            }
 
             if (index + 1 < _drawBuffer.Count && CollapsesInto(message, _drawBuffer[index + 1]))
             {
@@ -86,6 +97,13 @@ public sealed partial class ChatboxWindow
             previous = message;
 
             var top = ImGui.GetCursorPosY();
+            if (message.Seq == _anchorSeq) anchorTop = top;
+            if (nextAnchorSeq == 0 && top >= scrollY)
+            {
+                nextAnchorSeq = message.Seq;
+                nextAnchorTop = top;
+            }
+
             if (!TryCullRow(message, grouped, repeats, top, viewTop, viewBottom, spacing))
             {
                 DrawMessage(draw, channel, message, grouped, repeats);
@@ -99,7 +117,22 @@ public sealed partial class ChatboxWindow
 
         DrawLinkPopup();
 
-        if (pendingJump != 0 && _scrollToSeq == pendingJump) _scrollToSeq = 0;
+        if (pendingJump != 0 && _scrollToSeq == pendingJump)
+        {
+            _scrollToSeq = 0;
+            _anchorSeq = 0;
+            nextAnchorSeq = 0;
+        }
+        else
+        {
+            ApplyScrollAnchor(anchorTop);
+        }
+
+        if (nextAnchorSeq != 0)
+        {
+            _anchorSeq = nextAnchorSeq;
+            _anchorTop = nextAnchorTop;
+        }
 
         ImGui.Dummy(new Vector2(0f, 4f * ImGuiHelpers.GlobalScale));
 
@@ -111,11 +144,6 @@ public sealed partial class ChatboxWindow
         else if (pendingJump == 0 && Config.AutoScroll && _stickToBottom)
         {
             ImGui.SetScrollHereY(1f);
-        }
-
-        if (_stickToBottom && channel.DividerSeq != 0 && Chatbox.WindowFocused)
-        {
-            Chatbox.ClearDivider(channel);
         }
     }
 
@@ -176,6 +204,19 @@ public sealed partial class ChatboxWindow
 
         ImGui.Dummy(new Vector2(0f, MathF.Max(metrics.Height - spacing, 0f)));
         return true;
+    }
+
+    private void ApplyScrollAnchor(float anchorTop)
+    {
+        if (_anchorSeq == 0 || float.IsNaN(anchorTop)) return;
+        if (_stickToBottom || _scrollToBottomFrames > 0 || _scrollToSeq != 0) return;
+
+        var delta = anchorTop - _anchorTop;
+        if (MathF.Abs(delta) < 0.5f) return;
+
+        ImGui.SetScrollY(ImGui.GetScrollY() + delta);
+        _lastScrollY += delta;
+        _lastScrollMax = ImGui.GetScrollMaxY();
     }
 
     private void UpdateStickToBottom()
@@ -276,7 +317,7 @@ public sealed partial class ChatboxWindow
 
         if (_scrollToSeq == message.Seq)
         {
-            ImGui.SetScrollHereY(0.5f);
+            ImGui.SetScrollHereY(_scrollToAlign);
             _scrollToSeq = 0;
         }
 
@@ -553,10 +594,22 @@ public sealed partial class ChatboxWindow
         if (seq == 0 || channel.FindBySeq(seq) == null) return;
 
         _scrollToSeq = seq;
+        _scrollToAlign = 0.5f;
         _scrollToBottomFrames = 0;
         _stickToBottom = false;
         _highlightSeq = seq;
         _highlightUntil = DateTime.Now.AddSeconds(2);
+    }
+
+    private void ScrollToUnread(ChatboxChannelState? channel, long dividerSeq)
+    {
+        if (!Config.ScrollToFirstUnread || dividerSeq == 0) return;
+        if (channel == null || channel.FindBySeq(dividerSeq) == null) return;
+
+        _scrollToSeq = dividerSeq;
+        _scrollToAlign = 0.2f;
+        _scrollToBottomFrames = 0;
+        _stickToBottom = false;
     }
 
     private float EmoteSizeFor(ChatboxMessage message)

@@ -370,7 +370,12 @@ public sealed partial class ChatboxWindow
         using var popup = ImRaii.ContextPopupItem($"##ctx-{channel.Id}");
         if (!popup) return;
 
-        if (ImGui.MenuItem("Mark as read")) channel.MarkRead();
+        if (ImGui.MenuItem("Mark as read"))
+        {
+            channel.MarkRead();
+            Chatbox.ClearDivider(channel);
+        }
+
         if (ImGui.MenuItem("Clear messages")) channel.Clear();
     }
 
@@ -379,8 +384,11 @@ public sealed partial class ChatboxWindow
 
     private void Activate(ChatboxChannelState channel)
     {
-        Chatbox.SetActiveChannel(channel.Id);
+        var dividerSeq = Chatbox.SetActiveChannel(channel.Id);
+
+        _scrollToSeq = 0;
         _scrollToBottomFrames = ScrollSettleFrames;
+        ScrollToUnread(channel, dividerSeq);
         _focusInput = true;
     }
 

@@ -162,6 +162,16 @@ public sealed partial class ChatboxService : IDisposable
         return divider;
     }
 
+    public long BeginViewingActive()
+    {
+        var active = GetChannel(ResolveActiveChannelId());
+        if (active is null) return 0;
+
+        var divider = active.BeginViewing();
+        PersistState(active);
+        return divider;
+    }
+
     public void MarkActiveRead()
     {
         var id = ResolveActiveChannelId();

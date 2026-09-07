@@ -3,22 +3,21 @@ using Dalamud.Interface.Windowing;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Interface.Utility.Raii;
 
+using Cordi.Configuration;
 using Cordi.Core;
 using Cordi.UI.Panels;
-using Cordi.UI.Themes;
 
 namespace Cordi.UI.Windows;
 
-public class CombinedWindow : Window
+public class CombinedWindow : ThemedWindow
 {
     private readonly CordiPlugin _plugin;
     private readonly EmoteLogPanel _emoteLogPanel;
     private readonly CordiPeepPanel _peepPanel;
-    private readonly UiTheme _theme = new UiTheme();
-    private ImRaii.ColorDisposable? _opacityScope;
-    private ImRaii.StyleDisposable? _borderScope;
 
-    public CombinedWindow(CordiPlugin plugin) : base("Emote Log & Peeper###CordiCombo", ImGuiWindowFlags.None)
+    public CombinedWindow(CordiPlugin plugin) : base(
+        "Emote Log & Peeper###CordiCombo",
+        ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse)
     {
         _plugin = plugin;
         _emoteLogPanel = new EmoteLogPanel(plugin);
@@ -26,45 +25,11 @@ public class CombinedWindow : Window
 
         this.SizeConstraints = new WindowSizeConstraints
         {
-            // MinimumSize = new Vector2(500, 200),
             MaximumSize = new Vector2(float.MaxValue, float.MaxValue)
         };
     }
 
-    public override void PreDraw()
-    {
-        base.PreDraw();
-        var cfg = _plugin.Config.CombinedWindow;
-        RespectCloseHotkey = !cfg.IgnoreEsc;
-        Flags = ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse;
-        if (cfg.WindowLocked) Flags |= ImGuiWindowFlags.NoMove;
-        if (cfg.WindowNoResize) Flags |= ImGuiWindowFlags.NoResize;
-        if (cfg.HideTitleBar) Flags |= ImGuiWindowFlags.NoTitleBar;
-
-        _theme.PushWindow();
-
-        if (cfg.BackgroundOpacity < 1.0f)
-        {
-            var bg = _theme.WindowBg;
-            bg.W *= cfg.BackgroundOpacity;
-            _opacityScope = ImRaii.PushColor(ImGuiCol.WindowBg, bg);
-        }
-
-        if (cfg.HideTitleBar)
-        {
-            _borderScope = ImRaii.PushStyle(ImGuiStyleVar.WindowBorderSize, 0f);
-        }
-    }
-
-    public override void PostDraw()
-    {
-        _borderScope?.Dispose();
-        _borderScope = null;
-        _opacityScope?.Dispose();
-        _opacityScope = null;
-        _theme.PopWindow();
-        base.PostDraw();
-    }
+    protected override IWindowChromeConfig Chrome => _plugin.Config.CombinedWindow;
 
     public override void Draw()
     {
@@ -88,7 +53,6 @@ public class CombinedWindow : Window
 
                 ImGui.TableNextRow();
 
-                // Left column
                 ImGui.TableSetColumnIndex(0);
                 var shadow = cfg.TextShadow;
                 using (ImRaii.Child("##LeftPanel", new Vector2(0, 0), false))
@@ -99,7 +63,6 @@ public class CombinedWindow : Window
                         _emoteLogPanel.Draw(shadow);
                 }
 
-                // Right column
                 ImGui.TableSetColumnIndex(1);
                 using (ImRaii.Child("##RightPanel", new Vector2(0, 0), false))
                 {

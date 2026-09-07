@@ -25,14 +25,6 @@ public partial class ChatsTab : ConfigTabBase
     private Dictionary<ulong, string> cachedAvailableThreads = new();
     private readonly Services.Features.ExtraChatService extraChatService;
 
-    private SettingsRow? rowRenderer;
-    private PageHeader? layoutRenderer;
-    private Panel? panelRenderer;
-
-    private SettingsRow Row => rowRenderer ??= new SettingsRow(theme);
-    private PageHeader Layout => layoutRenderer ??= new PageHeader(theme);
-    private Panel Card => panelRenderer ??= new Panel(theme);
-
     public override string Label => "Chats";
 
     public ChatsTab(CordiPlugin plugin, UiTheme theme) : base(plugin, theme)

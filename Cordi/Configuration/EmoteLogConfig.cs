@@ -4,8 +4,11 @@ using System.Collections.Generic;
 namespace Cordi.Configuration;
 
 [Serializable]
-public class EmoteLogConfig
+public class EmoteLogConfig : IWindowChromeConfig
 {
+    bool IWindowChromeConfig.LockPosition => WindowLockPosition;
+    bool IWindowChromeConfig.LockSize => WindowLockSize;
+
     public string ChannelId { get; set; } = string.Empty;
     public bool Enabled { get; set; } = true;
     public bool IncludeSelf { get; set; } = true;

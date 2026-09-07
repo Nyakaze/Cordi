@@ -12,15 +12,9 @@ namespace Cordi.UI.Tabs;
 
 public partial class ChatboxTab : ConfigTabBase
 {
-    private SettingsRow? rowRenderer;
-    private PageHeader? layoutRenderer;
-    private Panel? panelRenderer;
     private ListPanel? listRenderer;
     private ChipSelector? chipRenderer;
 
-    private SettingsRow Row => rowRenderer ??= new SettingsRow(theme);
-    private PageHeader Layout => layoutRenderer ??= new PageHeader(theme);
-    private Panel Card => panelRenderer ??= new Panel(theme);
     private ListPanel List => listRenderer ??= new ListPanel(theme);
     private ChipSelector Chips => chipRenderer ??= new ChipSelector(theme);
 
@@ -33,8 +27,6 @@ public partial class ChatboxTab : ConfigTabBase
     public override string Label => "Chatbox";
 
     private ChatboxConfig Cfg => plugin.Config.Chatbox;
-
-    private void Save() => plugin.Config.Save();
 
     private void ConsumeScroll()
     {
@@ -53,29 +45,16 @@ public partial class ChatboxTab : ConfigTabBase
         float rowWidth,
         Func<bool> get,
         Action<bool> set,
-        Vector4? activeColor = null)
-    {
-        bool value = get();
-
-        void Apply(bool next)
-        {
-            set(next);
-            Save();
-        }
-
-        var result = Row.Draw(
-            id: id,
-            icon: icon,
-            iconColor: value ? activeColor ?? theme.Accent : theme.MutedText,
-            title: title,
-            subtitle: subtitle,
-            toggleValue: value,
-            onToggle: Apply,
-            rowWidth: rowWidth);
-
-        if (result.RowClicked && !result.ToggleChanged)
-            Apply(!value);
-    }
+        Vector4? activeColor = null) =>
+        DrawToggleRow(
+            id,
+            icon,
+            get() ? activeColor ?? theme.Accent : theme.MutedText,
+            title,
+            subtitle,
+            rowWidth,
+            get,
+            set);
 
     private void DrawSliderRow(
         string id,
@@ -89,27 +68,10 @@ public partial class ChatboxTab : ConfigTabBase
         Func<float> get,
         Action<float> set,
         int decimals = 0,
-        string suffix = "")
-    {
-        Row.Draw(
-            id: id,
-            icon: icon,
-            iconColor: theme.Accent,
-            title: title,
-            subtitle: subtitle,
-            controlWidth: 260f,
-            drawControl: (pos, width) =>
-            {
-                float value = get();
-
-                if (!theme.SliderControl($"##{id}-slider", pos, width, ref value, min, max, step, decimals, suffix))
-                    return;
-
-                set(value);
-                Save();
-            },
-            rowWidth: rowWidth);
-    }
+        string suffix = "") =>
+        DrawSliderRow(
+            id, icon, theme.Accent, title, subtitle, rowWidth,
+            min, max, step, get, set, decimals, suffix);
 
     private void DrawIntSliderRow(
         string id,
@@ -227,35 +189,6 @@ public partial class ChatboxTab : ConfigTabBase
         return list;
     }
 
-    private void DrawColorRow(
-        string id,
-        string title,
-        string subtitle,
-        float rowWidth,
-        Func<Vector4> get,
-        Action<Vector4> set)
-    {
-        var color = get();
-
-        Row.Draw(
-            id: id,
-            icon: FontAwesomeIcon.Palette,
-            iconColor: color,
-            title: title,
-            subtitle: subtitle,
-            controlWidth: 90f,
-            drawControl: (pos, width) =>
-            {
-                var edited = color;
-
-                if (!theme.ColorSwatch($"##{id}-swatch", pos, width, ref edited))
-                    return;
-
-                set(edited);
-                Save();
-            },
-            rowWidth: rowWidth);
-    }
 
     private void DrawActionRow(
         string id,

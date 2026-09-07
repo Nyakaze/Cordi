@@ -19,14 +19,8 @@ public partial class SlashCommandsTab : ConfigTabBase
 {
     private static readonly Regex PlaceholderPattern = new(@"\{([^{}]+)\}", RegexOptions.Compiled);
 
-    private SettingsRow? rowRenderer;
-    private PageHeader? layoutRenderer;
-    private Panel? panelRenderer;
     private ListPanel? listRenderer;
 
-    private SettingsRow Row => rowRenderer ??= new SettingsRow(theme);
-    private PageHeader Layout => layoutRenderer ??= new PageHeader(theme);
-    private Panel Card => panelRenderer ??= new Panel(theme);
     private ListPanel List => listRenderer ??= new ListPanel(theme);
 
     private CustomSlashCommand? editState;
@@ -52,8 +46,6 @@ public partial class SlashCommandsTab : ConfigTabBase
 
     private int EnabledCount => Config.Commands.Count(c => c.IsEnabled);
 
-    private void Save() => plugin.Config.Save();
-
     public override void Draw()
     {
         if (pendingScrollTop)
@@ -72,39 +64,6 @@ public partial class SlashCommandsTab : ConfigTabBase
         DrawDiscordCard();
         DrawBuiltInCard();
         DrawCommandsCard();
-    }
-
-    private void DrawToggleRow(
-        string id,
-        FontAwesomeIcon icon,
-        Vector4 iconColor,
-        string title,
-        string subtitle,
-        float rowWidth,
-        Func<bool> get,
-        Action<bool> set)
-    {
-        bool value = get();
-
-        var result = Row.Draw(
-            id: id,
-            icon: icon,
-            iconColor: iconColor,
-            title: title,
-            subtitle: subtitle,
-            toggleValue: value,
-            onToggle: newValue =>
-            {
-                set(newValue);
-                Save();
-            },
-            rowWidth: rowWidth);
-
-        if (result.RowClicked && !result.ToggleChanged)
-        {
-            set(!value);
-            Save();
-        }
     }
 
     private void DrawCountChip(Vector2 rightAnchor, string text, Vector4? color = null)

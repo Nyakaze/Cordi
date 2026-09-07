@@ -6,8 +6,11 @@ using Newtonsoft.Json;
 namespace Cordi.Configuration;
 
 [Serializable]
-public class CordiPeepConfig
+public class CordiPeepConfig : IWindowChromeConfig
 {
+    bool IWindowChromeConfig.LockPosition => WindowLocked;
+    bool IWindowChromeConfig.LockSize => WindowNoResize;
+
     public bool Enabled { get; set; } = false;
     public bool DiscordEnabled { get; set; } = true;
     public bool DetectWhenClosed { get; set; } = true;

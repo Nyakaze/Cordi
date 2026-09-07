@@ -72,8 +72,11 @@ public class ChatboxChannelConfig
 }
 
 [Serializable]
-public class ChatboxConfig
+public class ChatboxConfig : IWindowChromeConfig
 {
+    bool IWindowChromeConfig.LockPosition => WindowLockPosition;
+    bool IWindowChromeConfig.LockSize => WindowLockSize;
+
     public bool Enabled { get; set; }
     public bool OpenOnLogin { get; set; }
 
@@ -113,6 +116,7 @@ public class ChatboxConfig
     public bool ColorNamesByChannel { get; set; } = true;
     public bool CompactSystemMessages { get; set; } = true;
     public bool ShowNewMessageDivider { get; set; } = true;
+    public bool ScrollToFirstUnread { get; set; } = true;
     public bool ShowHoverToolbar { get; set; } = true;
     public bool AutoScroll { get; set; } = true;
 
