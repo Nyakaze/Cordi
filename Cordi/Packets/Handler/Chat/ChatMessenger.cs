@@ -83,33 +83,7 @@ public class ChatMessenger : IAsyncDisposable
                 return;
             }
 
-            var cmd = type switch
-            {
-                XivChatType.Say => "/say",
-                XivChatType.Shout => "/sh",
-                XivChatType.Yell => "/y",
-                XivChatType.Party => "/p",
-                XivChatType.Alliance => "/a",
-                XivChatType.FreeCompany => "/fc",
-                XivChatType.Ls1 => "/ls1",
-                XivChatType.Ls2 => "/ls2",
-                XivChatType.Ls3 => "/ls3",
-                XivChatType.Ls4 => "/ls4",
-                XivChatType.Ls5 => "/ls5",
-                XivChatType.Ls6 => "/ls6",
-                XivChatType.Ls7 => "/ls7",
-                XivChatType.Ls8 => "/ls8",
-                XivChatType.CrossLinkShell1 => "/cwl1",
-                XivChatType.CrossLinkShell2 => "/cwl2",
-                XivChatType.CrossLinkShell3 => "/cwl3",
-                XivChatType.CrossLinkShell4 => "/cwl4",
-                XivChatType.CrossLinkShell5 => "/cwl5",
-                XivChatType.CrossLinkShell6 => "/cwl6",
-                XivChatType.CrossLinkShell7 => "/cwl7",
-                XivChatType.CrossLinkShell8 => "/cwl8",
-                XivChatType.TellOutgoing => "/tell",
-                _ => null
-            };
+            var cmd = Cordi.Domain.ChatTypes.SendCommand(type);
 
             if (cmd is null)
             {

@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Threading.Tasks;
 using Cordi.Core;
 using Cordi.Domain;
@@ -35,6 +36,22 @@ public class PartyDiscordNotifier
         var username = character?.FullName ?? "Party Notification";
 
         return await _plugin.Discord.SendWebhookMessageRaw(channelId, embedBuilder.Build(), username, avatarUrl);
+    }
+
+    public async Task<ulong> SendSummaryAsync(string title, string description, int color,
+        IReadOnlyList<(string Name, string Value)> fields, string username)
+    {
+        if (!_plugin.Config.Party.DiscordEnabled) return 0;
+
+        var channelIdStr = _plugin.Config.Party.DiscordChannelId;
+        if (!ulong.TryParse(channelIdStr, out var channelId)) return 0;
+
+        var embedBuilder = _plugin.EmbedFactory.CreateEmbedBuilder(title, description, color);
+
+        foreach (var field in fields)
+            embedBuilder.AddField(field.Name, field.Value, inline: true);
+
+        return await _plugin.Discord.SendWebhookMessageRaw(channelId, embedBuilder.Build(), username, null);
     }
 
     public async Task UpdateNotificationAsync(ulong msgId, string title, string description, int color, Player? character = null)

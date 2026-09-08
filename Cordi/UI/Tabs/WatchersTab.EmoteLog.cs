@@ -86,69 +86,25 @@ public partial class WatchersTab
             label: "Discord Notifications");
     }
 
-    private void DrawEmoteLogOverlayPanel(EmoteLogConfig config)
-    {
-        Card.Draw(
-            "emote-overlay",
-            innerWidth =>
+    private void DrawEmoteLogOverlayPanel(EmoteLogConfig config) =>
+        DrawOverlayPanel(
+            "emote",
+            "Emote Log",
+            () => plugin.EmoteLogWindow,
+            () => config.WindowEnabled,
+            value => config.WindowEnabled = value,
+            () => new[]
             {
-                DrawToggleRow(
-                    "emote-window-enabled",
-                    FontAwesomeIcon.WindowMaximize,
-                    theme.Accent,
-                    "In-game overlay",
-                    "Shows the Emote Log window in game",
-                    innerWidth,
-                    () => config.WindowEnabled,
-                    value =>
-                    {
-                        config.WindowEnabled = value;
-                        if (plugin.EmoteLogWindow != null)
-                            plugin.EmoteLogWindow.IsOpen = value;
-                        plugin.UpdateCommandVisibility();
-                    });
-
-                theme.SpacerY(0.4f);
-
-                Toggles.Draw("emote-window-flags", new[]
-                {
-                    Flag("emote-open-login", "Open on login", () => config.WindowOpenOnLogin, v => config.WindowOpenOnLogin = v),
-                    Flag("emote-lock-position", "Lock position", () => config.WindowLockPosition, v => config.WindowLockPosition = v),
-                    Flag("emote-lock-size", "Lock size", () => config.WindowLockSize, v => config.WindowLockSize = v),
-                    Flag("emote-ignore-esc", "Ignore ESC", () => config.IgnoreEsc, v => config.IgnoreEsc = v),
-                    Flag("emote-reply-button", "Show reply button", () => config.ShowReplyButton, v => config.ShowReplyButton = v),
-                    Flag("emote-hide-title", "Hide title bar", () => config.HideTitleBar, v => config.HideTitleBar = v),
-                    Flag("emote-text-shadow", "Text shadow", () => config.TextShadow, v => config.TextShadow = v),
-                }, innerWidth);
-
-                theme.SpacerY(0.4f);
-
-                DrawPercentRow(
-                    "emote-opacity",
-                    FontAwesomeIcon.Adjust,
-                    theme.Accent,
-                    "Background opacity",
-                    "Transparency of the overlay background",
-                    innerWidth,
-                    () => config.BackgroundOpacity,
-                    value => config.BackgroundOpacity = value);
-
-                DrawButtonRow(
-                    "emote-open-window",
-                    FontAwesomeIcon.ExternalLinkAlt,
-                    UiTheme.TileBlue,
-                    "Open the overlay",
-                    "Brings the Emote Log window up right now",
-                    "Open Now",
-                    innerWidth,
-                    () =>
-                    {
-                        if (plugin.EmoteLogWindow != null)
-                            plugin.EmoteLogWindow.IsOpen = true;
-                    });
+                Flag("emote-open-login", "Open on login", () => config.WindowOpenOnLogin, v => config.WindowOpenOnLogin = v),
+                Flag("emote-lock-position", "Lock position", () => config.WindowLockPosition, v => config.WindowLockPosition = v),
+                Flag("emote-lock-size", "Lock size", () => config.WindowLockSize, v => config.WindowLockSize = v),
+                Flag("emote-ignore-esc", "Ignore ESC", () => config.IgnoreEsc, v => config.IgnoreEsc = v),
+                Flag("emote-reply-button", "Show reply button", () => config.ShowReplyButton, v => config.ShowReplyButton = v),
+                Flag("emote-hide-title", "Hide title bar", () => config.HideTitleBar, v => config.HideTitleBar = v),
+                Flag("emote-text-shadow", "Text shadow", () => config.TextShadow, v => config.TextShadow = v),
             },
-            label: "Overlay");
-    }
+            () => config.BackgroundOpacity,
+            value => config.BackgroundOpacity = value);
 
     private void DrawEmoteLogBlacklistPanel(EmoteLogConfig config)
     {

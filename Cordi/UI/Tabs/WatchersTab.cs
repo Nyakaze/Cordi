@@ -4,6 +4,7 @@ using System.Numerics;
 using Cordi.Core;
 using Cordi.UI.Components;
 using Cordi.UI.Themes;
+using Cordi.UI.Windows;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Interface;
 
@@ -41,6 +42,73 @@ public partial class WatchersTab : ConfigTabBase
                 Save();
             },
         };
+
+    private void DrawOverlayPanel(
+        string idPrefix,
+        string windowName,
+        Func<ThemedWindow?> window,
+        Func<bool> enabled,
+        Action<bool> setEnabled,
+        Func<ToggleGridEntry[]> flags,
+        Func<float> opacity,
+        Action<float> setOpacity)
+    {
+        Card.Draw(
+            $"{idPrefix}-overlay",
+            innerWidth =>
+            {
+                DrawToggleRow(
+                    $"{idPrefix}-window-enabled",
+                    FontAwesomeIcon.WindowMaximize,
+                    theme.Accent,
+                    "In-game overlay",
+                    $"Shows the {windowName} window in game",
+                    innerWidth,
+                    enabled,
+                    value =>
+                    {
+                        setEnabled(value);
+
+                        var target = window();
+                        if (target != null)
+                            target.IsOpen = value;
+
+                        plugin.UpdateCommandVisibility();
+                    });
+
+                theme.SpacerY(0.4f);
+
+                Toggles.Draw($"{idPrefix}-window-flags", flags(), innerWidth);
+
+                theme.SpacerY(0.4f);
+
+                DrawPercentRow(
+                    $"{idPrefix}-opacity",
+                    FontAwesomeIcon.Adjust,
+                    theme.Accent,
+                    "Background opacity",
+                    "Transparency of the overlay background",
+                    innerWidth,
+                    opacity,
+                    setOpacity);
+
+                DrawButtonRow(
+                    $"{idPrefix}-open-window",
+                    FontAwesomeIcon.ExternalLinkAlt,
+                    UiTheme.TileBlue,
+                    "Open the overlay",
+                    $"Brings the {windowName} window up right now",
+                    "Open Now",
+                    innerWidth,
+                    () =>
+                    {
+                        var target = window();
+                        if (target != null)
+                            target.IsOpen = true;
+                    });
+            },
+            label: "Overlay");
+    }
 
     private void DrawChannelRow(
         string id,

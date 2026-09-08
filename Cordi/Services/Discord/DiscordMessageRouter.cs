@@ -28,12 +28,12 @@ public class DiscordMessageRouter
             : content ?? string.Empty;
     }
 
-    public async Task<bool> RouteExtraChatMessage(DiscordMessage message, ulong channelId)
+    public Task<bool> RouteExtraChatMessage(DiscordMessage message, ulong channelId)
     {
         var extraChatMapping = _plugin.Config.Chat.ExtraChatMappings.FirstOrDefault(x => x.Value.DiscordChannelId == channelId.ToString());
 
         if (string.IsNullOrEmpty(extraChatMapping.Key))
-            return false;
+            return Task.FromResult(false);
 
         var label = extraChatMapping.Key;
         var connection = extraChatMapping.Value;
@@ -41,76 +41,58 @@ public class DiscordMessageRouter
         if (connection.ExtraChatNumber <= 0)
         {
             Log.Warning(LogSource, $"ExtraChat mapping '{label}' has no channel number configured, message not sent.");
-            return false;
+            return Task.FromResult(false);
         }
 
-        var content = ParseForGame(message.Content, true);
-        if (string.IsNullOrWhiteSpace(content)) return false;
-
-        try
-        {
-            var command = $"/ecl{connection.ExtraChatNumber} {content}";
-
-            await Service.Framework.RunOnFrameworkThread(() => _plugin._chat.SendMessage(command));
-
-            Log.Info(LogSource, $"Forwarded to ExtraChat {connection.ExtraChatNumber} ({label}): {content}");
-
-            await DeleteAsync(message);
-            return true;
-        }
-        catch (Exception ex)
-        {
-            Log.Error(LogSource, $"Failed to forward message to ExtraChat {label}", ex);
-            return false;
-        }
+        return RelayAsync(message, true,
+            content => Service.Framework.RunOnFrameworkThread(
+                () => _plugin._chat.SendMessage($"/ecl{connection.ExtraChatNumber} {content}")),
+            content => $"Forwarded to ExtraChat {connection.ExtraChatNumber} ({label}): {content}",
+            () => $"Failed to forward message to ExtraChat {label}");
     }
 
-    public async Task<bool> RouteStandardMessage(DiscordMessage message, ulong channelId)
+    public Task<bool> RouteStandardMessage(DiscordMessage message, ulong channelId)
     {
         var mapping = _plugin.Config.Chat.Mappings.FirstOrDefault(m => m.DiscordChannelId == channelId.ToString());
-        if (mapping == null) return false;
+        if (mapping == null) return Task.FromResult(false);
 
-        var content = ParseForGame(message.Content, mapping.TranslateEmoji);
-        if (string.IsNullOrWhiteSpace(content)) return false;
-
-        try
-        {
-            await _plugin._chat.SendAsync(mapping.GameChatType, content);
-        }
-        catch (Exception ex)
-        {
-            Log.Error(LogSource, $"Failed to forward message to {mapping.GameChatType}", ex);
-            return false;
-        }
-
-        Log.Info(LogSource, $"Forwarded to {mapping.GameChatType}: {content}");
-
-        await DeleteAsync(message);
-        return true;
+        return RelayAsync(message, mapping.TranslateEmoji,
+            content => _plugin._chat.SendAsync(mapping.GameChatType, content),
+            content => $"Forwarded to {mapping.GameChatType}: {content}",
+            () => $"Failed to forward message to {mapping.GameChatType}");
     }
 
-    public async Task<bool> RouteTellMessage(DiscordMessage message, ulong channelId)
+    public Task<bool> RouteTellMessage(DiscordMessage message, ulong channelId)
     {
         var tellTarget = _plugin.Config.Chat.TellThreadMappings.FirstOrDefault(x => x.Value == channelId.ToString()).Key;
-        if (string.IsNullOrEmpty(tellTarget)) return false;
+        if (string.IsNullOrEmpty(tellTarget)) return Task.FromResult(false);
 
         var mapping = _plugin.Config.Chat.Mappings
             .FirstOrDefault(m => m.GameChatType == Dalamud.Game.Text.XivChatType.TellIncoming);
 
-        var content = ParseForGame(message.Content, mapping?.TranslateEmoji ?? true);
+        return RelayAsync(message, mapping?.TranslateEmoji ?? true,
+            content => _plugin._chat.SendTellAsync(tellTarget, content),
+            content => $"Forwarded tell reply to {tellTarget}: {content}",
+            () => $"Failed to forward tell reply to {tellTarget}");
+    }
+
+    private async Task<bool> RelayAsync(DiscordMessage message, bool translateEmoji, Func<string, Task> send,
+        Func<string, string> succeeded, Func<string> failed)
+    {
+        var content = ParseForGame(message.Content, translateEmoji);
         if (string.IsNullOrWhiteSpace(content)) return false;
 
         try
         {
-            await _plugin._chat.SendTellAsync(tellTarget, content);
+            await send(content);
         }
         catch (Exception ex)
         {
-            Log.Error(LogSource, $"Failed to forward tell reply to {tellTarget}", ex);
+            Log.Error(LogSource, failed(), ex);
             return false;
         }
 
-        Log.Info(LogSource, $"Forwarded tell reply to {tellTarget}: {content}");
+        Log.Info(LogSource, succeeded(content));
 
         await DeleteAsync(message);
         return true;

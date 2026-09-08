@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Numerics;
+using Cordi.Domain;
 using Dalamud.Game.Text;
 
 namespace Cordi.Configuration;
@@ -194,57 +195,11 @@ public class ChatboxConfig : IWindowChromeConfig
 
     public Dictionary<XivChatType, Vector4> ChatTypeColors { get; set; } = DefaultChatTypeColors();
 
-    public static readonly (string Label, XivChatType Key, uint Default, XivChatType[] Applies)[] ChatColorGroups =
-    {
-        ("Say", XivChatType.Say, 0xF7F7F7FF, new[] { XivChatType.Say, XivChatType.GmSay }),
-        ("Shout", XivChatType.Shout, 0xFFA64DFF, new[] { XivChatType.Shout, XivChatType.GmShout }),
-        ("Yell", XivChatType.Yell, 0xFFE659FF, new[] { XivChatType.Yell, XivChatType.GmYell }),
-        ("Tells", XivChatType.TellIncoming, 0xFF8CD9FF, new[] { XivChatType.TellIncoming, XivChatType.TellOutgoing, XivChatType.GmTell }),
-        ("Party", XivChatType.Party, 0x66CCFFFF, new[] { XivChatType.Party, XivChatType.CrossParty, XivChatType.GmParty }),
-        ("Alliance", XivChatType.Alliance, 0xFF8C33FF, new[] { XivChatType.Alliance }),
-        ("Free Company", XivChatType.FreeCompany, 0x8CE6F2FF, new[] { XivChatType.FreeCompany, XivChatType.FreeCompanyAnnouncement, XivChatType.FreeCompanyLoginLogout, XivChatType.GmFreeCompany }),
-        ("Linkshells", XivChatType.Ls1, 0xD4FF7DFF, new[]
-        {
-            XivChatType.Ls1, XivChatType.Ls2, XivChatType.Ls3, XivChatType.Ls4,
-            XivChatType.Ls5, XivChatType.Ls6, XivChatType.Ls7, XivChatType.Ls8,
-            XivChatType.GmLinkshell1, XivChatType.GmLinkshell2, XivChatType.GmLinkshell3, XivChatType.GmLinkshell4,
-            XivChatType.GmLinkshell5, XivChatType.GmLinkshell6, XivChatType.GmLinkshell7, XivChatType.GmLinkshell8,
-        }),
-        ("Cross-world Linkshells", XivChatType.CrossLinkShell1, 0xD4FF7DFF, new[]
-        {
-            XivChatType.CrossLinkShell1, XivChatType.CrossLinkShell2, XivChatType.CrossLinkShell3, XivChatType.CrossLinkShell4,
-            XivChatType.CrossLinkShell5, XivChatType.CrossLinkShell6, XivChatType.CrossLinkShell7, XivChatType.CrossLinkShell8,
-        }),
-        ("Novice Network", XivChatType.NoviceNetwork, 0xD4FF7DFF, new[] { XivChatType.NoviceNetwork, XivChatType.NoviceNetworkSystem, XivChatType.GmNoviceNetwork }),
-        ("PvP Team", XivChatType.PvPTeam, 0xABDBE5FF, new[] { XivChatType.PvPTeam, XivChatType.PvpTeamAnnouncement, XivChatType.PvpTeamLoginLogout }),
-        ("Emotes", XivChatType.CustomEmote, 0xBAFFF0FF, new[] { XivChatType.CustomEmote, XivChatType.StandardEmote }),
-        ("NPC Dialogue", XivChatType.NPCDialogue, 0xABD647FF, new[] { XivChatType.NPCDialogue, XivChatType.NPCDialogueAnnouncements }),
-        ("System", XivChatType.SystemMessage, 0xCCCCCCFF, new[]
-        {
-            XivChatType.SystemMessage, XivChatType.SystemError, XivChatType.GatheringSystemMessage, XivChatType.Echo,
-            XivChatType.Orchestrion, XivChatType.Alarm, XivChatType.Sign, XivChatType.MessageBook,
-            XivChatType.GlamourNotifications, XivChatType.RetainerSale, XivChatType.PeriodicRecruitmentNotification,
-        }),
-        ("Errors", XivChatType.ErrorMessage, 0xFF4A4AFF, new[] { XivChatType.ErrorMessage }),
-        ("Notices", XivChatType.Notice, 0xB38CFFFF, new[] { XivChatType.Notice }),
-        ("Urgent", XivChatType.Urgent, 0xFF7F7FFF, new[] { XivChatType.Urgent }),
-        ("Debug", XivChatType.Debug, 0xCCCCCCFF, new[] { XivChatType.Debug }),
-        ("Damage", XivChatType.Damage, 0xFF7D7DFF, new[] { XivChatType.Damage }),
-        ("Misses", XivChatType.Miss, 0xCCCCCCFF, new[] { XivChatType.Miss }),
-        ("Healing", XivChatType.Healing, 0xD4FF7DFF, new[] { XivChatType.Healing }),
-        ("Actions and Items", XivChatType.Action, 0xFFFFB0FF, new[] { XivChatType.Action, XivChatType.Item, XivChatType.LootNotice }),
-        ("Beneficial Effects", XivChatType.GainBuff, 0x94BFFFFF, new[] { XivChatType.GainBuff, XivChatType.LoseBuff }),
-        ("Detrimental Effects", XivChatType.GainDebuff, 0xFF8AC4FF, new[] { XivChatType.GainDebuff, XivChatType.LoseDebuff }),
-        ("Progress", XivChatType.Progress, 0xFFDE73FF, new[] { XivChatType.Progress }),
-        ("Loot Rolls", XivChatType.LootRoll, 0xC7BF9EFF, new[] { XivChatType.LootRoll, XivChatType.RandomNumber }),
-        ("Crafting and Gathering", XivChatType.Crafting, 0xDEBFF7FF, new[] { XivChatType.Crafting, XivChatType.Gathering }),
-    };
-
     public static Dictionary<XivChatType, Vector4> DefaultChatTypeColors()
     {
         var colors = new Dictionary<XivChatType, Vector4>();
 
-        foreach (var group in ChatColorGroups)
+        foreach (var group in ChatTypes.ColorGroups)
         {
             var color = FromRgba(group.Default);
             foreach (var type in group.Applies)

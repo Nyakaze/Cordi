@@ -32,13 +32,10 @@ public sealed class ChatboxImageCache : IDisposable
     private readonly Func<int> _animationIdleSeconds;
     private readonly ConcurrentDictionary<string, IDalamudTextureWrap> _textures = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, long> _lastUsed = new(StringComparer.Ordinal);
-    private readonly ConcurrentDictionary<string, byte> _inFlight = new(StringComparer.Ordinal);
-    private readonly ConcurrentDictionary<string, DateTime> _failures = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, AnimatedTextureWrap> _animated = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, byte> _unloaded = new(StringComparer.Ordinal);
     private readonly ConcurrentQueue<(IDalamudTextureWrap Wrap, long Frame)> _graveyard = new();
-    private readonly SemaphoreSlim _downloadGate = new(4, 4);
-    private readonly CancellationTokenSource _cts = new();
+    private readonly ChatboxFetchQueue _fetch = new(4, FailureBackoff, "Image load");
     private long _frame;
     private bool _disposed;
 
@@ -54,8 +51,8 @@ public sealed class ChatboxImageCache : IDisposable
         _animationIdleSeconds = animationIdleSeconds;
     }
 
-    public int PendingDownloads => _inFlight.Count;
-    public int FailedDownloads => _failures.Count;
+    public int PendingDownloads => _fetch.Pending;
+    public int FailedDownloads => _fetch.Failed;
     public int LoadedTextures => _textures.Count;
     public int AnimatedTextures => _animated.Count;
     public bool HasUnloaded => !_unloaded.IsEmpty;
@@ -86,7 +83,7 @@ public sealed class ChatboxImageCache : IDisposable
 
         if (_unloaded.ContainsKey(url)) return null;
 
-        Enqueue(url);
+        _fetch.Enqueue(url, ResolveAsync);
         return null;
     }
 
@@ -164,80 +161,52 @@ public sealed class ChatboxImageCache : IDisposable
         }
     }
 
-    private void Enqueue(string url)
-    {
-        if (_failures.TryGetValue(url, out var failedAt))
-        {
-            if (DateTime.UtcNow - failedAt < FailureBackoff) return;
-            _failures.TryRemove(url, out _);
-        }
-
-        if (!_inFlight.TryAdd(url, 0)) return;
-
-        _ = Task.Run(() => ResolveAsync(url), _cts.Token);
-    }
-
     private async Task ResolveAsync(string url)
     {
-        try
+        var bytes = ReadBlob(url);
+
+        if (bytes is null)
         {
-            var bytes = ReadBlob(url);
+            bytes = await TryDownloadAsync(url).ConfigureAwait(false);
 
-            if (bytes is null)
+            if (bytes is null || bytes.Length == 0)
             {
-                bytes = await TryDownloadAsync(url).ConfigureAwait(false);
-
-                if (bytes is null || bytes.Length == 0)
-                {
-                    var fallback = EmoteFallbackUrl(url);
-                    if (fallback != null)
-                        bytes = await TryDownloadAsync(fallback).ConfigureAwait(false);
-                }
-
-                if (bytes is null || bytes.Length == 0)
-                {
-                    _failures[url] = DateTime.UtcNow;
-                    return;
-                }
-
-                StoreBlob(url, bytes);
+                var fallback = EmoteFallbackUrl(url);
+                if (fallback != null)
+                    bytes = await TryDownloadAsync(fallback).ConfigureAwait(false);
             }
 
-            var wrap = await CreateTextureWrapAsync(bytes, _cts.Token).ConfigureAwait(false);
-            if (wrap == null)
+            if (bytes is null || bytes.Length == 0)
             {
-                _failures[url] = DateTime.UtcNow;
+                _fetch.MarkFailed(url);
                 return;
             }
 
-            if (_disposed)
-            {
-                wrap.Dispose();
-                return;
-            }
+            StoreBlob(url, bytes);
+        }
 
-            _lastUsed[url] = Interlocked.Read(ref _frame);
-            if (!_textures.TryAdd(url, wrap))
-            {
-                wrap.Dispose();
-                return;
-            }
+        var wrap = await CreateTextureWrapAsync(bytes, _fetch.Token).ConfigureAwait(false);
+        if (wrap == null)
+        {
+            _fetch.MarkFailed(url);
+            return;
+        }
 
-            if (wrap is AnimatedTextureWrap animated)
-                _animated[url] = animated;
-        }
-        catch (OperationCanceledException)
+        if (_disposed)
         {
+            wrap.Dispose();
+            return;
         }
-        catch (Exception ex)
+
+        _lastUsed[url] = Interlocked.Read(ref _frame);
+        if (!_textures.TryAdd(url, wrap))
         {
-            _failures[url] = DateTime.UtcNow;
-            Service.Log.Debug($"[Chatbox] Image load failed for {url}: {ex.Message}");
+            wrap.Dispose();
+            return;
         }
-        finally
-        {
-            _inFlight.TryRemove(url, out _);
-        }
+
+        if (wrap is AnimatedTextureWrap animated)
+            _animated[url] = animated;
     }
 
     private static string? EmoteFallbackUrl(string url)
@@ -335,33 +304,22 @@ public sealed class ChatboxImageCache : IDisposable
 
     private async Task<byte[]?> DownloadAsync(string url)
     {
-        try
-        {
-            await _downloadGate.WaitAsync(_cts.Token).ConfigureAwait(false);
-        }
-        catch (OperationCanceledException)
-        {
+        if (!await _fetch.EnterGateAsync().ConfigureAwait(false))
             return null;
-        }
-        catch (ObjectDisposedException)
-        {
-            return null;
-        }
 
         try
         {
-            using var response = await Http.GetAsync(url, _cts.Token).ConfigureAwait(false);
+            using var response = await Http.GetAsync(url, _fetch.Token).ConfigureAwait(false);
             response.EnsureSuccessStatusCode();
 
             if (response.Content.Headers.ContentLength > MaxImageBytes) return null;
 
-            var bytes = await response.Content.ReadAsByteArrayAsync(_cts.Token).ConfigureAwait(false);
+            var bytes = await response.Content.ReadAsByteArrayAsync(_fetch.Token).ConfigureAwait(false);
             return bytes.Length is > 0 and <= MaxImageBytes ? bytes : null;
         }
         finally
         {
-            try { _downloadGate.Release(); }
-            catch (ObjectDisposedException) { }
+            _fetch.ExitGate();
         }
     }
 
@@ -479,12 +437,12 @@ public sealed class ChatboxImageCache : IDisposable
         }
 
         _lastUsed.Clear();
-        _failures.Clear();
+        _fetch.ClearFailures();
     }
 
     public void Clear()
     {
-        _failures.Clear();
+        _fetch.ClearFailures();
         _animated.Clear();
         _unloaded.Clear();
 
@@ -529,7 +487,7 @@ public sealed class ChatboxImageCache : IDisposable
         if (_disposed) return;
         _disposed = true;
 
-        _cts.Cancel();
+        _fetch.Cancel();
 
         foreach (var wrap in _textures.Values)
         {
@@ -547,7 +505,6 @@ public sealed class ChatboxImageCache : IDisposable
             catch (Exception ex) { Service.Log.Debug($"[Chatbox] Texture dispose failed: {ex.Message}"); }
         }
 
-        _cts.Dispose();
-        _downloadGate.Dispose();
+        _fetch.Dispose();
     }
 }

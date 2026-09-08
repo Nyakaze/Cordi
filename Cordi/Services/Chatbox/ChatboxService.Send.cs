@@ -1,4 +1,5 @@
 ﻿using System.Collections.Generic;
+using System.Linq;
 using Cordi.Configuration;
 using Cordi.Domain;
 using Dalamud.Game.Text;
@@ -24,8 +25,7 @@ public sealed partial class ChatboxService
         config.SendGameChatType != XivChatType.None;
 
     private static bool IsTellChannel(ChatboxChannelState channel) =>
-        channel.Config.GameChatTypes.Contains(XivChatType.TellIncoming)
-        || channel.Config.GameChatTypes.Contains(XivChatType.TellOutgoing);
+        channel.Config.GameChatTypes.Any(ChatTypes.IsTell);
 
     public void Send(string channelId, string text, ChatboxReplyRef? reply)
     {

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Numerics;
 using System.Text;
 using Cordi.Configuration;
+using Cordi.Domain;
 using Cordi.Services.Chatbox;
 using Cordi.UI.Components;
 using Cordi.UI.Panels;
@@ -122,14 +123,14 @@ public sealed partial class ChatboxWindow
             : "Pick a channel";
 
         var items = new List<DropdownItem>();
-        foreach (var type in ChatboxService.SendableChatTypes)
+        foreach (var type in ChatTypes.Sendable)
         {
             if (!ChatboxService.IsSendTargetAvailable(type)) continue;
             items.Add(new DropdownItem
             {
                 Key = type.ToString(),
                 Label = ChatboxService.LabelFor(type),
-                Group = ChatboxService.SendGroupFor(type),
+                Group = ChatTypes.SendGroup(type),
             });
         }
 

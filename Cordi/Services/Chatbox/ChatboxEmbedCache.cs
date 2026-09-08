@@ -40,10 +40,7 @@ public sealed class ChatboxEmbedCache : IDisposable
     private readonly ChatboxDatabase _database;
     private readonly Func<int> _lifetimeDays;
     private readonly ConcurrentDictionary<string, ChatboxLinkEmbed> _embeds = new(StringComparer.Ordinal);
-    private readonly ConcurrentDictionary<string, byte> _inFlight = new(StringComparer.Ordinal);
-    private readonly ConcurrentDictionary<string, DateTime> _failures = new(StringComparer.Ordinal);
-    private readonly SemaphoreSlim _fetchGate = new(2, 2);
-    private readonly CancellationTokenSource _cts = new();
+    private readonly ChatboxFetchQueue _fetch = new(2, FailureBackoff, "Embed lookup");
     private bool _disposed;
 
     public ChatboxEmbedCache(ChatboxDatabase database, Func<int> lifetimeDays)
@@ -54,7 +51,7 @@ public sealed class ChatboxEmbedCache : IDisposable
         PruneUnresolved();
     }
 
-    public int PendingFetches => _inFlight.Count;
+    public int PendingFetches => _fetch.Pending;
 
     private static HttpClient CreateClient()
     {
@@ -83,7 +80,7 @@ public sealed class ChatboxEmbedCache : IDisposable
         if (_embeds.TryGetValue(key, out var cached))
             return cached;
 
-        Enqueue(key);
+        _fetch.Enqueue(key, ResolveAsync);
         return null;
     }
 
@@ -122,65 +119,31 @@ public sealed class ChatboxEmbedCache : IDisposable
         };
     }
 
-    private void Enqueue(string url)
-    {
-        if (_failures.TryGetValue(url, out var failedAt))
-        {
-            if (DateTime.UtcNow - failedAt < FailureBackoff) return;
-            _failures.TryRemove(url, out _);
-        }
-
-        if (!_inFlight.TryAdd(url, 0)) return;
-
-        _ = Task.Run(() => ResolveAsync(url), _cts.Token);
-    }
-
     private async Task ResolveAsync(string url)
     {
-        try
+        var stored = ReadStored(url);
+        if (stored != null)
         {
-            var stored = ReadStored(url);
-            if (stored != null)
-            {
-                _embeds[url] = stored;
-                return;
-            }
+            _embeds[url] = stored;
+            return;
+        }
 
-            var embed = await FetchAsync(url).ConfigureAwait(false);
-            if (embed == null)
-            {
-                StoreEmpty(url);
-                if (!_disposed) _embeds[url] = new ChatboxLinkEmbed { Url = url };
-                return;
-            }
+        var embed = await FetchAsync(url).ConfigureAwait(false);
+        if (embed == null)
+        {
+            StoreEmpty(url);
+            if (!_disposed) _embeds[url] = new ChatboxLinkEmbed { Url = url };
+            return;
+        }
 
-            Store(url, embed);
-            if (!_disposed) _embeds[url] = embed;
-        }
-        catch (OperationCanceledException)
-        {
-        }
-        catch (Exception ex)
-        {
-            _failures[url] = DateTime.UtcNow;
-            Service.Log.Debug($"[Chatbox] Embed lookup failed for {url}: {ex.Message}");
-        }
-        finally
-        {
-            _inFlight.TryRemove(url, out _);
-        }
+        Store(url, embed);
+        if (!_disposed) _embeds[url] = embed;
     }
 
     private async Task<ChatboxLinkEmbed?> FetchAsync(string url)
     {
-        try
-        {
-            await _fetchGate.WaitAsync(_cts.Token).ConfigureAwait(false);
-        }
-        catch (Exception)
-        {
+        if (!await _fetch.EnterGateAsync().ConfigureAwait(false))
             return null;
-        }
 
         try
         {
@@ -188,7 +151,7 @@ public sealed class ChatboxEmbedCache : IDisposable
             if (provider != null) return provider;
 
             using var response = await Http
-                .GetAsync(url, HttpCompletionOption.ResponseHeadersRead, _cts.Token)
+                .GetAsync(url, HttpCompletionOption.ResponseHeadersRead, _fetch.Token)
                 .ConfigureAwait(false);
 
             if (!response.IsSuccessStatusCode) return null;
@@ -207,8 +170,7 @@ public sealed class ChatboxEmbedCache : IDisposable
         }
         finally
         {
-            try { _fetchGate.Release(); }
-            catch (ObjectDisposedException) { }
+            _fetch.ExitGate();
         }
     }
 
@@ -218,12 +180,12 @@ public sealed class ChatboxEmbedCache : IDisposable
         if (!match.Success) return null;
 
         using var response = await Http
-            .GetAsync($"https://api.klipy.com/api/v1/gifs/{match.Groups["slug"].Value}", _cts.Token)
+            .GetAsync($"https://api.klipy.com/api/v1/gifs/{match.Groups["slug"].Value}", _fetch.Token)
             .ConfigureAwait(false);
 
         if (!response.IsSuccessStatusCode) return null;
 
-        var payload = await response.Content.ReadAsStringAsync(_cts.Token).ConfigureAwait(false);
+        var payload = await response.Content.ReadAsStringAsync(_fetch.Token).ConfigureAwait(false);
 
         try
         {
@@ -262,14 +224,14 @@ public sealed class ChatboxEmbedCache : IDisposable
 
     private async Task<string> ReadCappedAsync(HttpResponseMessage response)
     {
-        await using var stream = await response.Content.ReadAsStreamAsync(_cts.Token).ConfigureAwait(false);
+        await using var stream = await response.Content.ReadAsStreamAsync(_fetch.Token).ConfigureAwait(false);
 
         var buffer = new byte[8192];
         using var memory = new MemoryStream();
 
         while (memory.Length < MaxHtmlBytes)
         {
-            var read = await stream.ReadAsync(buffer, _cts.Token).ConfigureAwait(false);
+            var read = await stream.ReadAsync(buffer, _fetch.Token).ConfigureAwait(false);
             if (read <= 0) break;
 
             memory.Write(buffer, 0, read);
@@ -338,7 +300,7 @@ public sealed class ChatboxEmbedCache : IDisposable
     public void Clear()
     {
         _embeds.Clear();
-        _failures.Clear();
+        _fetch.ClearFailures();
 
         _database.Write(connection => ChatboxDatabase.Execute(connection, "DELETE FROM embeds;"), "clear embeds");
     }
@@ -367,9 +329,7 @@ public sealed class ChatboxEmbedCache : IDisposable
         if (_disposed) return;
         _disposed = true;
 
-        _cts.Cancel();
-        _cts.Dispose();
-        _fetchGate.Dispose();
+        _fetch.Dispose();
         _embeds.Clear();
     }
 }

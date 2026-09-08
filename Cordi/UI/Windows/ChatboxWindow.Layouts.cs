@@ -1,5 +1,6 @@
 using System;
 using System.Numerics;
+using Cordi.Domain;
 using Cordi.Services.Chatbox;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Game.Text;
@@ -56,7 +57,7 @@ public sealed partial class ChatboxWindow
     }
 
     private static bool IsTell(ChatboxMessage message) =>
-        message.GameChatType is XivChatType.TellIncoming or XivChatType.TellOutgoing;
+        ChatTypes.IsTell(message.GameChatType);
 
     private Vector4 TellDirectionColor(ChatboxMessage message) =>
         message.GameChatType == XivChatType.TellOutgoing ? _theme.MutedText : _theme.Accent;

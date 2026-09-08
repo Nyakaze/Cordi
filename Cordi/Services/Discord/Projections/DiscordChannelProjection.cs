@@ -7,6 +7,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Cordi.Core;
 using Cordi.Services.Discord.Connection;
+using Crovus.Cache;
 using Crovus.Events;
 using Crovus.Models;
 using Crovus.Rest;
@@ -27,18 +28,15 @@ public sealed class DiscordChannelProjection : IDisposable
     private readonly CordiPlugin _plugin;
     private readonly DiscordConnection _connection;
 
-    private readonly ConcurrentDictionary<ulong, DiscordGuild> _guilds = new();
-    private readonly ConcurrentDictionary<ulong, DiscordMember> _members = new();
-    private readonly ConcurrentDictionary<ulong, DiscordChannel> _channels = new();
-    private readonly ConcurrentDictionary<ulong, DiscordChannel> _threads = new();
-    private readonly ConcurrentDictionary<ulong, string> _resolvedThreadNames = new();
     private readonly ConcurrentDictionary<ulong, byte> _pendingThreadFetches = new();
     private readonly ConcurrentDictionary<ulong, byte> _missingThreads = new();
     private readonly ConcurrentDictionary<ulong, byte> _loadedForums = new();
     private readonly ConcurrentDictionary<ulong, DateTime> _threadRetryAt = new();
+    private readonly object _gate = new();
 
     private IReadOnlyList<DiscordChannel> _textChannels = [];
     private IReadOnlyList<DiscordChannel> _forumChannels = [];
+    private long _built = -1;
 
     private bool _bound;
     private bool _disposed;
@@ -49,11 +47,28 @@ public sealed class DiscordChannelProjection : IDisposable
         _connection = connection;
     }
 
-    public IReadOnlyList<DiscordChannel> TextChannels => Volatile.Read(ref _textChannels);
+    public IReadOnlyList<DiscordChannel> TextChannels
+    {
+        get
+        {
+            Refresh();
 
-    public IReadOnlyList<DiscordChannel> ForumChannels => Volatile.Read(ref _forumChannels);
+            return Volatile.Read(ref _textChannels);
+        }
+    }
 
-    public IReadOnlyList<DiscordGuild> Guilds => _guilds.Values.OrderBy(guild => guild.Name).ToArray();
+    public IReadOnlyList<DiscordChannel> ForumChannels
+    {
+        get
+        {
+            Refresh();
+
+            return Volatile.Read(ref _forumChannels);
+        }
+    }
+
+    public IReadOnlyList<DiscordGuild> Guilds =>
+        Cache?.Guilds.OrderBy(guild => guild.Name).ToArray() ?? [];
 
     public void Bind()
     {
@@ -61,64 +76,29 @@ public sealed class DiscordChannelProjection : IDisposable
         _bound = true;
 
         _connection.Ready += OnReadyAsync;
-
-        _connection.Register<GuildAvailableEvent>(OnGuildAvailableAsync);
-        _connection.Register<GuildUnavailableEvent>(OnGuildUnavailableAsync);
-        _connection.Register<ChannelCreatedEvent>((e, _) => Track(e.Channel, e.Guild?.Id));
-        _connection.Register<ChannelUpdatedEvent>((e, _) => Track(e.Channel, e.Guild?.Id));
-        _connection.Register<ChannelDeletedEvent>((e, _) => Forget(e.Channel.Id));
-        _connection.Register<ThreadCreatedEvent>((e, _) => Track(e.Thread, e.GuildId));
-        _connection.Register<ThreadUpdatedEvent>((e, _) => Track(e.Thread, e.GuildId));
-        _connection.Register<ThreadDeletedEvent>((e, _) => Forget(e.Thread.Id));
-        _connection.Register<ThreadListSyncEvent>(OnThreadListSyncAsync);
-        _connection.Register<GuildEmojisUpdatedEvent>((e, _) =>
-            UpdateGuild(e.GuildId, guild => guild with { Emojis = e.Emojis }));
-        _connection.Register<RoleCreatedEvent>((e, _) => StoreRole(e.GuildId, e.Role));
-        _connection.Register<RoleUpdatedEvent>((e, _) => StoreRole(e.GuildId, e.Role));
-        _connection.Register<RoleDeletedEvent>((e, _) => UpdateGuild(e.GuildId, guild => guild with
-        {
-            Roles = guild.Roles.Where(role => role.Id != e.RoleId).ToArray()
-        }));
-        _connection.Register<MemberJoinedEvent>((e, _) => StoreMember(e.Member));
-        _connection.Register<MemberUpdatedEvent>((e, _) => StoreMember(e.Member));
-        _connection.Register<MemberLeftEvent>((e, ct) =>
-        {
-            _members.TryRemove(e.UserId.Value, out _);
-
-            return Task.CompletedTask;
-        });
-        _connection.Register<GuildMembersChunkEvent>((e, _) =>
-        {
-            foreach (var member in e.Members) _members[member.User.Id.Value] = member;
-
-            return Task.CompletedTask;
-        });
     }
 
-    public DiscordMember? FindMember(ulong userId) =>
-        _members.TryGetValue(userId, out var member) ? member : null;
-
-    public DiscordRole? FindRole(ulong roleId)
+    public DiscordMember? FindMember(ulong userId)
     {
-        foreach (var guild in _guilds.Values)
-            if (guild.Role(roleId) is { } role)
-                return role;
+        if (Cache is not { } cache) return null;
+
+        var id = new Snowflake(userId);
+
+        foreach (var guild in cache.Guilds)
+            if (cache.FindMember(guild.Id, id) is { } member)
+                return member;
 
         return null;
     }
 
-    public DiscordChannel? Find(ulong channelId)
-    {
-        if (_channels.TryGetValue(channelId, out var channel)) return channel;
-        if (_threads.TryGetValue(channelId, out var thread)) return thread;
+    public DiscordRole? FindRole(ulong roleId) => Cache?.FindRole(new Snowflake(roleId));
 
-        return null;
-    }
+    public DiscordChannel? Find(ulong channelId) => Cache?.FindChannel(new Snowflake(channelId));
 
     public IReadOnlyDictionary<ulong, string> GetThreadsForForum(ulong forumChannelId) =>
-        _threads.Values
-            .Where(thread => thread.ParentId?.Value == forumChannelId)
-            .ToDictionary(thread => thread.Id.Value, thread => thread.Name);
+        Cache?.ThreadsOf(new Snowflake(forumChannelId))
+            .ToDictionary(thread => thread.Id.Value, thread => thread.Name)
+        ?? new Dictionary<ulong, string>();
 
     public string GetThreadName(ulong threadId)
     {
@@ -129,15 +109,9 @@ public sealed class DiscordChannelProjection : IDisposable
 
     public ThreadStatus ResolveThread(ulong threadId, out string name)
     {
-        if (_threads.TryGetValue(threadId, out var thread))
+        if (Find(threadId) is { } thread)
         {
             name = thread.Name;
-            return ThreadStatus.Known;
-        }
-
-        if (_resolvedThreadNames.TryGetValue(threadId, out var resolved))
-        {
-            name = resolved;
             return ThreadStatus.Known;
         }
 
@@ -162,7 +136,7 @@ public sealed class DiscordChannelProjection : IDisposable
             {
                 var posts = await context.Services.Threads.GetPostsAsync(guildId, forumChannelId, archivedLimit: 100);
 
-                foreach (var post in posts) Store(post, guildId);
+                foreach (var post in posts) await StoreAsync(context.Cache, post, guildId);
 
                 Log.Debug(LogSource, $"Loaded {posts.Count} post(s) from forum {forumChannelId}");
             }
@@ -185,136 +159,60 @@ public sealed class DiscordChannelProjection : IDisposable
         Clear();
     }
 
+    private IDiscordCache? Cache => _connection.Context?.Cache;
+
     private Task OnReadyAsync(ReadyEvent e)
     {
         Clear();
-        return Task.CompletedTask;
-    }
-
-    private Task OnGuildAvailableAsync(GuildAvailableEvent e, CancellationToken ct)
-    {
-        _guilds[e.GuildId.Value] = e.Guild;
-
-        foreach (var member in e.Members) _members[member.User.Id.Value] = member;
-        foreach (var channel in e.Channels) Store(channel, e.GuildId);
-        foreach (var thread in e.Threads) Store(thread, e.GuildId);
-
-        Rebuild();
-
-        Log.Debug(LogSource,
-            $"Projected guild '{e.GuildName}': {e.Channels.Count} channel(s), {e.Threads.Count} thread(s)");
 
         return Task.CompletedTask;
-    }
-
-    private Task OnGuildUnavailableAsync(GuildUnavailableEvent e, CancellationToken ct)
-    {
-        var guildId = e.GuildId.Value;
-
-        _guilds.TryRemove(guildId, out _);
-
-        foreach (var member in _members.Values.Where(m => m.GuildId?.Value == guildId))
-            _members.TryRemove(member.User.Id.Value, out _);
-
-        foreach (var channel in _channels.Values.Where(c => c.GuildId?.Value == guildId))
-            _channels.TryRemove(channel.Id.Value, out _);
-
-        foreach (var thread in _threads.Values.Where(t => t.GuildId?.Value == guildId))
-            _threads.TryRemove(thread.Id.Value, out _);
-
-        Rebuild();
-
-        Log.Debug(LogSource, $"Dropped projection for guild '{e.Guild.Name}'");
-
-        return Task.CompletedTask;
-    }
-
-    private Task OnThreadListSyncAsync(ThreadListSyncEvent e, CancellationToken ct)
-    {
-        foreach (var thread in e.Threads) Store(thread, e.GuildId);
-
-        Rebuild();
-
-        return Task.CompletedTask;
-    }
-
-    private Task StoreMember(DiscordMember member)
-    {
-        _members[member.User.Id.Value] = member;
-
-        return Task.CompletedTask;
-    }
-
-    private Task StoreRole(Snowflake guildId, DiscordRole role) =>
-        UpdateGuild(guildId, guild => guild with
-        {
-            Roles = guild.Roles.Where(existing => existing.Id != role.Id).Append(role).ToArray()
-        });
-
-    private Task UpdateGuild(Snowflake guildId, Func<DiscordGuild, DiscordGuild> update)
-    {
-        if (_guilds.TryGetValue(guildId.Value, out var guild))
-            _guilds[guildId.Value] = update(guild);
-
-        return Task.CompletedTask;
-    }
-
-    private Task Track(DiscordChannel channel, Snowflake? guildId)
-    {
-        Store(channel, guildId);
-        Rebuild();
-
-        return Task.CompletedTask;
-    }
-
-    private Task Forget(Snowflake channelId)
-    {
-        _channels.TryRemove(channelId.Value, out _);
-        _threads.TryRemove(channelId.Value, out _);
-        _resolvedThreadNames.TryRemove(channelId.Value, out _);
-
-        Rebuild();
-
-        return Task.CompletedTask;
-    }
-
-    private void Store(DiscordChannel channel, Snowflake? guildId)
-    {
-        var known = guildId is { } id ? channel.In(id) : channel;
-
-        if (known.IsThread) _threads[known.Id.Value] = known;
-        else _channels[known.Id.Value] = known;
-    }
-
-    private void Rebuild()
-    {
-        var known = _channels.Values.ToList();
-
-        Volatile.Write(ref _textChannels, known
-            .Where(channel => channel.Type is ChannelType.GuildText or ChannelType.GuildAnnouncement)
-            .OrderBy(channel => channel.Name, StringComparer.OrdinalIgnoreCase)
-            .ToArray());
-
-        Volatile.Write(ref _forumChannels, known
-            .Where(channel => channel.Type is ChannelType.GuildForum)
-            .OrderBy(channel => channel.Name, StringComparer.OrdinalIgnoreCase)
-            .ToArray());
     }
 
     private void Clear()
     {
-        _guilds.Clear();
-        _members.Clear();
-        _channels.Clear();
-        _threads.Clear();
-        _resolvedThreadNames.Clear();
         _pendingThreadFetches.Clear();
         _missingThreads.Clear();
         _loadedForums.Clear();
         _threadRetryAt.Clear();
 
-        Rebuild();
+        lock (_gate)
+        {
+            Volatile.Write(ref _textChannels, []);
+            Volatile.Write(ref _forumChannels, []);
+            Volatile.Write(ref _built, -1);
+        }
     }
+
+    private void Refresh()
+    {
+        if (Cache is not { } cache) return;
+
+        var version = cache.ChannelsVersion;
+
+        if (Interlocked.Read(ref _built) == version) return;
+
+        lock (_gate)
+        {
+            if (Interlocked.Read(ref _built) == version) return;
+
+            var known = cache.Channels;
+
+            Volatile.Write(ref _textChannels, known
+                .Where(channel => channel.Type is ChannelType.GuildText or ChannelType.GuildAnnouncement)
+                .OrderBy(channel => channel.Name, StringComparer.OrdinalIgnoreCase)
+                .ToArray());
+
+            Volatile.Write(ref _forumChannels, known
+                .Where(channel => channel.Type is ChannelType.GuildForum)
+                .OrderBy(channel => channel.Name, StringComparer.OrdinalIgnoreCase)
+                .ToArray());
+
+            Interlocked.Exchange(ref _built, version);
+        }
+    }
+
+    private static ValueTask StoreAsync(IDiscordCache cache, DiscordChannel channel, Snowflake? guildId) =>
+        cache.SetChannelAsync(channel.GuildId is null && guildId is { } id ? channel.In(id) : channel);
 
     private void ResolveThreadName(ulong threadId)
     {
@@ -328,8 +226,7 @@ public sealed class DiscordChannelProjection : IDisposable
             {
                 var thread = await context.Services.Channels.GetAsync(threadId);
 
-                Store(thread, thread.GuildId);
-                _resolvedThreadNames[threadId] = thread.Name;
+                await StoreAsync(context.Cache, thread, thread.GuildId);
 
                 Log.Debug(LogSource, $"Resolved thread {threadId}: {thread.Name}");
             }

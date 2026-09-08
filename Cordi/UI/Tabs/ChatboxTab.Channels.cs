@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
 using Cordi.Configuration;
+using Cordi.Domain;
 using Cordi.Services.Chatbox;
 using Cordi.UI.Components;
 using Cordi.UI.Themes;
@@ -14,104 +15,11 @@ namespace Cordi.UI.Tabs;
 
 public partial class ChatboxTab
 {
-    private static readonly (string Group, bool Simple, XivChatType[] Types)[] SelectableChatGroups =
-    {
-        ("Chat", true, new[]
-        {
-            XivChatType.Say,
-            XivChatType.Shout,
-            XivChatType.Yell,
-            XivChatType.TellIncoming,
-            XivChatType.Party,
-            XivChatType.CrossParty,
-            XivChatType.Alliance,
-            XivChatType.FreeCompany,
-            XivChatType.NoviceNetwork,
-            XivChatType.PvPTeam,
-        }),
-        ("Linkshells", true, new[]
-        {
-            XivChatType.Ls1,
-            XivChatType.Ls2,
-            XivChatType.Ls3,
-            XivChatType.Ls4,
-            XivChatType.Ls5,
-            XivChatType.Ls6,
-            XivChatType.Ls7,
-            XivChatType.Ls8,
-        }),
-        ("Cross-world Linkshells", true, new[]
-        {
-            XivChatType.CrossLinkShell1,
-            XivChatType.CrossLinkShell2,
-            XivChatType.CrossLinkShell3,
-            XivChatType.CrossLinkShell4,
-            XivChatType.CrossLinkShell5,
-            XivChatType.CrossLinkShell6,
-            XivChatType.CrossLinkShell7,
-            XivChatType.CrossLinkShell8,
-        }),
-        ("Emotes", false, new[]
-        {
-            XivChatType.CustomEmote,
-            XivChatType.StandardEmote,
-        }),
-        ("Battle", false, new[]
-        {
-            XivChatType.Damage,
-            XivChatType.Miss,
-            XivChatType.Action,
-            XivChatType.Item,
-            XivChatType.Healing,
-            XivChatType.GainBuff,
-            XivChatType.LoseBuff,
-            XivChatType.GainDebuff,
-            XivChatType.LoseDebuff,
-        }),
-        ("Announcements", false, new[]
-        {
-            XivChatType.FreeCompanyAnnouncement,
-            XivChatType.FreeCompanyLoginLogout,
-            XivChatType.PvpTeamAnnouncement,
-            XivChatType.PvpTeamLoginLogout,
-            XivChatType.NoviceNetworkSystem,
-            XivChatType.NPCDialogue,
-            XivChatType.NPCDialogueAnnouncements,
-            XivChatType.PeriodicRecruitmentNotification,
-            XivChatType.MessageBook,
-        }),
-        ("Progress", false, new[]
-        {
-            XivChatType.LootNotice,
-            XivChatType.LootRoll,
-            XivChatType.Progress,
-            XivChatType.Crafting,
-            XivChatType.Gathering,
-            XivChatType.GlamourNotifications,
-            XivChatType.RetainerSale,
-        }),
-        ("System", false, new[]
-        {
-            XivChatType.Echo,
-            XivChatType.SystemMessage,
-            XivChatType.SystemError,
-            XivChatType.GatheringSystemMessage,
-            XivChatType.ErrorMessage,
-            XivChatType.Notice,
-            XivChatType.Urgent,
-            XivChatType.Debug,
-            XivChatType.Alarm,
-            XivChatType.Orchestrion,
-            XivChatType.Sign,
-            XivChatType.RandomNumber,
-        }),
-    };
-
     private const string ChatGroupKeyPrefix = "group:";
 
     private static List<ChipSelectorGroup> BuildSelectableChatGroups(bool advanced)
     {
-        var groups = SelectableChatGroups
+        var groups = ChatTypes.SelectableGroups
             .Where(group => advanced || group.Simple)
             .Select(group => new ChipSelectorGroup
             {
@@ -132,7 +40,7 @@ public partial class ChatboxTab
         groups.Add(new ChipSelectorGroup
         {
             Label = "Categories",
-            Items = SelectableChatGroups
+            Items = ChatTypes.SelectableGroups
                 .Where(group => !group.Simple)
                 .Select(group => new DropdownItem
                 {
@@ -151,7 +59,7 @@ public partial class ChatboxTab
         {
             string name = key[ChatGroupKeyPrefix.Length..];
 
-            foreach (var group in SelectableChatGroups)
+            foreach (var group in ChatTypes.SelectableGroups)
             {
                 if (string.Equals(group.Group, name, StringComparison.Ordinal))
                     return group.Types;
@@ -164,9 +72,6 @@ public partial class ChatboxTab
             ? new[] { parsed }
             : Array.Empty<XivChatType>();
     }
-
-    private static bool IsTellType(XivChatType type) =>
-        type is XivChatType.TellIncoming or XivChatType.TellOutgoing;
 
     private const string ChannelPayload = "CORDI_CHATBOX_CHANNEL";
     private static readonly byte[] ChannelPayloadData = { 1 };
@@ -465,7 +370,7 @@ public partial class ChatboxTab
         else
             channel.GameChatTypes.Remove(type);
 
-        if (!IsTellType(type))
+        if (!ChatTypes.IsTell(type))
             return true;
 
         if (enabled)
@@ -535,12 +440,12 @@ public partial class ChatboxTab
                 new() { Key = XivChatType.None.ToString(), Label = "None" },
             };
 
-            items.AddRange(ChatboxService.SendableChatTypes
+            items.AddRange(ChatTypes.Sendable
                 .Select(type => new DropdownItem
                 {
                     Key = type.ToString(),
                     Label = ChatboxService.LabelFor(type),
-                    Group = ChatboxService.SendGroupFor(type),
+                    Group = ChatTypes.SendGroup(type),
                 }));
 
             Row.Draw(

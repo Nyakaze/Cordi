@@ -185,7 +185,7 @@ namespace Cordi.Services
 
             if (config is null) return false;
 
-            return config.TypeConfigs.TryGetValue(ActivityType.Custom, out var custom) && custom.Enabled;
+            return config.EnabledTypes().Includes(ActivityType.Custom);
         }
 
         private CordiLogService Log => _plugin.LogService;

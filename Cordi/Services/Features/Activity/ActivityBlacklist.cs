@@ -4,7 +4,7 @@ using Cordi.Configuration;
 
 namespace Cordi.Services.Activity;
 
-public static class ActivityFilters
+public static class ActivityBlacklist
 {
     private const string LogSource = "Activity";
 

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
 using Cordi.Configuration;
+using Cordi.Domain;
 using Cordi.Services.Features;
 using Cordi.UI.Components;
 using Cordi.UI.Themes;
@@ -33,18 +34,6 @@ public partial class ChatsTab
         new() { Type = XivChatType.Alliance, Label = "Alliance", Icon = FontAwesomeIcon.ShieldAlt, Color = UiTheme.TileBlue },
         new() { Type = XivChatType.FreeCompany, Label = "FreeCompany", Icon = FontAwesomeIcon.Flag, Color = UiTheme.TileTeal },
         new() { Type = XivChatType.TellIncoming, Label = "Tell", Icon = FontAwesomeIcon.Envelope, Color = UiTheme.TilePink },
-    };
-
-    private static readonly XivChatType[] LinkshellTypes =
-    {
-        XivChatType.Ls1, XivChatType.Ls2, XivChatType.Ls3, XivChatType.Ls4,
-        XivChatType.Ls5, XivChatType.Ls6, XivChatType.Ls7, XivChatType.Ls8,
-    };
-
-    private static readonly XivChatType[] CrossWorldLinkshellTypes =
-    {
-        XivChatType.CrossLinkShell1, XivChatType.CrossLinkShell2, XivChatType.CrossLinkShell3, XivChatType.CrossLinkShell4,
-        XivChatType.CrossLinkShell5, XivChatType.CrossLinkShell6, XivChatType.CrossLinkShell7, XivChatType.CrossLinkShell8,
     };
 
     private bool linkshellExpanded;
@@ -285,11 +274,11 @@ public partial class ChatsTab
                 "linkshell-rows",
                 innerWidth =>
                 {
-                    for (int i = 0; i < LinkshellTypes.Length; i++)
+                    for (int i = 0; i < ChatTypes.Linkshells.Length; i++)
                     {
                         var name = LinkshellNameService.GetLinkshellName(i);
                         DrawMappingRow(
-                            LinkshellTypes[i],
+                            ChatTypes.Linkshells[i],
                             name ?? $"Linkshell {i + 1}",
                             name != null ? $"Linkshell {i + 1}" : "Not joined on this character",
                             FontAwesomeIcon.Link,
@@ -308,11 +297,11 @@ public partial class ChatsTab
                 "cwls-rows",
                 innerWidth =>
                 {
-                    for (int i = 0; i < CrossWorldLinkshellTypes.Length; i++)
+                    for (int i = 0; i < ChatTypes.CrossWorldLinkshells.Length; i++)
                     {
                         var name = LinkshellNameService.GetCrossWorldLinkshellName(i);
                         DrawMappingRow(
-                            CrossWorldLinkshellTypes[i],
+                            ChatTypes.CrossWorldLinkshells[i],
                             name ?? $"CWLS {i + 1}",
                             name != null ? $"Cross-world linkshell {i + 1}" : "Not joined on this character",
                             FontAwesomeIcon.Globe,

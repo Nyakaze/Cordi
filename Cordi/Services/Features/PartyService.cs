@@ -9,7 +9,6 @@ using Dalamud.Game.ClientState.Objects.SubKinds;
 using Dalamud.Game.ClientState.Party;
 using Dalamud.Game.ClientState.Objects.Types;
 using Dalamud.Plugin.Services;
-using Crovus.Factory;
 using Lumina.Excel.Sheets;
 using Dalamud.Game.ClientState.Conditions;
 using FFXIVClientStructs.FFXIV.Client.UI.Info;
@@ -428,39 +427,29 @@ public class PartyService : IDisposable
     {
         try
         {
-            var channelIdStr = plugin.Config.Party.DiscordChannelId;
-            if (!ulong.TryParse(channelIdStr, out var channelId)) return;
-
             var members = _partyMembers.ToList();
             if (members.Count == 0) return;
 
-            // Wait until the party is settled and data is fetched
             int attempts = 0;
             while (attempts < 10 && members.Any(m => m.ItemLevel == null))
             {
                 await Task.Delay(500);
                 attempts++;
-                members = _partyMembers.ToList(); // Refresh list in case it changes
+                members = _partyMembers.ToList();
             }
-
-            var embed = EmbedFactory.Create()
-                .WithTitle($"Party Summary ({members.Count}/8)")
-                .WithDescription(members.Count == 8 ? "The party is now full! Here is a summary:" : "Current party summary:")
-                .WithColor(0x7289DA)
-                .WithTimestamp(DateTimeOffset.Now);
 
             var classJobSheet = Service.DataManager.GetExcelSheet<Lumina.Excel.Sheets.ClassJob>();
 
-            // Use the already created copy of the list to build the embed
             members = _partyMembers.ToList();
 
-            for (int i = 0; i < members.Count; i++)
+            var fields = new List<(string Name, string Value)>(members.Count);
+
+            foreach (var member in members)
             {
-                var member = members[i];
                 var classJob = classJobSheet?.GetRow(member.JobId);
                 var jobAbbr = classJob?.Abbreviation.ToString() ?? "??";
 
-                var iLvlText = member.ItemLevel.HasValue && member.ItemLevel.Value > 0 ? member.ItemLevel.Value.ToString() : "??";
+                var iLvlText = member.ItemLevel is > 0 ? member.ItemLevel.Value.ToString() : "??";
 
                 var raidSummary = "No Raid Data";
                 if (member.RaidActivity != null && member.RaidActivity.Encounters.Count > 0)
@@ -477,20 +466,16 @@ public class PartyService : IDisposable
                     if (raidLines.Count > 0) raidSummary = string.Join("\n", raidLines);
                 }
 
-                // Title: [JOB] Name
-                // Body: iLvl + Raid
-                embed.AddField($"`[{jobAbbr}]` {member.Name}", $"**iLvl:** {iLvlText}\n{raidSummary}", inline: true);
-
-                // Try to force a row break after 4 people if possible
-                // Note: Discord often forces 3 columns, but we'll try to groups them.
-                if ((i + 1) % 4 == 0 && i < members.Count - 1)
-                {
-                    // Adding an empty field with inline: false sometimes forces a break or at least separates rows
-                    // But Discord embed fields are tricky. We'll stick to 8 inline fields for now.
-                }
+                fields.Add(($"`[{jobAbbr}]` {member.Name}", $"**iLvl:** {iLvlText}\n{raidSummary}"));
             }
 
-            await plugin.Discord.SendWebhookMessageRaw(channelId, embed.Build(), "Party Full Summary", null);
+            await _discordNotifier.SendSummaryAsync(
+                $"Party Summary ({members.Count}/8)",
+                members.Count == 8 ? "The party is now full! Here is a summary:" : "Current party summary:",
+                0x7289DA,
+                fields,
+                "Party Full Summary");
+
             Log.Info(LogSource, "Sent party full summary to Discord.");
         }
         catch (Exception ex)

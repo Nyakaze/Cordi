@@ -5,6 +5,7 @@ using System.Numerics;
 using System.Threading;
 using Cordi.Configuration;
 using Cordi.Core;
+using Cordi.Domain;
 using Cordi.Services.Features;
 using Dalamud.Game.Text;
 
@@ -188,7 +189,7 @@ public sealed partial class ChatboxService : IDisposable
     {
         var changed = false;
 
-        if (config.SendGameChatType is XivChatType.TellIncoming or XivChatType.TellOutgoing)
+        if (ChatTypes.IsTell(config.SendGameChatType))
         {
             config.SendGameChatType = XivChatType.None;
             changed = true;
@@ -242,123 +243,11 @@ public sealed partial class ChatboxService : IDisposable
             Hydrate(channel);
     }
 
-    public static readonly XivChatType[] SendableChatTypes =
-    {
-        XivChatType.Say,
-        XivChatType.Shout,
-        XivChatType.Yell,
-        XivChatType.Party,
-        XivChatType.Alliance,
-        XivChatType.FreeCompany,
-        XivChatType.Ls1,
-        XivChatType.Ls2,
-        XivChatType.Ls3,
-        XivChatType.Ls4,
-        XivChatType.Ls5,
-        XivChatType.Ls6,
-        XivChatType.Ls7,
-        XivChatType.Ls8,
-        XivChatType.CrossLinkShell1,
-        XivChatType.CrossLinkShell2,
-        XivChatType.CrossLinkShell3,
-        XivChatType.CrossLinkShell4,
-        XivChatType.CrossLinkShell5,
-        XivChatType.CrossLinkShell6,
-        XivChatType.CrossLinkShell7,
-        XivChatType.CrossLinkShell8,
-    };
-
-    public static string SendGroupFor(XivChatType type)
-    {
-        if (LinkshellNameService.LinkshellSlot(type) >= 0)
-            return "Linkshells";
-
-        return LinkshellNameService.CrossWorldLinkshellSlot(type) >= 0 ? "Cross-world Linkshells" : "Chat";
-    }
-
-    public static bool IsGameMasterChatType(XivChatType type) =>
-        type is XivChatType.GmTell
-            or XivChatType.GmSay
-            or XivChatType.GmShout
-            or XivChatType.GmYell
-            or XivChatType.GmParty
-            or XivChatType.GmFreeCompany
-            or XivChatType.GmNoviceNetwork
-            or XivChatType.GmLinkshell1 or XivChatType.GmLinkshell2 or XivChatType.GmLinkshell3 or XivChatType.GmLinkshell4
-            or XivChatType.GmLinkshell5 or XivChatType.GmLinkshell6 or XivChatType.GmLinkshell7 or XivChatType.GmLinkshell8;
-
     public static bool IsSendTargetAvailable(XivChatType type) =>
-        Array.IndexOf(SendableChatTypes, type) >= 0 && LinkshellNameService.IsJoined(type);
+        ChatTypes.IsSendable(type) && LinkshellNameService.IsJoined(type);
 
-    public static string LabelFor(XivChatType type) => LinkshellNameService.LabelFor(type) ?? type switch
-    {
-        XivChatType.Say => "Say",
-        XivChatType.Shout => "Shout",
-        XivChatType.Yell => "Yell",
-        XivChatType.Party => "Party",
-        XivChatType.CrossParty => "Cross Party",
-        XivChatType.Alliance => "Alliance",
-        XivChatType.FreeCompany => "Free Company",
-        XivChatType.TellIncoming => "Tells",
-        XivChatType.TellOutgoing => "Tells",
-        XivChatType.NoviceNetwork => "Novice Network",
-        XivChatType.PvPTeam => "PvP Team",
-        XivChatType.CustomEmote => "Custom Emotes",
-        XivChatType.StandardEmote => "Standard Emotes",
-        XivChatType.Damage => "Damage Dealt",
-        XivChatType.Miss => "Missed Attacks",
-        XivChatType.Action => "Actions Used",
-        XivChatType.Item => "Items Used",
-        XivChatType.Healing => "HP Recovery",
-        XivChatType.GainBuff => "Beneficial Effects Granted",
-        XivChatType.LoseBuff => "Beneficial Effects Lost",
-        XivChatType.GainDebuff => "Detrimental Effects Inflicted",
-        XivChatType.LoseDebuff => "Detrimental Effects Lost",
-        XivChatType.FreeCompanyAnnouncement => "Free Company Announcements",
-        XivChatType.FreeCompanyLoginLogout => "Free Company Login and Logout",
-        XivChatType.PvpTeamAnnouncement => "PvP Team Announcements",
-        XivChatType.PvpTeamLoginLogout => "PvP Team Login and Logout",
-        XivChatType.NoviceNetworkSystem => "Novice Network Notices",
-        XivChatType.NPCDialogue => "NPC Dialogue",
-        XivChatType.NPCDialogueAnnouncements => "NPC Announcements",
-        XivChatType.LootNotice => "Loot Messages",
-        XivChatType.LootRoll => "Loot Rolls",
-        XivChatType.Progress => "Progression Messages",
-        XivChatType.Crafting => "Synthesis Messages",
-        XivChatType.Gathering => "Gathering Messages",
-        XivChatType.Sign => "Sign Messages",
-        XivChatType.RandomNumber => "Random Number Messages",
-        XivChatType.Orchestrion => "Orchestrion Track Messages",
-        XivChatType.MessageBook => "Message Book Alerts",
-        XivChatType.PeriodicRecruitmentNotification => "Recruitment Notices",
-        XivChatType.GlamourNotifications => "Glamour Messages",
-        XivChatType.RetainerSale => "Retainer Sales",
-        XivChatType.Alarm => "Alarm Notifications",
-        XivChatType.Echo => "Echo",
-        XivChatType.SystemMessage => "System Messages",
-        XivChatType.SystemError => "Battle System Messages",
-        XivChatType.GatheringSystemMessage => "Gathering System Messages",
-        XivChatType.ErrorMessage => "Error Messages",
-        XivChatType.Notice => "Notices",
-        XivChatType.Urgent => "Urgent Messages",
-        XivChatType.Debug => "Debug Messages",
-        XivChatType.GmTell => "GM Tells",
-        XivChatType.GmSay => "GM Say",
-        XivChatType.GmShout => "GM Shout",
-        XivChatType.GmYell => "GM Yell",
-        XivChatType.GmParty => "GM Party",
-        XivChatType.GmFreeCompany => "GM Free Company",
-        XivChatType.GmLinkshell1 => "GM Linkshell 1",
-        XivChatType.GmLinkshell2 => "GM Linkshell 2",
-        XivChatType.GmLinkshell3 => "GM Linkshell 3",
-        XivChatType.GmLinkshell4 => "GM Linkshell 4",
-        XivChatType.GmLinkshell5 => "GM Linkshell 5",
-        XivChatType.GmLinkshell6 => "GM Linkshell 6",
-        XivChatType.GmLinkshell7 => "GM Linkshell 7",
-        XivChatType.GmLinkshell8 => "GM Linkshell 8",
-        XivChatType.GmNoviceNetwork => "GM Novice Network",
-        _ => type.ToString(),
-    };
+    public static string LabelFor(XivChatType type) =>
+        LinkshellNameService.LabelFor(type) ?? ChatTypes.Label(type);
 
     public void ClearAll()
     {

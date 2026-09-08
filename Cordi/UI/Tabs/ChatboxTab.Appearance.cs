@@ -1,4 +1,5 @@
 using Cordi.Configuration;
+using Cordi.Domain;
 using Cordi.UI.Themes;
 using Dalamud.Interface;
 
@@ -243,7 +244,7 @@ public partial class ChatboxTab
                 theme.MutedText);
             theme.SpacerY(0.6f);
 
-            foreach (var group in ChatboxConfig.ChatColorGroups)
+            foreach (var group in ChatTypes.ColorGroups)
             {
                 var applies = group.Applies;
                 var fallback = ChatboxConfig.FromRgba(group.Default);

@@ -99,7 +99,7 @@ public class Configuration : IPluginConfiguration
 
         if (_additionalData.TryGetValue("EmoteLogWindowLocked", out var elLocked))
         {
-            EmoteLog.WindowLocked = elLocked.ToObject<bool>();
+            EmoteLog.WindowLockPosition = elLocked.ToObject<bool>();
             needsSave = true;
         }
         if (_additionalData.TryGetValue("EmoteLogChannelId", out var elChan))

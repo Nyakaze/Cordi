@@ -42,30 +42,29 @@ public class ThroughputStats
         }
     }
 
-    public void IncrementChatType(XivChatType type)
+    public void IncrementChatType(XivChatType type) => Increment(ChatTypeStats, type);
+
+    public void IncrementTell(string target) => Increment(TellStats, target);
+
+    public void RecordPeep(string name, string world) => Record(PeepStats, name, world);
+
+    public void RecordEmote(string name, string world) => Record(EmoteStats, name, world);
+
+    private void Increment<TKey>(Dictionary<TKey, long> counters, TKey key) where TKey : notnull
     {
         lock (this)
         {
-            if (!ChatTypeStats.ContainsKey(type)) ChatTypeStats[type] = 0;
-            ChatTypeStats[type]++;
+            counters.TryGetValue(key, out var count);
+            counters[key] = count + 1;
         }
     }
 
-    public void IncrementTell(string target)
-    {
-        lock (this)
-        {
-            if (!TellStats.ContainsKey(target)) TellStats[target] = 0;
-            TellStats[target]++;
-        }
-    }
-
-    public void RecordPeep(string name, string world)
+    private void Record(Dictionary<string, PeeperStats> target, string name, string world)
     {
         lock (this)
         {
             var key = $"{name}@{world}";
-            if (!PeepStats.TryGetValue(key, out var stats))
+            if (!target.TryGetValue(key, out var stats))
             {
                 stats = new PeeperStats
                 {
@@ -73,27 +72,7 @@ public class ThroughputStats
                     World = world,
                     Count = 0
                 };
-                PeepStats[key] = stats;
-            }
-
-            stats.Count++;
-            stats.LastSeen = DateTime.Now;
-        }
-    }
-    public void RecordEmote(string name, string world)
-    {
-        lock (this)
-        {
-            var key = $"{name}@{world}";
-            if (!EmoteStats.TryGetValue(key, out var stats))
-            {
-                stats = new PeeperStats
-                {
-                    Name = name,
-                    World = world,
-                    Count = 0
-                };
-                EmoteStats[key] = stats;
+                target[key] = stats;
             }
 
             stats.Count++;

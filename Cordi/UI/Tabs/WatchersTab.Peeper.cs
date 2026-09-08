@@ -235,68 +235,26 @@ public partial class WatchersTab
                 "lives under Settings > Audio."));
     }
 
-    private void DrawPeeperOverlayPanel(CordiPeepConfig config)
-    {
-        Card.Draw(
-            "peep-overlay",
-            innerWidth =>
+    private void DrawPeeperOverlayPanel(CordiPeepConfig config) =>
+        DrawOverlayPanel(
+            "peep",
+            "Peeper",
+            () => plugin.CordiPeepWindow,
+            () => config.WindowEnabled,
+            value => config.WindowEnabled = value,
+            () => new[]
             {
-                DrawToggleRow(
-                    "peep-window-enabled",
-                    FontAwesomeIcon.WindowMaximize,
-                    theme.Accent,
-                    "In-game overlay",
-                    "Shows the Peeper window in game",
-                    innerWidth,
-                    () => config.WindowEnabled,
-                    value =>
-                    {
-                        config.WindowEnabled = value;
-                        plugin.UpdateCommandVisibility();
-                    });
-
-                theme.SpacerY(0.4f);
-
-                Toggles.Draw("peep-window-flags", new[]
-                {
-                    Flag("open-login", "Open on login", () => config.OpenOnLogin, v => config.OpenOnLogin = v),
-                    Flag("lock-position", "Lock position", () => config.WindowLocked, v => config.WindowLocked = v),
-                    Flag("lock-size", "Lock size", () => config.WindowNoResize, v => config.WindowNoResize = v),
-                    Flag("ignore-esc", "Ignore ESC", () => config.IgnoreEsc, v => config.IgnoreEsc = v),
-                    Flag("focus-hover", "Focus on hover", () => config.FocusOnHover, v => config.FocusOnHover = v),
-                    Flag("alt-examine", "Alt-click examine", () => config.AltClickExamine, v => config.AltClickExamine = v),
-                    Flag("hide-title", "Hide title bar", () => config.HideTitleBar, v => config.HideTitleBar = v),
-                    Flag("text-shadow", "Text shadow", () => config.TextShadow, v => config.TextShadow = v),
-                }, innerWidth);
-
-                theme.SpacerY(0.4f);
-
-                DrawPercentRow(
-                    "peep-opacity",
-                    FontAwesomeIcon.Adjust,
-                    theme.Accent,
-                    "Background opacity",
-                    "Transparency of the overlay background",
-                    innerWidth,
-                    () => config.BackgroundOpacity,
-                    value => config.BackgroundOpacity = value);
-
-                DrawButtonRow(
-                    "peep-open-window",
-                    FontAwesomeIcon.ExternalLinkAlt,
-                    UiTheme.TileBlue,
-                    "Open the overlay",
-                    "Brings the Peeper window up right now",
-                    "Open Now",
-                    innerWidth,
-                    () =>
-                    {
-                        if (plugin.CordiPeepWindow != null)
-                            plugin.CordiPeepWindow.IsOpen = true;
-                    });
+                Flag("open-login", "Open on login", () => config.OpenOnLogin, v => config.OpenOnLogin = v),
+                Flag("lock-position", "Lock position", () => config.WindowLocked, v => config.WindowLocked = v),
+                Flag("lock-size", "Lock size", () => config.WindowNoResize, v => config.WindowNoResize = v),
+                Flag("ignore-esc", "Ignore ESC", () => config.IgnoreEsc, v => config.IgnoreEsc = v),
+                Flag("focus-hover", "Focus on hover", () => config.FocusOnHover, v => config.FocusOnHover = v),
+                Flag("alt-examine", "Alt-click examine", () => config.AltClickExamine, v => config.AltClickExamine = v),
+                Flag("hide-title", "Hide title bar", () => config.HideTitleBar, v => config.HideTitleBar = v),
+                Flag("text-shadow", "Text shadow", () => config.TextShadow, v => config.TextShadow = v),
             },
-            label: "Overlay");
-    }
+            () => config.BackgroundOpacity,
+            value => config.BackgroundOpacity = value);
 
     private void DrawPeeperDisplayPanel(CordiPeepConfig config)
     {

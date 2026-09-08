@@ -18,7 +18,6 @@ public class EmoteLogConfig : IWindowChromeConfig
     public bool DetectWhenClosed { get; set; } = true;
     public bool WindowEnabled { get; set; } = true;
     public bool WindowOpenOnLogin { get; set; } = false;
-    public bool WindowLocked { get; set; } = false;
     public bool WindowLockPosition { get; set; } = false;
     public bool WindowLockSize { get; set; } = false;
     public bool IgnoreEsc { get; set; } = false;

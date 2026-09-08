@@ -32,7 +32,7 @@ public sealed partial class ChatboxService
 
         BeginSourceCapture();
 
-        var gameMaster = IsGameMasterChatType(message.ChatType);
+        var gameMaster = ChatTypes.IsGameMaster(message.ChatType);
 
         var targets = Channels
             .Where(c => gameMaster || c.Config.GameChatTypes.Contains(message.ChatType))
