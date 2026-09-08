@@ -16,6 +16,9 @@ namespace Cordi.UI.Tabs;
 public partial class ChatboxTab
 {
     private const string ChatGroupKeyPrefix = "group:";
+    private const string GeneralChannelName = "General";
+    private const int ChannelSummaryLimit = 6;
+    private const int ChannelTooltipColumns = 4;
 
     private static List<ChipSelectorGroup> BuildSelectableChatGroups(bool advanced)
     {
@@ -117,6 +120,11 @@ public partial class ChatboxTab
 
                 theme.SameLineGap();
 
+                if (theme.SecondaryButton("Create General Chat##chatbox", new Vector2(theme.Scaled(200f), theme.Scaled(UiTheme.ControlHeight))))
+                    CreateGeneralChannel();
+
+                theme.SameLineGap();
+
                 if (theme.SecondaryButton("Sort by Order##chatbox", new Vector2(theme.Scaled(160f), theme.Scaled(UiTheme.ControlHeight))))
                 {
                     Cfg.Channels.Sort((a, b) => a.Order.CompareTo(b.Order));
@@ -147,6 +155,47 @@ public partial class ChatboxTab
             channelDragActive = false;
 
         ApplyPendingChannelChanges();
+    }
+
+    private static bool IsGeneralChannel(ChatboxChannelConfig channel) =>
+        string.Equals(channel.Name, GeneralChannelName, StringComparison.OrdinalIgnoreCase);
+
+    private void CreateGeneralChannel()
+    {
+        var general = Cfg.Channels.FirstOrDefault(IsGeneralChannel);
+
+        var types = general?.GameChatTypes.ToList() ?? new List<XivChatType>();
+
+        foreach (var type in Cfg.Channels.SelectMany(channel => channel.GameChatTypes))
+        {
+            if (!types.Contains(type))
+                types.Add(type);
+        }
+
+        if (types.Count == 0)
+            return;
+
+        if (types.Any(ChatTypes.IsTell) && !types.Contains(XivChatType.TellOutgoing))
+            types.Add(XivChatType.TellOutgoing);
+
+        if (general == null)
+        {
+            general = new ChatboxChannelConfig
+            {
+                Name = GeneralChannelName,
+                ShortLabel = "GEN",
+                Order = Cfg.Channels.Count,
+            };
+
+            Cfg.Channels.Add(general);
+        }
+
+        general.Enabled = true;
+        general.ShowInNav = true;
+        general.GameChatTypes = types;
+
+        Save();
+        plugin.Chatbox.RebuildChannels();
     }
 
     private void OpenChannelEditor(string id)
@@ -185,7 +234,15 @@ public partial class ChatboxTab
             },
             showChevron: true,
             rowWidth: rowWidth,
-            onRowItem: () => HandleChannelDrag(index, title));
+            onRowItem: () =>
+            {
+                bool hovered = ImGui.IsItemHovered();
+
+                HandleChannelDrag(index, title);
+
+                if (hovered && !channelDragActive)
+                    theme.Tooltip(ChannelChatTooltip(channel));
+            });
 
         if ((result.RowClicked || result.ChevronClicked) && !channelDragActive)
             OpenChannelEditor(channel.Id);
@@ -213,10 +270,33 @@ public partial class ChatboxTab
         ImGui.EndDragDropTarget();
     }
 
-    private string DescribeChannel(ChatboxChannelConfig channel) =>
-        channel.GameChatTypes.Count == 0
-            ? "No game chat"
-            : string.Join(", ", channel.GameChatTypes.Select(ChatboxService.LabelFor).Distinct());
+    private static List<string> ChannelChatLabels(ChatboxChannelConfig channel) =>
+        channel.GameChatTypes.Select(ChatboxService.LabelFor).Distinct().ToList();
+
+    private static string DescribeChannel(ChatboxChannelConfig channel)
+    {
+        var labels = ChannelChatLabels(channel);
+
+        if (labels.Count == 0)
+            return "No game chat";
+
+        return labels.Count <= ChannelSummaryLimit
+            ? string.Join(", ", labels)
+            : $"{string.Join(", ", labels.Take(ChannelSummaryLimit))} +{labels.Count - ChannelSummaryLimit} more";
+    }
+
+    private static string ChannelChatTooltip(ChatboxChannelConfig channel)
+    {
+        var labels = ChannelChatLabels(channel);
+
+        if (labels.Count <= ChannelSummaryLimit)
+            return string.Empty;
+
+        return string.Join("\n", labels
+            .Select((label, index) => (label, index))
+            .GroupBy(entry => entry.index / ChannelTooltipColumns)
+            .Select(group => string.Join(", ", group.Select(entry => entry.label))));
+    }
 
     private void ApplyPendingChannelChanges()
     {
