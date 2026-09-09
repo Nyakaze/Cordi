@@ -92,6 +92,7 @@ public sealed partial class ChatboxWindow : ThemedWindow, IDisposable
 
     public override void Draw()
     {
+        _picker.SetChatboxBounds(ImGui.GetWindowPos(), ImGui.GetWindowSize());
         _theme.ApplyFontScale();
         UpdateItemTooltip();
         var focused = ImGui.IsWindowFocused(ImGuiFocusedFlags.RootAndChildWindows);

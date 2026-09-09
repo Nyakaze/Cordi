@@ -32,6 +32,14 @@ public enum ChatboxTabSide
     Bottom,
 }
 
+public enum ChatboxEmojiPickerPosition
+{
+    Left,
+    Right,
+    Top,
+    Bottom,
+}
+
 public enum ChatboxTimestampStyle
 {
     None,
@@ -183,6 +191,8 @@ public class ChatboxConfig : IWindowChromeConfig
     public int AnimateIdleUnloadSeconds { get; set; } = 30;
 
     public bool ShowEmojiPicker { get; set; } = true;
+    public ChatboxEmojiPickerPosition EmojiPickerPosition { get; set; } = ChatboxEmojiPickerPosition.Right;
+    public Vector2 EmojiPickerSize { get; set; } = Vector2.Zero;
     public int EmojiPickerRecentLimit { get; set; } = 32;
     public bool PickerIncludeSeenEmotes { get; set; } = true;
     public bool ShowOthersEmotes { get; set; } = false;

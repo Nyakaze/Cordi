@@ -1,3 +1,5 @@
+using System.Numerics;
+using Cordi.Configuration;
 using Cordi.UI.Themes;
 using Dalamud.Interface;
 
@@ -93,6 +95,22 @@ public partial class ChatboxTab
 
             if (Cfg.ShowEmojiPicker)
             {
+                DrawOptionRow(
+                    "chatbox-picker-position", FontAwesomeIcon.ArrowsAlt,
+                    "Picker Position",
+                    "Which side of the chatbox the emoji picker opens on. Left and right match the chatbox height, top and bottom its width. Drag the picker corner to resize it.",
+                    innerWidth, () => Cfg.EmojiPickerPosition,
+                    v =>
+                    {
+                        Cfg.EmojiPickerPosition = v;
+                        Cfg.EmojiPickerSize = Vector2.Zero;
+                    },
+                    Options(
+                        (ChatboxEmojiPickerPosition.Left, "Left"),
+                        (ChatboxEmojiPickerPosition.Right, "Right"),
+                        (ChatboxEmojiPickerPosition.Top, "Top"),
+                        (ChatboxEmojiPickerPosition.Bottom, "Bottom")));
+
                 DrawIntSliderRow(
                     "chatbox-picker-recent", FontAwesomeIcon.History,
                     "Recent Emoji to Keep", "How many recently used emoji the picker remembers.",

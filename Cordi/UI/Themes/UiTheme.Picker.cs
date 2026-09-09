@@ -1,5 +1,6 @@
 using System;
 using System.Numerics;
+using Cordi.Configuration;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Interface;
 using Dalamud.Interface.Utility;
@@ -9,14 +10,103 @@ namespace Cordi.UI.Themes;
 
 public sealed partial class UiTheme
 {
-    public IDisposable PickerPopupScope()
+    public float PickerGripSize() => Scaled(EmojiPickerGripSize);
+
+    public Vector2 PickerMinSize() => new(Scaled(EmojiPickerMinWidth), Scaled(EmojiPickerMinHeight));
+
+    public Vector2 ClampPickerSize(Vector2 size)
+    {
+        var min = PickerMinSize();
+
+        return Vector2.Clamp(size, min, Vector2.Max(min, ImGui.GetMainViewport().WorkSize));
+    }
+
+    public Vector2 PickerInitialSize(Vector2 chatboxSize, ChatboxEmojiPickerPosition side) => ClampPickerSize(side switch
+    {
+        ChatboxEmojiPickerPosition.Top or ChatboxEmojiPickerPosition.Bottom
+            => new Vector2(chatboxSize.X, Scaled(EmojiPickerHeight)),
+        _ => new Vector2(Scaled(EmojiPickerWidth), chatboxSize.Y),
+    });
+
+    public void PreparePickerPopup(Vector2 chatboxPosition, Vector2 chatboxSize, ChatboxEmojiPickerPosition side, Vector2 size)
+    {
+        var viewport = ImGui.GetMainViewport();
+        var gap = Gap(0.5f);
+        var position = side switch
+        {
+            ChatboxEmojiPickerPosition.Left => new Vector2(chatboxPosition.X - size.X - gap, chatboxPosition.Y),
+            ChatboxEmojiPickerPosition.Top => new Vector2(chatboxPosition.X, chatboxPosition.Y - size.Y - gap),
+            ChatboxEmojiPickerPosition.Bottom => new Vector2(chatboxPosition.X, chatboxPosition.Y + chatboxSize.Y + gap),
+            _ => new Vector2(chatboxPosition.X + chatboxSize.X + gap, chatboxPosition.Y),
+        };
+
+        position = Vector2.Clamp(position,
+            viewport.WorkPos,
+            Vector2.Max(viewport.WorkPos, viewport.WorkPos + viewport.WorkSize - size));
+
+        ImGui.SetNextWindowViewport(viewport.ID);
+        ImGui.SetNextWindowSize(size, ImGuiCond.Always);
+        ImGui.SetNextWindowPos(position, ImGuiCond.Always);
+    }
+
+    public bool PickerResizeGrip(string id, ChatboxEmojiPickerPosition side, ref Vector2 size)
+    {
+        var grip = PickerGripSize();
+        var padding = ImGui.GetStyle().WindowPadding;
+        var min = ImGui.GetWindowPos() + padding;
+        var max = min + ImGui.GetWindowSize() - padding * 2f;
+        var flipX = side == ChatboxEmojiPickerPosition.Left;
+        var flipY = side == ChatboxEmojiPickerPosition.Top;
+        var corner = new Vector2(flipX ? min.X : max.X, flipY ? min.Y : max.Y);
+        var step = new Vector2(flipX ? grip : -grip, flipY ? grip : -grip);
+        var cursor = ImGui.GetCursorScreenPos();
+
+        ImGui.SetCursorScreenPos(Vector2.Min(corner, corner + step));
+        ImGui.InvisibleButton(id, new Vector2(grip, grip));
+
+        var hovered = ImGui.IsItemHovered();
+        var active = ImGui.IsItemActive();
+        var released = ImGui.IsItemDeactivated();
+
+        ImGui.SetCursorScreenPos(cursor);
+
+        if (hovered || active)
+            ImGui.SetMouseCursor(flipX != flipY ? ImGuiMouseCursor.ResizeNesw : ImGuiMouseCursor.ResizeNwse);
+
+        if (active)
+        {
+            var delta = ImGui.GetIO().MouseDelta;
+
+            size = ClampPickerSize(size + new Vector2(flipX ? -delta.X : delta.X, flipY ? -delta.Y : delta.Y));
+        }
+
+        var draw = ImGui.GetWindowDrawList();
+        var color = ImGui.GetColorU32(active ? Accent : hovered ? AccentHover : Border);
+
+        for (var i = 1; i <= 3; i++)
+        {
+            var fraction = i / 3f;
+
+            draw.AddLine(
+                new Vector2(corner.X + step.X * fraction, corner.Y),
+                new Vector2(corner.X, corner.Y + step.Y * fraction),
+                color,
+                1.5f * ImGuiHelpers.GlobalScale);
+        }
+
+        return released;
+    }
+
+    public IDisposable PickerPopupScope(float opacity)
     {
         var style = ImRaii.PushStyle(ImGuiStyleVar.PopupRounding, Radius(1.2f))
             .Push(ImGuiStyleVar.WindowPadding, new Vector2(PadX(0.8f), PadY(0.8f)))
             .Push(ImGuiStyleVar.WindowBorderSize, 1f * ImGuiHelpers.GlobalScale)
             .Push(ImGuiStyleVar.ItemSpacing, new Vector2(Gap(0.35f), Gap(0.35f)));
 
-        var color = ImRaii.PushColor(ImGuiCol.PopupBg, WindowBg)
+        var background = WindowBg;
+        background.W *= Math.Clamp(opacity, 0f, 1f);
+        var color = ImRaii.PushColor(ImGuiCol.PopupBg, background)
             .Push(ImGuiCol.Border, WindowBorder);
 
         return new ActionDisposable(() =>
@@ -95,33 +185,24 @@ public sealed partial class UiTheme
     {
         var height = PickerChipHeight();
         var width = PickerChipWidth(label);
-        var max = pos + new Vector2(width, height);
 
         ImGui.SetCursorScreenPos(pos);
-        var clicked = ImGui.InvisibleButton(id, new Vector2(width, height));
-        var hovered = ImGui.IsItemHovered();
-        if (hovered) ImGui.SetMouseCursor(ImGuiMouseCursor.Hand);
-
-        var draw = ImGui.GetWindowDrawList();
-        var fill = active
-            ? new Vector4(Accent.X, Accent.Y, Accent.Z, 0.18f)
-            : hovered ? Hover : FrameBg;
-
-        draw.AddRectFilled(pos, max, ImGui.GetColorU32(fill), height * 0.5f);
-        draw.AddRect(pos, max, ImGui.GetColorU32(active ? AccentBorder : Border), height * 0.5f);
-
         ApplyFontScale(0.82f);
-        var textSize = ImGui.CalcTextSize(label);
-
-        using (ImRaii.PushColor(ImGuiCol.Text, active ? Accent : hovered ? Text : MutedText))
+        try
         {
-            ImGui.SetCursorScreenPos(new Vector2(pos.X + (width - textSize.X) * 0.5f, pos.Y + (height - textSize.Y) * 0.5f));
-            ImGui.TextUnformatted(label);
+            var hit = NavTab(id, width, new UiNavItem
+            {
+                Label = label,
+                Active = active,
+                Accent = Accent,
+            }, height);
+            if (hit.Hovered) ImGui.SetMouseCursor(ImGuiMouseCursor.Hand);
+            return hit.Clicked;
         }
-
-        ApplyFontScale();
-
-        return clicked;
+        finally
+        {
+            ApplyFontScale();
+        }
     }
 
     public void PickerSectionHeader(string label, string trailing, float width)

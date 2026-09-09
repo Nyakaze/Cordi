@@ -136,9 +136,9 @@ public sealed partial class UiTheme
         return new UiNavHit { Clicked = clicked, Hovered = hovered };
     }
 
-    public UiNavHit NavTab(string id, float width, UiNavItem item)
+    public UiNavHit NavTab(string id, float width, UiNavItem item, float height = 0f)
     {
-        var height = ImGui.GetFrameHeight();
+        if (height <= 0f) height = ImGui.GetFrameHeight();
         var origin = ImGui.GetCursorScreenPos();
 
         var clicked = ImGui.InvisibleButton(id, new Vector2(width, height));

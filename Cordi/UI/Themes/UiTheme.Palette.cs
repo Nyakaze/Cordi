@@ -122,6 +122,11 @@ public sealed partial class UiTheme
     public const float ToggleHeight = 22f;
     public const float TooltipCursorOffset = 24f;
     public const float ActionButtonSize = 34f;
+    public const float EmojiPickerWidth = 420f;
+    public const float EmojiPickerHeight = 470f;
+    public const float EmojiPickerMinWidth = 260f;
+    public const float EmojiPickerMinHeight = 200f;
+    public const float EmojiPickerGripSize = 14f;
 
     public float Radius(float mul = 1f) => RadiusBase * ImGuiHelpers.GlobalScale * mul;
     public float PadX(float mul = 1f) => PadBase * ImGuiHelpers.GlobalScale * mul;

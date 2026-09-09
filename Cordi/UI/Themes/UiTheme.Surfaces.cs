@@ -19,10 +19,13 @@ public sealed partial class UiTheme
         var draw = ImGui.GetWindowDrawList();
 
         if (hovered)
-            draw.AddRectFilled(min, max, ImGui.GetColorU32(Hover), Radius(0.4f));
+        {
+            ImGui.SetMouseCursor(ImGuiMouseCursor.Hand);
+            draw.AddRectFilled(min, max, ImGui.GetColorU32(AccentSelected), Radius(0.4f));
+        }
 
-        if (marked)
-            draw.AddRect(min, max, ImGui.GetColorU32(Accent), Radius(0.4f), ImDrawFlags.None, 1f);
+        if (hovered || marked)
+            draw.AddRect(min, max, ImGui.GetColorU32(hovered ? AccentHover : Accent), Radius(0.4f), ImDrawFlags.None, 1f);
 
         if (image == null) return;
 
