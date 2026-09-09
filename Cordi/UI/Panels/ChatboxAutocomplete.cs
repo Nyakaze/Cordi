@@ -16,6 +16,7 @@ public enum ChatboxSuggestionKind
     Emoji,
     Command,
     Argument,
+    Translate,
 }
 
 public sealed class ChatboxSuggestion
@@ -41,6 +42,7 @@ public sealed class ChatboxAutocomplete
     private readonly List<EmojiCatalogEntry> _catalog = new();
     private readonly List<ChatboxCommandEntry> _commands = new();
     private readonly List<string> _arguments = new();
+    private readonly List<ChatboxAutoTranslateEntry> _translations = new();
     private readonly List<UiSuggestionItem> _rows = new();
 
     private ChatboxSuggestionKind _kind = ChatboxSuggestionKind.Emoji;
@@ -50,6 +52,7 @@ public sealed class ChatboxAutocomplete
     private int _selected;
     private int _scroll;
     private bool _dismissed;
+    private bool _translating;
     private Vector2 _boundsMin;
     private Vector2 _boundsMax;
 
@@ -77,6 +80,7 @@ public sealed class ChatboxAutocomplete
         _catalog.Clear();
         _commands.Clear();
         _arguments.Clear();
+        _translations.Clear();
         _rows.Clear();
         _kind = ChatboxSuggestionKind.Emoji;
         _owner = string.Empty;
@@ -87,6 +91,7 @@ public sealed class ChatboxAutocomplete
         _selected = 0;
         _scroll = 0;
         _dismissed = false;
+        _translating = false;
     }
 
     public void Dismiss()
@@ -94,10 +99,24 @@ public sealed class ChatboxAutocomplete
         _matches.Clear();
         _hint = string.Empty;
         _dismissed = true;
+        _translating = false;
+    }
+
+    public void OpenTranslate(ReadOnlySpan<byte> buffer, int caret)
+    {
+        _translating = true;
+        _dismissed = false;
+        UpdateTranslate(buffer, caret, true);
     }
 
     public void Update(ReadOnlySpan<byte> buffer, int caret)
     {
+        if (_translating)
+        {
+            UpdateTranslate(buffer, caret, false);
+            return;
+        }
+
         if (TryEmojiFragment(buffer, caret, out var start, out var fragment))
         {
             Apply(ChatboxSuggestionKind.Emoji, string.Empty, start, fragment, fragment.Length + 1);
@@ -209,12 +228,30 @@ public sealed class ChatboxAutocomplete
         }
     }
 
-    private void Apply(ChatboxSuggestionKind kind, string owner, int start, string fragment, int replace)
+    private void UpdateTranslate(ReadOnlySpan<byte> buffer, int caret, bool force)
+    {
+        if (caret < 0 || caret > buffer.Length)
+        {
+            Reset();
+            return;
+        }
+
+        var start = caret;
+        while (start > 0 && !IsBoundaryByte(buffer[start - 1])) start--;
+
+        var end = caret;
+        while (end < buffer.Length && !IsBoundaryByte(buffer[end])) end++;
+
+        Apply(ChatboxSuggestionKind.Translate, string.Empty, start, Decode(buffer[start..caret]), end - start, force);
+    }
+
+    private void Apply(ChatboxSuggestionKind kind, string owner, int start, string fragment, int replace, bool force = false)
     {
         FragmentStart = start;
         ReplaceLength = replace;
 
-        if (kind == _kind
+        if (!force
+            && kind == _kind
             && string.Equals(owner, _owner, StringComparison.Ordinal)
             && string.Equals(fragment, _fragment, StringComparison.Ordinal))
         {
@@ -253,7 +290,29 @@ public sealed class ChatboxAutocomplete
             case ChatboxSuggestionKind.Argument:
                 RebuildArguments(_owner, _fragment);
                 break;
+            case ChatboxSuggestionKind.Translate:
+                RebuildTranslate(_fragment);
+                break;
         }
+    }
+
+    private void RebuildTranslate(string fragment)
+    {
+        ChatboxAutoTranslate.Search(fragment, _translations, MaxResults);
+
+        foreach (var entry in _translations)
+        {
+            _matches.Add(new ChatboxSuggestion
+            {
+                Token = entry.Token,
+                Label = entry.Text,
+                Detail = entry.Title,
+                Kind = ChatboxSuggestionKind.Translate,
+                Icon = FontAwesomeIcon.Language,
+            });
+        }
+
+        _hint = _matches.Count > 0 ? "Auto-translate" : "Auto-translate  no matches";
     }
 
     private void RebuildCommands(string fragment)

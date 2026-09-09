@@ -42,6 +42,7 @@ public sealed partial class ChatboxService : IDisposable
         RebuildChannels();
         LoadHiddenEmbeds();
         InitializeSourceHook();
+        ChatboxAutoTranslate.Preload(plugin.LogService);
     }
 
     private readonly System.Collections.Concurrent.ConcurrentDictionary<(long Seq, string Url), byte> _hiddenEmbeds = new();

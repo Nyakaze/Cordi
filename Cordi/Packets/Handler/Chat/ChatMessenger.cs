@@ -4,6 +4,7 @@ using System.Reflection;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using Cordi.Services.Chatbox;
 using Dalamud.Game.Text;
 using ECommons.Automation;
 using Dalamud.Game.Text.SeStringHandling;
@@ -118,7 +119,11 @@ public class ChatMessenger : IAsyncDisposable
             {
                 try
                 {
-                    ECommons.Automation.Chat.SendMessage(full);
+                    if (ChatboxAutoTranslate.TryExpandTags(full, out var payload))
+                        ECommons.Automation.Chat.SendMessageUnsafe(payload);
+                    else
+                        ECommons.Automation.Chat.SendMessage(full);
+
                     tcs.SetResult();
                 }
                 catch (Exception ex)

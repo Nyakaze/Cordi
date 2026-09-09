@@ -283,7 +283,11 @@ public sealed partial class ChatboxWindow
         if (data.EventFlag == ImGuiInputTextFlags.CallbackCompletion)
         {
             var token = _autocomplete.Accept();
-            if (token == null) return 0;
+            if (token == null)
+            {
+                _autocomplete.OpenTranslate(data.BufTextSpan, data.CursorPos);
+                return 0;
+            }
 
             _pendingToken = SlotFor(token.Token, token.ImageUrl);
             _pendingStart = _autocomplete.FragmentStart;
