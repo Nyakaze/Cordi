@@ -632,9 +632,10 @@ public sealed partial class ChatboxWindow
             : message.AuthorColor;
 
     private Vector4 NameColorFor(ChatboxMessage message) =>
-        Config.ColorNamesByChannel && AuthorColorFor(message) is { } color
+        message.AuthorPrefixColor
+        ?? (Config.ColorNamesByChannel && AuthorColorFor(message) is { } color
             ? color
-            : _theme.Accent;
+            : _theme.Accent);
 
     private string FormatTimestamp(DateTime timestamp) => Config.Timestamps switch
     {

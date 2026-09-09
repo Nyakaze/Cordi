@@ -83,11 +83,15 @@ public sealed class SettingsRow
         float height = MathF.Max(baseHeight, textBlock + theme.PadY(0.9f) * 2f);
         var max = min + new Vector2(width, height);
 
-        bool rowClicked = ImGui.InvisibleButton($"##row-{id}", new Vector2(width, height));
+        float clickWidth = MathF.Max(theme.Scaled(24f), bandLeft - min.X);
+
+        bool rowClicked = ImGui.InvisibleButton($"##row-{id}", new Vector2(clickWidth, height));
         ImGui.SetItemAllowOverlap();
-        bool hovered = ImGui.IsItemHovered();
-        if (hovered)
+        bool itemHovered = ImGui.IsItemHovered();
+        if (itemHovered)
             ImGui.SetMouseCursor(ImGuiMouseCursor.Hand);
+
+        bool hovered = itemHovered || (ImGui.IsWindowHovered() && ImGui.IsMouseHoveringRect(min, max));
 
         onRowItem?.Invoke();
 

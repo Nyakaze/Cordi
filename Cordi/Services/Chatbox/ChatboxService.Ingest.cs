@@ -42,6 +42,7 @@ public sealed partial class ChatboxService
             return;
 
         var (name, world) = ResolveGameSender(message);
+        var (prefix, prefixColor) = ResolveSenderPrefix(message);
         var localName = _plugin.cachedLocalPlayer?.Name.TextValue ?? string.Empty;
         var isSelf = message.ChatType == XivChatType.TellOutgoing
                      || (!string.IsNullOrEmpty(localName) && string.Equals(name, localName, StringComparison.Ordinal));
@@ -68,6 +69,8 @@ public sealed partial class ChatboxService
                 AuthorKey = $"{name}@{world}",
                 AuthorName = name,
                 AuthorWorld = world,
+                AuthorPrefix = prefix,
+                AuthorPrefixColor = prefixColor,
                 GameChatType = message.ChatType,
                 RawContent = raw,
                 Source = message.Message,
@@ -411,6 +414,40 @@ public sealed partial class ChatboxService
         if (payload == null || payload.World.RowId == 0) return string.Empty;
 
         return payload.World.ValueNullable?.Name.ExtractText() ?? string.Empty;
+    }
+
+    private const char BoxedLetterFirst = (char)0xE071;
+    private const char BoxedLetterLast = (char)0xE08A;
+
+    private static bool IsRolePlate(string text) =>
+        text.Any(ch => ch is >= BoxedLetterFirst and <= BoxedLetterLast);
+
+    private static (string Text, Vector4? Color) ResolveSenderPrefix(ChatMessage message)
+    {
+        var payloads = message.Sender?.Payloads;
+
+        if (payloads == null || payloads.All(p => p.Type != PayloadType.Player))
+            return (string.Empty, null);
+
+        var builder = new StringBuilder();
+        Vector4? color = null;
+
+        foreach (var payload in payloads.TakeWhile(p => p.Type != PayloadType.Player))
+        {
+            switch (payload)
+            {
+                case UIForegroundPayload foreground when foreground.IsEnabled:
+                    color ??= RgbaToColor(foreground.UIColor.ValueNullable?.Dark ?? 0);
+                    break;
+                case TextPayload text when !string.IsNullOrEmpty(text.Text):
+                    builder.Append(text.Text);
+                    break;
+            }
+        }
+
+        var prefix = builder.ToString().Trim();
+
+        return (IsRolePlate(prefix) ? prefix : string.Empty, color);
     }
 
     private static (string Name, string World) ResolveGameSender(ChatMessage message)

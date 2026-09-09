@@ -80,6 +80,8 @@ public sealed class ChatboxMessage
     public string AuthorKey { get; init; } = string.Empty;
     public string AuthorName { get; init; } = string.Empty;
     public string AuthorWorld { get; init; } = string.Empty;
+    public string AuthorPrefix { get; init; } = string.Empty;
+    public Vector4? AuthorPrefixColor { get; init; }
     public ulong SenderContentId { get; set; }
     public ulong SenderAccountId { get; set; }
     public ushort SenderWorldId { get; set; }

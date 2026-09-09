@@ -123,8 +123,18 @@ public sealed partial class ChatboxWindow
         && !message.IsSystemLine
         && message.AuthorName.Length > 0;
 
+    private void DrawAuthorPrefix(ChatboxMessage message)
+    {
+        if (message.AuthorPrefix.Length == 0) return;
+
+        ImGui.TextColored(message.AuthorPrefixColor ?? NameColorFor(message), message.AuthorPrefix);
+        ImGui.SameLine(0, _theme.Gap(0.35f));
+    }
+
     private void DrawAuthorName(ChatboxMessage message)
     {
+        DrawAuthorPrefix(message);
+
         var color = NameColorFor(message);
         var text = message.DisplayName(Config.NameStyle);
 
@@ -159,6 +169,9 @@ public sealed partial class ChatboxWindow
     {
         var color = NameColorFor(message);
         var text = message.DisplayName(Config.NameStyle);
+
+        if (message.AuthorPrefix.Length > 0)
+            _flow.Text(message.AuthorPrefix + " ", message.AuthorPrefixColor ?? color);
 
         if (!CanOpenPlayerMenu(message))
         {

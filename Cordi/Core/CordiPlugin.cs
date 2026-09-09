@@ -223,7 +223,7 @@ public class CordiPlugin : IDalamudPlugin
             }
         });
 
-        Service.Chat.ChatMessage += ChatOnChatMessage;
+        Service.Chat.ChatMessageUnhandled += ChatOnChatMessage;
         Service.ClientState.Login += OnLoginEvent;
         Service.ClientState.Logout += OnLogoutEvent;
 
@@ -439,10 +439,8 @@ public class CordiPlugin : IDalamudPlugin
         cachedLocalPlayer = null;
     }
 
-    private void ChatOnChatMessage(Dalamud.Game.Chat.IHandleableChatMessage message)
+    private void ChatOnChatMessage(Dalamud.Game.Chat.IChatMessage message)
     {
-        if (message.IsHandled) return;
-
         var msg = new ChatMessage
         {
             ChatType = message.LogKind,
@@ -496,7 +494,7 @@ public class CordiPlugin : IDalamudPlugin
         Service.PluginInterface.UiBuilder.OpenConfigUi -= this.ToggleConfigUI;
         Service.PluginInterface.UiBuilder.OpenMainUi -= this.ToggleConfigUI;
 
-        Service.Chat.ChatMessage -= ChatOnChatMessage;
+        Service.Chat.ChatMessageUnhandled -= ChatOnChatMessage;
         Service.ClientState.Login -= OnLoginEvent;
         Service.ClientState.Logout -= OnLogoutEvent;
 

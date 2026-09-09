@@ -19,6 +19,7 @@ public partial class ChatboxTab
     private const string GeneralChannelName = "General";
     private const int ChannelSummaryLimit = 6;
     private const int ChannelTooltipColumns = 4;
+    private const float ChannelRowControlBand = 140f;
 
     private static List<ChipSelectorGroup> BuildSelectableChatGroups(bool advanced)
     {
@@ -209,6 +210,8 @@ public partial class ChatboxTab
         string title = string.IsNullOrWhiteSpace(channel.Name) ? $"Channel {index + 1}" : channel.Name;
         string subtitle = DescribeChannel(channel);
 
+        var rowMin = ImGui.GetCursorScreenPos();
+
         var result = Row.Draw(
             id: $"chatbox-channel-{channel.Id}",
             icon: FontAwesomeIcon.Hashtag,
@@ -234,15 +237,14 @@ public partial class ChatboxTab
             },
             showChevron: true,
             rowWidth: rowWidth,
-            onRowItem: () =>
-            {
-                bool hovered = ImGui.IsItemHovered();
+            onRowItem: () => HandleChannelDrag(index, title));
 
-                HandleChannelDrag(index, title);
+        var rowMax = new Vector2(
+            rowMin.X + rowWidth - theme.Scaled(ChannelRowControlBand),
+            ImGui.GetCursorScreenPos().Y);
 
-                if (hovered && !channelDragActive)
-                    theme.Tooltip(ChannelChatTooltip(channel));
-            });
+        if (!channelDragActive && ImGui.IsMouseHoveringRect(rowMin, rowMax))
+            theme.Tooltip(ChannelChatTooltip(channel));
 
         if ((result.RowClicked || result.ChevronClicked) && !channelDragActive)
             OpenChannelEditor(channel.Id);
