@@ -377,6 +377,7 @@ public sealed class ChatboxAutocomplete
         {
             foreach (var seen in Chatbox.Emotes.Snapshot())
             {
+                if (!seen.Own && !Config.ShowOthersEmotes) continue;
                 if (!seen.Name.StartsWith(fragment, StringComparison.OrdinalIgnoreCase)) continue;
                 if (_plugin.Emoji.Guilds.Contains(seen.Id)) continue;
                 if (!Add(seen.Token, $":{seen.Name}:", seen.ImageUrl)) return;

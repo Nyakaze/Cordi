@@ -8,7 +8,7 @@ using Cordi.Services.Chatbox;
 using Cordi.Services.Emojis;
 using Cordi.UI.Themes;
 using Dalamud.Bindings.ImGui;
-using Dalamud.Interface.Utility;
+using Dalamud.Interface;
 using Dalamud.Interface.Utility.Raii;
 
 namespace Cordi.UI.Panels;
@@ -20,6 +20,12 @@ public sealed class ChatboxEmojiPicker
     private const int SearchLimit = 120;
     private const int SeenSearchLimit = 60;
 
+    private const string FilterAll = "";
+    private const string FilterFavorites = "fav";
+    private const string FilterRecent = "recent";
+    private const string FilterOwn = "own";
+    private const string FilterOthers = "others";
+
     private static readonly Regex CustomToken = new(
         @"^<(?<a>a?):(?<name>[A-Za-z0-9_~]{2,32}):(?<id>\d{5,25})>$",
         RegexOptions.Compiled);
@@ -28,12 +34,17 @@ public sealed class ChatboxEmojiPicker
     private readonly UiTheme _theme;
 
     private readonly List<EmojiCatalogEntry> _matches = new();
-    private readonly List<ChatboxSeenEmote> _seenEmotes = new();
+    private readonly List<ChatboxSeenEmote> _ownEmotes = new();
+    private readonly List<ChatboxSeenEmote> _otherEmotes = new();
+    private readonly List<(string Key, string Label)> _chips = new();
 
     private int _guildVersion = -1;
     private int _seenVersion = -1;
 
     private string _emojiQuery = string.Empty;
+    private string _filter = FilterAll;
+    private bool _searchActive;
+    private bool _unicodeOpen;
     private int _column;
     private int _columns = 1;
     private float _cellSize;
@@ -64,8 +75,9 @@ public sealed class ChatboxEmojiPicker
             ImGui.OpenPopup(PopupId);
         }
 
-        var scale = ImGuiHelpers.GlobalScale * UiTheme.GlobalFontScale;
-        ImGui.SetNextWindowSize(new Vector2(400f * scale, 440f * scale), ImGuiCond.Always);
+        ImGui.SetNextWindowSize(new Vector2(_theme.Scaled(420f), _theme.Scaled(470f)), ImGuiCond.Always);
+
+        using var scope = _theme.PickerPopupScope();
 
         if (!ImGui.BeginPopup(PopupId, ImGuiWindowFlags.NoMove))
         {
@@ -77,7 +89,7 @@ public sealed class ChatboxEmojiPicker
 
         try
         {
-            DrawEmojiGrid(insert);
+            DrawPicker(insert);
         }
         finally
         {
@@ -85,67 +97,177 @@ public sealed class ChatboxEmojiPicker
         }
     }
 
-    private void DrawEmojiGrid(Action<string, string?> insert)
+    private void DrawPicker(Action<string, string?> insert)
     {
-        DrawSearch("##chatbox-emoji-search", "Search emoji", ref _emojiQuery);
+        var width = ImGui.GetContentRegionAvail().X;
 
-        using var child = ImRaii.Child("##chatbox-emoji-scroll", new Vector2(0f, 0f), false);
-        if (!child) return;
-
-        var scale = ImGuiHelpers.GlobalScale * UiTheme.GlobalFontScale;
-        BeginGrid(30f * scale, _theme.Gap(0.35f));
+        _theme.PickerSearch("##chatbox-emoji-search", width, ref _emojiQuery, "Search emoji", ref _searchActive);
+        _theme.SpacerY(0.4f);
 
         RefreshSeenEmotes();
 
         var query = _emojiQuery.Trim();
-        if (query.Length > 0)
+
+        if (query.Length == 0)
         {
-            DrawEmojiSearchResults(insert, query);
-            EndGrid();
-            return;
+            DrawFilterChips(width);
+            _theme.SpacerY(0.3f);
         }
 
-        if (Config.FavoriteEmojis.Count > 0)
+        using var child = ImRaii.Child("##chatbox-emoji-scroll", new Vector2(0f, 0f), false);
+        if (!child) return;
+
+        BeginGrid(_theme.Scaled(30f), _theme.Gap(0.35f));
+
+        if (query.Length > 0) DrawEmojiSearchResults(insert, query);
+        else DrawCategories(insert);
+
+        EndGrid();
+    }
+
+    private void DrawFilterChips(float width)
+    {
+        BuildChips();
+        if (_chips.Count <= 1) return;
+
+        var spacing = _theme.Gap(0.3f);
+        var height = _theme.PickerChipHeight();
+        var origin = ImGui.GetCursorScreenPos();
+        var x = origin.X;
+        var y = origin.Y;
+
+        for (var i = 0; i < _chips.Count; i++)
         {
-            Section("Favorites");
+            var chip = _chips[i];
+            var chipWidth = _theme.PickerChipWidth(chip.Label);
+
+            if (x > origin.X && x + chipWidth > origin.X + width)
+            {
+                x = origin.X;
+                y += height + spacing;
+            }
+
+            if (_theme.PickerChip($"##emoji-chip-{i}", new Vector2(x, y), chip.Label, _filter == chip.Key))
+                _filter = chip.Key;
+
+            x += chipWidth + spacing;
+        }
+
+        ImGui.SetCursorScreenPos(new Vector2(origin.X, y + height));
+    }
+
+    private void BuildChips()
+    {
+        _chips.Clear();
+        _chips.Add((FilterAll, "All"));
+
+        if (Config.FavoriteEmojis.Count > 0) _chips.Add((FilterFavorites, "Favorites"));
+        if (Config.RecentEmojis.Count > 0) _chips.Add((FilterRecent, "Frequent"));
+
+        foreach (var guild in GuildEmotes.Groups)
+        {
+            if (guild.Emotes.Count == 0) continue;
+
+            _chips.Add((GuildKey(guild.Guild), guild.Guild));
+        }
+
+        if (_ownEmotes.Count > 0) _chips.Add((FilterOwn, "Own"));
+        if (Config.ShowOthersEmotes && _otherEmotes.Count > 0) _chips.Add((FilterOthers, "Others"));
+
+        foreach (var chip in _chips)
+            if (chip.Key == _filter) return;
+
+        _filter = FilterAll;
+    }
+
+    private static string GuildKey(string guild) => $"g:{guild}";
+
+    private bool Shows(string key) => _filter.Length == 0 || string.Equals(_filter, key, StringComparison.Ordinal);
+
+    private void DrawCategories(Action<string, string?> insert)
+    {
+        var any = false;
+
+        if (Shows(FilterFavorites) && Config.FavoriteEmojis.Count > 0)
+        {
+            Section("Favorites", Config.FavoriteEmojis.Count);
             foreach (var token in Config.FavoriteEmojis.ToArray())
                 DrawTokenCell(insert, token);
+
+            any = true;
         }
 
-        if (Config.RecentEmojis.Count > 0)
+        if (Shows(FilterRecent) && Config.RecentEmojis.Count > 0)
         {
-            Section("Frequently Used");
+            Section("Frequently Used", Config.RecentEmojis.Count);
             foreach (var token in Config.RecentEmojis.ToArray())
                 DrawTokenCell(insert, token);
+
+            any = true;
         }
 
         foreach (var guild in GuildEmotes.Groups)
         {
-            Section(guild.Guild);
+            if (guild.Emotes.Count == 0) continue;
+            if (!Shows(GuildKey(guild.Guild))) continue;
+
+            Section(guild.Guild, guild.Emotes.Count);
             foreach (var emote in guild.Emotes)
                 DrawTokenCell(insert, emote.Token, emote.Name);
+
+            any = true;
         }
 
-        if (_seenEmotes.Count > 0)
+        if (Shows(FilterOwn) && _ownEmotes.Count > 0)
         {
-            Section("Seen in Chat");
-            foreach (var emote in _seenEmotes)
+            Section("Own Emojis", _ownEmotes.Count);
+            foreach (var emote in _ownEmotes)
                 DrawTokenCell(insert, emote.Token, emote.Name);
+
+            any = true;
         }
+
+        if (Shows(FilterOthers) && Config.ShowOthersEmotes && _otherEmotes.Count > 0)
+        {
+            Section("Others Emojis", _otherEmotes.Count);
+            foreach (var emote in _otherEmotes)
+                DrawTokenCell(insert, emote.Token, emote.Name);
+
+            any = true;
+        }
+
+        if (_filter.Length > 0)
+        {
+            if (!any) EmptyState("Nothing in this category yet.");
+            return;
+        }
+
+        DrawUnicodeSection(insert);
+    }
+
+    private void DrawUnicodeSection(Action<string, string?> insert)
+    {
+        EndGrid();
+        _theme.SpacerY(0.3f);
+
+        var width = ImGui.GetContentRegionAvail().X;
+        if (_theme.PickerCollapsible("##chatbox-emoji-unicode", "Emoji", _unicodeOpen, width))
+            _unicodeOpen = !_unicodeOpen;
+
+        if (!_unicodeOpen) return;
 
         foreach (var group in EmojiCatalog.Groups)
         {
-            Section(group.Name);
+            Section(group.Name, group.Entries.Count);
             foreach (var entry in group.Entries)
                 DrawTokenCell(insert, entry.Glyph, entry.Name);
         }
-
-        EndGrid();
     }
 
     private void DrawEmojiSearchResults(Action<string, string?> insert, string query)
     {
         var any = false;
+        var custom = 0;
 
         foreach (var guild in GuildEmotes.Groups)
         {
@@ -153,39 +275,53 @@ public sealed class ChatboxEmojiPicker
             {
                 if (emote.Name.IndexOf(query, StringComparison.OrdinalIgnoreCase) < 0) continue;
 
-                if (!any)
-                {
-                    Section("Custom");
-                    any = true;
-                }
+                if (custom == 0) Section("Custom", 0);
 
                 DrawTokenCell(insert, emote.Token, emote.Name);
+                custom++;
+                any = true;
             }
         }
 
-        var seenShown = 0;
-        foreach (var emote in _seenEmotes)
-        {
-            if (seenShown >= SeenSearchLimit) break;
-            if (emote.Name.IndexOf(query, StringComparison.OrdinalIgnoreCase) < 0) continue;
+        any |= DrawSeenSearchResults(insert, query, _ownEmotes, "Own Emojis");
 
-            if (seenShown == 0) Section("Seen in Chat");
-
-            DrawTokenCell(insert, emote.Token, emote.Name);
-            seenShown++;
-            any = true;
-        }
+        if (Config.ShowOthersEmotes)
+            any |= DrawSeenSearchResults(insert, query, _otherEmotes, "Others Emojis");
 
         EmojiCatalog.Search(query, _matches, SearchLimit);
+
         if (_matches.Count > 0)
         {
-            Section("Emoji");
+            Section("Emoji", _matches.Count);
             foreach (var entry in _matches)
                 DrawTokenCell(insert, entry.Glyph, entry.Name);
+
             any = true;
         }
 
-        if (!any) ImGui.TextDisabled("No emoji found.");
+        if (!any) EmptyState("No emoji found.");
+    }
+
+    private bool DrawSeenSearchResults(
+        Action<string, string?> insert,
+        string query,
+        List<ChatboxSeenEmote> source,
+        string label)
+    {
+        var shown = 0;
+
+        foreach (var emote in source)
+        {
+            if (shown >= SeenSearchLimit) break;
+            if (emote.Name.IndexOf(query, StringComparison.OrdinalIgnoreCase) < 0) continue;
+
+            if (shown == 0) Section(label, 0);
+
+            DrawTokenCell(insert, emote.Token, emote.Name);
+            shown++;
+        }
+
+        return shown > 0;
     }
 
     private void DrawTokenCell(Action<string, string?> insert, string token, string? name = null)
@@ -235,15 +371,6 @@ public sealed class ChatboxEmojiPicker
         _plugin.Config.Save();
     }
 
-    private void DrawSearch(string id, string hint, ref string value)
-    {
-        ImGui.SetNextItemWidth(ImGui.GetContentRegionAvail().X);
-        _theme.PushInputScope();
-        ImGui.InputTextWithHint(id, hint, ref value, 64);
-        _theme.PopInputScope();
-        _theme.SpacerY(0.2f);
-    }
-
     private void BeginGrid(float cellSize, float spacing)
     {
         _cellSize = cellSize;
@@ -267,11 +394,24 @@ public sealed class ChatboxEmojiPicker
         _column = 0;
     }
 
-    private void Section(string label)
+    private void Section(string label, int count)
     {
         EndGrid();
-        _theme.SpacerY(0.2f);
-        ImGui.TextDisabled(label);
+        _theme.SpacerY(0.3f);
+
+        _theme.PickerSectionHeader(
+            label,
+            count > 0 ? count.ToString() : string.Empty,
+            MathF.Max(_cellSize, ImGui.GetContentRegionAvail().X));
+    }
+
+    private void EmptyState(string text)
+    {
+        EndGrid();
+        _theme.PickerEmptyState(
+            FontAwesomeIcon.SmileBeam,
+            text,
+            MathF.Max(_cellSize, ImGui.GetContentRegionAvail().X));
     }
 
     private bool Cell(string? url, string tooltip, bool favorite, out bool rightClicked)
@@ -324,7 +464,8 @@ public sealed class ChatboxEmojiPicker
     {
         if (!Config.PickerIncludeSeenEmotes)
         {
-            if (_seenEmotes.Count > 0) _seenEmotes.Clear();
+            _ownEmotes.Clear();
+            _otherEmotes.Clear();
             _seenVersion = -1;
             return;
         }
@@ -336,13 +477,15 @@ public sealed class ChatboxEmojiPicker
 
         _seenVersion = version;
         _guildVersion = guildVersion;
-        _seenEmotes.Clear();
+        _ownEmotes.Clear();
+        _otherEmotes.Clear();
 
         foreach (var emote in Chatbox.Emotes.Snapshot())
         {
             if (GuildEmotes.Contains(emote.Id)) continue;
 
-            _seenEmotes.Add(emote);
+            if (emote.Own) _ownEmotes.Add(emote);
+            else _otherEmotes.Add(emote);
         }
     }
 }

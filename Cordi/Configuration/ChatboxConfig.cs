@@ -185,6 +185,7 @@ public class ChatboxConfig : IWindowChromeConfig
     public bool ShowEmojiPicker { get; set; } = true;
     public int EmojiPickerRecentLimit { get; set; } = 32;
     public bool PickerIncludeSeenEmotes { get; set; } = true;
+    public bool ShowOthersEmotes { get; set; } = false;
     public int SeenEmoteLimit { get; set; } = 500;
     public bool RelayEmotesAsUrls { get; set; } = false;
     public bool UseEmoticonsInGameChat { get; set; } = true;

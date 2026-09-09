@@ -34,6 +34,8 @@ public sealed partial class ChatboxService
         text = text?.Trim() ?? string.Empty;
         if (text.Length == 0) return;
 
+        Emotes.RecordOwnTokens(text);
+
         var channel = GetChannel(channelId);
         if (channel == null) return;
 

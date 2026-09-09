@@ -15,6 +15,7 @@ public sealed class ChatboxSeenEmote
     public bool Animated { get; init; }
     public long LastSeen { get; set; }
     public string? Url { get; set; }
+    public bool Own { get; set; }
 
     public string Token => $"<{(Animated ? "a" : string.Empty)}:{Name}:{Id}>";
     public string ImageUrl => string.IsNullOrEmpty(Url) ? EmojiTranslator.EmoteUrl(Id, Animated) : Url!;
@@ -49,7 +50,11 @@ public sealed class ChatboxEmoteLibrary
 
         Load();
 
-        _ = Task.Run(Backfill);
+        _ = Task.Run(() =>
+        {
+            Backfill();
+            BackfillOwners();
+        });
     }
 
     public int Count => _entries.Count;
@@ -83,11 +88,23 @@ public sealed class ChatboxEmoteLibrary
         {
             if (segment.Kind != SegmentKind.Emote) continue;
 
-            Record(segment.Text, segment.ImageUrl);
+            Record(segment.Text, segment.ImageUrl, message.IsSelf);
         }
     }
 
-    public void Record(string? label, string? imageUrl)
+    public void RecordOwnTokens(string? text)
+    {
+        if (string.IsNullOrEmpty(text)) return;
+
+        foreach (Match match in RawToken.Matches(text))
+        {
+            if (!ulong.TryParse(match.Groups["id"].Value, out var id)) continue;
+
+            Record(id, match.Groups["name"].Value, match.Groups["a"].Value.Length > 0, null, true);
+        }
+    }
+
+    public void Record(string? label, string? imageUrl, bool own = false)
     {
         if (string.IsNullOrEmpty(imageUrl)) return;
 
@@ -99,10 +116,10 @@ public sealed class ChatboxEmoteLibrary
         var name = nameMatch.Success ? nameMatch.Groups["name"].Value : "emote";
         var animated = string.Equals(match.Groups["ext"].Value, "gif", StringComparison.OrdinalIgnoreCase);
 
-        Record(id, name, animated, imageUrl);
+        Record(id, name, animated, imageUrl, own);
     }
 
-    public void Record(ulong id, string name, bool animated, string? url = null)
+    public void Record(ulong id, string name, bool animated, string? url = null, bool own = false)
     {
         var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
 
@@ -110,8 +127,9 @@ public sealed class ChatboxEmoteLibrary
         {
             var renamed = !string.Equals(existing.Name, name, StringComparison.Ordinal) && name != "emote";
             var relinked = !string.IsNullOrEmpty(url) && !string.Equals(existing.Url, url, StringComparison.Ordinal);
+            var claimed = own && !existing.Own;
 
-            if (!renamed && !relinked && now - existing.LastSeen < TouchIntervalSeconds) return;
+            if (!renamed && !relinked && !claimed && now - existing.LastSeen < TouchIntervalSeconds) return;
 
             if (renamed)
             {
@@ -121,11 +139,12 @@ public sealed class ChatboxEmoteLibrary
             }
 
             if (relinked) existing.Url = url;
+            if (claimed) existing.Own = true;
 
             existing.LastSeen = now;
 
             Persist(existing);
-            if (renamed) Interlocked.Increment(ref _version);
+            if (renamed || claimed) Interlocked.Increment(ref _version);
             return;
         }
 
@@ -136,6 +155,7 @@ public sealed class ChatboxEmoteLibrary
             Animated = animated,
             LastSeen = now,
             Url = string.IsNullOrEmpty(url) ? null : url,
+            Own = own,
         };
 
         if (!_entries.TryAdd(id, entry)) return;
@@ -163,14 +183,7 @@ public sealed class ChatboxEmoteLibrary
     {
         try
         {
-            var done = _database.Read(connection =>
-            {
-                using var command = connection.CreateCommand();
-                command.CommandText = "SELECT value FROM meta WHERE key = 'emotes_backfilled';";
-                return command.ExecuteScalar() != null;
-            }, true, "check emote backfill");
-
-            if (done) return;
+            if (MetaFlag("emotes_backfilled")) return;
 
             var raw = _database.Read(connection =>
             {
@@ -195,11 +208,7 @@ public sealed class ChatboxEmoteLibrary
                 }
             }
 
-            _database.Write(
-                connection => ChatboxDatabase.Execute(
-                    connection,
-                    "INSERT OR REPLACE INTO meta(key, value) VALUES ('emotes_backfilled', '1');"),
-                "mark emote backfill");
+            SetMetaFlag("emotes_backfilled");
         }
         catch (Exception ex)
         {
@@ -207,12 +216,59 @@ public sealed class ChatboxEmoteLibrary
         }
     }
 
+    private void BackfillOwners()
+    {
+        try
+        {
+            if (MetaFlag("emotes_owner_backfilled")) return;
+
+            var raw = _database.Read(connection =>
+            {
+                var list = new List<string>();
+
+                using var command = connection.CreateCommand();
+                command.CommandText = "SELECT raw_content FROM messages WHERE is_self = 1 AND raw_content LIKE '%<%:%:%>%';";
+
+                using var reader = command.ExecuteReader();
+                while (reader.Read()) list.Add(reader.GetString(0));
+
+                return list;
+            }, new List<string>(), "backfill emote owners");
+
+            foreach (var content in raw)
+                RecordOwnTokens(content);
+
+            SetMetaFlag("emotes_owner_backfilled");
+        }
+        catch (Exception ex)
+        {
+            Service.Log.Warning($"[Chatbox] Emote owner backfill failed: {ex.Message}");
+        }
+    }
+
+    private bool MetaFlag(string key) => _database.Read(connection =>
+    {
+        using var command = connection.CreateCommand();
+        command.CommandText = "SELECT value FROM meta WHERE key = $key;";
+        command.Parameters.AddWithValue("$key", key);
+
+        return command.ExecuteScalar() != null;
+    }, true, $"check {key}");
+
+    private void SetMetaFlag(string key) => _database.Write(connection =>
+    {
+        using var command = connection.CreateCommand();
+        command.CommandText = "INSERT OR REPLACE INTO meta(key, value) VALUES ($key, '1');";
+        command.Parameters.AddWithValue("$key", key);
+        command.ExecuteNonQuery();
+    }, $"mark {key}");
+
     private void Load()
     {
         _database.Read(connection =>
         {
             using var command = connection.CreateCommand();
-            command.CommandText = "SELECT id, name, animated, last_seen, url FROM emotes;";
+            command.CommandText = "SELECT id, name, animated, last_seen, url, own FROM emotes;";
 
             using var reader = command.ExecuteReader();
             while (reader.Read())
@@ -224,6 +280,7 @@ public sealed class ChatboxEmoteLibrary
                     Animated = reader.GetInt32(2) != 0,
                     LastSeen = reader.GetInt64(3),
                     Url = reader.IsDBNull(4) ? null : reader.GetString(4),
+                    Own = !reader.IsDBNull(5) && reader.GetInt32(5) != 0,
                 };
 
                 _entries[entry.Id] = entry;
@@ -240,13 +297,14 @@ public sealed class ChatboxEmoteLibrary
     {
         using var command = connection.CreateCommand();
         command.CommandText = """
-            INSERT INTO emotes(id, name, animated, last_seen, url)
-            VALUES ($id, $name, $animated, $lastSeen, $url)
+            INSERT INTO emotes(id, name, animated, last_seen, url, own)
+            VALUES ($id, $name, $animated, $lastSeen, $url, $own)
             ON CONFLICT(id) DO UPDATE SET
                 name      = excluded.name,
                 animated  = excluded.animated,
                 last_seen = excluded.last_seen,
-                url       = COALESCE(excluded.url, emotes.url);
+                url       = COALESCE(excluded.url, emotes.url),
+                own       = MAX(excluded.own, emotes.own);
             """;
 
         command.Parameters.AddWithValue("$id", (long)entry.Id);
@@ -254,6 +312,7 @@ public sealed class ChatboxEmoteLibrary
         command.Parameters.AddWithValue("$animated", entry.Animated ? 1 : 0);
         command.Parameters.AddWithValue("$lastSeen", entry.LastSeen);
         command.Parameters.AddWithValue("$url", (object?)entry.Url ?? DBNull.Value);
+        command.Parameters.AddWithValue("$own", entry.Own ? 1 : 0);
         command.ExecuteNonQuery();
     }, "store emote");
 

@@ -101,9 +101,18 @@ public partial class ChatboxTab
 
                 DrawToggleRow(
                     "chatbox-picker-seen", FontAwesomeIcon.Eye,
-                    "Offer Emotes seen in Chat",
-                    $"Custom emotes arriving through Discord are remembered and can be sent again. Currently {plugin.Chatbox.Emotes.Count} known.",
+                    "Offer Own Emotes",
+                    $"Custom emotes you sent yourself are remembered and can be sent again. Currently {plugin.Chatbox.Emotes.Count} known.",
                     innerWidth, () => Cfg.PickerIncludeSeenEmotes, v => Cfg.PickerIncludeSeenEmotes = v);
+
+                if (Cfg.PickerIncludeSeenEmotes)
+                {
+                    DrawToggleRow(
+                        "chatbox-picker-others", FontAwesomeIcon.Users,
+                        "Show Others' Emotes",
+                        "Adds an \"Others Emojis\" category with custom emotes other people used in chat.",
+                        innerWidth, () => Cfg.ShowOthersEmotes, v => Cfg.ShowOthersEmotes = v);
+                }
             }
 
             DrawToggleRow(
@@ -131,7 +140,7 @@ public partial class ChatboxTab
 
             DrawActionRow(
                 "chatbox-forget-emotes", FontAwesomeIcon.EyeSlash, UiTheme.TileRed,
-                "Seen Emotes", $"{plugin.Chatbox.Emotes.Count} emotes remembered from chat.",
+                "Remembered Emotes", $"{plugin.Chatbox.Emotes.Count} custom emotes remembered from chat.",
                 "Forget", innerWidth,
                 () => plugin.Chatbox.Emotes.Clear());
         }, "Emoji Picker");
