@@ -219,6 +219,8 @@ public sealed partial class ChatboxService : IDisposable
             var seen = new HashSet<string>(StringComparer.Ordinal);
             foreach (var config in Config.Channels)
             {
+                if (config.IsSeparator) continue;
+
                 seen.Add(config.Id);
                 if (_channels.TryGetValue(config.Id, out var existing))
                 {

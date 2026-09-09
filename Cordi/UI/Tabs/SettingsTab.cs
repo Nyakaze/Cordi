@@ -124,7 +124,6 @@ public class SettingsTab : ConfigTabBase
                 ImGui.TextDisabled("Choose the accent color used across all Cordi windows.");
                 theme.SpacerY(0.75f);
 
-                var draw = ImGui.GetWindowDrawList();
                 var origin = ImGui.GetCursorScreenPos();
                 float swatch = theme.Scaled(30f);
                 float step = swatch + theme.Gap(1.2f);
@@ -146,19 +145,7 @@ public class SettingsTab : ConfigTabBase
                     }
 
                     bool selected = IsSameAccent(color, UiTheme.GlobalAccent);
-                    draw.AddRectFilled(pos, pos + new Vector2(swatch, swatch), ImGui.GetColorU32(color), theme.Radius(0.9f));
-
-                    if (selected || hovered)
-                    {
-                        float ring = theme.Scaled(3f);
-                        draw.AddRect(
-                            pos - new Vector2(ring, ring),
-                            pos + new Vector2(swatch + ring, swatch + ring),
-                            ImGui.GetColorU32(selected ? theme.Text : theme.MutedText),
-                            theme.Radius(1.1f),
-                            ImDrawFlags.None,
-                            theme.Scaled(2f));
-                    }
+                    theme.AccentSwatch(pos, swatch, color, selected, hovered);
                 }
 
                 ImGui.SetCursorScreenPos(new Vector2(origin.X, origin.Y + swatch + theme.Gap(1.5f)));

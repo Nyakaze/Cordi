@@ -16,7 +16,7 @@ public class CordiPeepWindow : ThemedWindow
     public CordiPeepWindow(CordiPlugin plugin) : base("Peeper###Cordi Peep", ImGuiWindowFlags.None)
     {
         _plugin = plugin;
-        _panel = new CordiPeepPanel(plugin);
+        _panel = new CordiPeepPanel(plugin, _theme);
         this.SizeConstraints = new WindowSizeConstraints
         {
             MaximumSize = new Vector2(float.MaxValue, float.MaxValue)

@@ -1,6 +1,7 @@
 using System;
 using System.Numerics;
 using Cordi.Services.Chatbox;
+using Cordi.UI.Themes;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Interface.Textures.TextureWraps;
 
@@ -8,6 +9,8 @@ namespace Cordi.UI.Panels;
 
 public sealed class ChatboxInlineFlow
 {
+    private readonly UiTheme _theme;
+
     private ImDrawListPtr _draw;
     private Vector2 _origin;
     private float _wrapWidth;
@@ -22,6 +25,11 @@ public sealed class ChatboxInlineFlow
     private bool _placed;
 
     public bool AnyHovered { get; private set; }
+
+    public ChatboxInlineFlow(UiTheme theme)
+    {
+        _theme = theme;
+    }
 
     public void Begin(float wrapWidth, float lineHeight, float lineSpacing)
     {
@@ -225,22 +233,8 @@ public sealed class ChatboxInlineFlow
         _draw.AddText(position, ImGui.GetColorU32(color), text);
     }
 
-    private static uint OutlineColor(float alpha) =>
-        ImGui.GetColorU32(new Vector4(0f, 0f, 0f, Math.Clamp(alpha, 0f, 1f) * 0.9f));
-
-    private static void DrawOutline(ImDrawListPtr draw, Vector2 position, ReadOnlySpan<char> token, float alpha)
-    {
-        var shade = OutlineColor(alpha);
-
-        for (var dx = -1; dx <= 1; dx++)
-        {
-            for (var dy = -1; dy <= 1; dy++)
-            {
-                if (dx == 0 && dy == 0) continue;
-                draw.AddText(position + new Vector2(dx, dy), shade, token);
-            }
-        }
-    }
+    private void DrawOutline(ImDrawListPtr draw, Vector2 position, ReadOnlySpan<char> token, float alpha) =>
+        _theme.TextOutline(draw, position, token, alpha);
 
     public bool Pill(string text, Vector4 background, Vector4 foreground, float rounding) =>
         Pill(text, background, foreground, rounding, out _);
@@ -256,24 +250,23 @@ public sealed class ChatboxInlineFlow
         hovered = false;
         if (!_active) return false;
 
-        var padding = ImGui.GetStyle().FramePadding.X * 0.6f;
-        var textSize = ImGui.CalcTextSize(text);
-        var width = textSize.X + padding * 2f;
+        var width = _theme.ChipInlineWidth(text);
 
         EnsureRoom(width);
         var position = Place(width, _lineHeight);
+        var bounds = _theme.ChipInlineBounds(text, position, _lineHeight);
 
-        var min = new Vector2(position.X, position.Y + (_lineHeight - textSize.Y) * 0.5f - 1f);
-        var max = new Vector2(position.X + width, min.Y + textSize.Y + 2f);
+        hovered = ImGui.IsMouseHoveringRect(bounds.Min, bounds.Max);
 
-        hovered = ImGui.IsMouseHoveringRect(min, max);
+        if (bounds.Min.Y > _clipBottom || bounds.Max.Y < _clipTop) return false;
 
-        if (min.Y > _clipBottom || max.Y < _clipTop) return false;
-
-        if (!backgroundOnHover || hovered)
-            _draw.AddRectFilled(min, max, ImGui.GetColorU32(background), rounding);
-
-        _draw.AddText(new Vector2(position.X + padding, min.Y + 1f), ImGui.GetColorU32(foreground), text);
+        _theme.ChipInline(
+            _draw,
+            bounds,
+            text,
+            foreground,
+            !backgroundOnHover || hovered ? background : null,
+            rounding);
 
         if (hovered) AnyHovered = true;
         return hovered && ImGui.IsMouseClicked(ImGuiMouseButton.Left);
@@ -310,15 +303,7 @@ public sealed class ChatboxInlineFlow
         ImGui.SetCursorScreenPos(position);
         ImGui.TextColored(color, token);
 
-        var min = ImGui.GetItemRectMin();
-        var max = ImGui.GetItemRectMax();
-        var underlineStart = new Vector2(min.X, max.Y - 1f);
-        var underlineEnd = new Vector2(max.X, max.Y - 1f);
-
-        if (outlined)
-            _draw.AddLine(underlineStart + Vector2.One, underlineEnd + Vector2.One, OutlineColor(color.W));
-
-        _draw.AddLine(underlineStart, underlineEnd, ImGui.GetColorU32(color));
+        _theme.TextUnderline(_draw, ImGui.GetItemRectMin(), ImGui.GetItemRectMax(), color, outlined);
 
         if (!ImGui.IsItemHovered()) return false;
 

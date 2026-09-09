@@ -17,7 +17,7 @@ public class EmoteLogWindow : ThemedWindow, IDisposable
     public EmoteLogWindow(CordiPlugin plugin) : base("Emote Log##CordiEmoteLog", ImGuiWindowFlags.None)
     {
         _plugin = plugin;
-        _panel = new EmoteLogPanel(plugin);
+        _panel = new EmoteLogPanel(plugin, _theme);
 
         this.SizeConstraints = new WindowSizeConstraints
         {

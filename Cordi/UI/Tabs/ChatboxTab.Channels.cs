@@ -121,6 +121,23 @@ public partial class ChatboxTab
 
                 theme.SameLineGap();
 
+                if (theme.SecondaryButton("Add Separator##chatbox", new Vector2(theme.Scaled(170f), theme.Scaled(UiTheme.ControlHeight))))
+                {
+                    var divider = new ChatboxChannelConfig
+                    {
+                        Name = string.Empty,
+                        IsSeparator = true,
+                        Order = Cfg.Channels.Count,
+                    };
+
+                    Cfg.Channels.Add(divider);
+                    Save();
+                    plugin.Chatbox.RebuildChannels();
+                    OpenChannelEditor(divider.Id);
+                }
+
+                theme.SameLineGap();
+
                 if (theme.SecondaryButton("Create General Chat##chatbox", new Vector2(theme.Scaled(200f), theme.Scaled(UiTheme.ControlHeight))))
                     CreateGeneralChannel();
 
@@ -207,14 +224,15 @@ public partial class ChatboxTab
 
     private void DrawChannelListRow(ChatboxChannelConfig channel, int index, float rowWidth)
     {
-        string title = string.IsNullOrWhiteSpace(channel.Name) ? $"Channel {index + 1}" : channel.Name;
+        string fallback = channel.IsSeparator ? "Separator" : $"Channel {index + 1}";
+        string title = string.IsNullOrWhiteSpace(channel.Name) ? fallback : channel.Name;
         string subtitle = DescribeChannel(channel);
 
         var rowMin = ImGui.GetCursorScreenPos();
 
         var result = Row.Draw(
             id: $"chatbox-channel-{channel.Id}",
-            icon: FontAwesomeIcon.Hashtag,
+            icon: channel.IsSeparator ? FontAwesomeIcon.GripLines : FontAwesomeIcon.Hashtag,
             iconColor: channel.Enabled ? channel.Color : theme.MutedText,
             title: title,
             subtitle: subtitle,
@@ -277,6 +295,11 @@ public partial class ChatboxTab
 
     private static string DescribeChannel(ChatboxChannelConfig channel)
     {
+        if (channel.IsSeparator)
+            return string.IsNullOrWhiteSpace(channel.Name)
+                ? "Divider between channels"
+                : "Labelled divider between channels";
+
         var labels = ChannelChatLabels(channel);
 
         if (labels.Count == 0)
@@ -338,7 +361,8 @@ public partial class ChatboxTab
 
     private void DrawChannelEditor(ChatboxChannelConfig channel)
     {
-        string title = string.IsNullOrWhiteSpace(channel.Name) ? "Channel" : channel.Name;
+        string fallback = channel.IsSeparator ? "Separator" : "Channel";
+        string title = string.IsNullOrWhiteSpace(channel.Name) ? fallback : channel.Name;
 
         Layout.Draw(title, DescribeChannel(channel), innerWidth =>
         {
@@ -360,6 +384,13 @@ public partial class ChatboxTab
         if (editingChannelId == null)
             return;
 
+        if (channel.IsSeparator)
+        {
+            DrawSeparatorIdentity(channel);
+            ApplyPendingChannelChanges();
+            return;
+        }
+
         DrawChannelIdentity(channel);
         DrawChannelSources(channel);
         DrawChannelSending(channel);
@@ -368,6 +399,34 @@ public partial class ChatboxTab
 
         ApplyPendingChannelChanges();
     }
+
+    private void DrawSeparatorIdentity(ChatboxChannelConfig channel) =>
+        Card.Draw($"chatbox-separator-{channel.Id}", innerWidth =>
+        {
+            theme.WrappedText(
+                "A separator splits the navigation into groups. Drag it between channels to place it.",
+                innerWidth,
+                theme.MutedText);
+            theme.SpacerY(0.6f);
+
+            DrawToggleRow(
+                $"chatbox-enabled-{channel.Id}", FontAwesomeIcon.PowerOff,
+                "Enabled", "Disabled separators are hidden everywhere.",
+                innerWidth,
+                () => channel.Enabled,
+                v => channel.Enabled = v,
+                UiTheme.TileGreen);
+
+            DrawToggleRow(
+                $"chatbox-nav-{channel.Id}", FontAwesomeIcon.Bars,
+                "Show in Navigation", "Draws the separator in the chatbox navigation.",
+                innerWidth, () => channel.ShowInNav, v => channel.ShowInNav = v);
+
+            DrawTextRow(
+                $"chatbox-name-{channel.Id}", FontAwesomeIcon.Tag,
+                "Label", "Optional caption. Leave empty for a plain divider.",
+                innerWidth, () => channel.Name, v => channel.Name = v, 32, "Category");
+        }, "Separator");
 
     private void DrawChannelIdentity(ChatboxChannelConfig channel) =>
         Card.Draw($"chatbox-identity-{channel.Id}", innerWidth =>

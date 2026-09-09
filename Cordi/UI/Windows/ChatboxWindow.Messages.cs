@@ -327,18 +327,12 @@ public sealed partial class ChatboxWindow
     private void DrawRowBackground(ImDrawListPtr draw, ChatboxMessage message, Vector2 min, Vector2 max, bool hovered)
     {
         if (message.MentionsMe)
-        {
-            draw.AddRectFilled(min, max, ImGui.GetColorU32(Config.MentionHighlightColor));
-            var accentWidth = 2f * ImGuiHelpers.GlobalScale;
-            draw.AddRectFilled(min, new Vector2(min.X + accentWidth, max.Y), ImGui.GetColorU32(Config.MentionColor));
-        }
+            _theme.HighlightRow(draw, min, max, Config.MentionHighlightColor, Config.MentionColor);
         else if (hovered)
-        {
-            draw.AddRectFilled(min, max, ImGui.GetColorU32(_theme.Hover), _theme.Radius(0.4f));
-        }
+            _theme.HoverRow(draw, min, max);
 
         if (_highlightSeq == message.Seq && DateTime.Now < _highlightUntil)
-            draw.AddRectFilled(min, max, ImGui.GetColorU32(Config.MentionHighlightColor));
+            _theme.HighlightRow(draw, min, max, Config.MentionHighlightColor);
     }
 
     private float DrawContent(ChatboxMessage message, float wrapWidth, Vector4 textColor, Action? prefix)
@@ -485,14 +479,7 @@ public sealed partial class ChatboxWindow
 
             if (hovered || btnHovered)
             {
-                var draw = ImGui.GetWindowDrawList();
-                draw.AddRectFilled(btnPos, btnMax, ImGui.GetColorU32(btnHovered ? UiTheme.ColorDanger : new Vector4(0f, 0f, 0f, 0.65f)), _theme.Radius(0.3f));
-                using (ImRaii.PushFont(UiBuilder.IconFont))
-                {
-                    var icon = FontAwesomeIcon.Times.ToIconString();
-                    var iconSize = ImGui.CalcTextSize(icon);
-                    draw.AddText(btnPos + (new Vector2(btnSize, btnSize) - iconSize) * 0.5f, 0xFFFFFFFF, icon);
-                }
+                _theme.OverlayIconButton(btnPos, btnSize, FontAwesomeIcon.Times, btnHovered, 0.65f);
 
                 if (btnHovered)
                 {
@@ -529,16 +516,17 @@ public sealed partial class ChatboxWindow
         {
             var mini = ImGui.GetTextLineHeight();
             var origin = ImGui.GetCursorScreenPos();
-            AnimatedTextureWrap.MarkVisible(avatar, new Vector2(mini, mini));
+
             ImGui.Dummy(new Vector2(mini, mini));
-            ImGui.GetWindowDrawList().AddImageRounded(
-                avatar.Handle,
+
+            _theme.Avatar(
                 origin,
                 origin + new Vector2(mini, mini),
-                Vector2.Zero,
-                Vector2.One,
-                0xFFFFFFFF,
-                mini * 0.5f);
+                avatar,
+                mini * 0.5f,
+                _theme.Accent,
+                onImage: AnimatedTextureWrap.MarkVisible);
+
             ImGui.SameLine(0, _theme.Gap(0.3f));
         }
 
@@ -575,18 +563,7 @@ public sealed partial class ChatboxWindow
 
     private void DrawNewMessageDivider()
     {
-        var draw = ImGui.GetWindowDrawList();
-        var origin = ImGui.GetCursorScreenPos();
-        var width = ImGui.GetContentRegionAvail().X;
-        var height = ImGui.GetTextLineHeight();
-        var color = ImGui.GetColorU32(Config.UnreadBadgeColor);
-        var label = "New";
-        var labelWidth = ImGui.CalcTextSize(label).X + _theme.PadX(0.6f);
-        var y = origin.Y + height * 0.5f;
-
-        draw.AddLine(new Vector2(origin.X, y), new Vector2(origin.X + width - labelWidth, y), color, 1f);
-        draw.AddText(new Vector2(origin.X + width - labelWidth + _theme.PadX(0.3f), origin.Y), color, label);
-        ImGui.Dummy(new Vector2(width, height));
+        _theme.DividerTrailing("New", ImGui.GetContentRegionAvail().X, Config.UnreadBadgeColor);
     }
 
     private void JumpTo(ChatboxChannelState channel, long seq)
@@ -683,28 +660,18 @@ public sealed partial class ChatboxWindow
         var origin = ImGui.GetCursorScreenPos();
         ImGui.Dummy(new Vector2(size, size));
 
-        var draw = ImGui.GetWindowDrawList();
-        var min = origin;
-        var max = origin + new Vector2(size, size);
-        var rounding = Config.RoundAvatars ? size * 0.5f : _theme.Radius(0.5f);
-
         var texture = Config.ImageCacheEnabled && !string.IsNullOrEmpty(message.AvatarUrl)
             ? Chatbox.ImageCache.Get(message.AvatarUrl)
             : null;
 
-        if (texture != null)
-        {
-            AnimatedTextureWrap.MarkVisible(texture, min, max);
-            draw.AddImageRounded(texture.Handle, min, max, Vector2.Zero, Vector2.One, 0xFFFFFFFF, rounding);
-            return;
-        }
-
-        var accent = AuthorColorFor(message) ?? _theme.Accent;
-        draw.AddRectFilled(min, max, ImGui.GetColorU32(DimColor(accent, 0.8f)), rounding);
-
-        var initials = Initials(message.AuthorName);
-        var textSize = ImGui.CalcTextSize(initials);
-        draw.AddText(min + (new Vector2(size, size) - textSize) * 0.5f, 0xFFFFFFFF, initials);
+        _theme.Avatar(
+            origin,
+            origin + new Vector2(size, size),
+            texture,
+            Config.RoundAvatars ? size * 0.5f : _theme.Radius(0.5f),
+            DimColor(AuthorColorFor(message) ?? _theme.Accent, 0.8f),
+            Initials(message.AuthorName),
+            AnimatedTextureWrap.MarkVisible);
     }
 
     private static string Initials(string name)

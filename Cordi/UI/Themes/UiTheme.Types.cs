@@ -53,3 +53,41 @@ public readonly struct UiBadgeToggleResult
     public bool Clicked { get; init; }
     public bool StateChanged { get; init; }
 }
+
+public readonly struct UiSuggestionItem
+{
+    public required string Label { get; init; }
+    public string Detail { get; init; }
+    public FontAwesomeIcon Icon { get; init; }
+    public Dalamud.Interface.Textures.TextureWraps.IDalamudTextureWrap? Image { get; init; }
+}
+
+public readonly struct UiSuggestionHit
+{
+    public int Hovered { get; init; }
+    public int Clicked { get; init; }
+}
+
+public enum UiNavBadgePlacement
+{
+    TopRight,
+    MiddleRight,
+}
+
+public readonly struct UiNavItem
+{
+    public required string Label { get; init; }
+    public Vector4 Accent { get; init; }
+    public bool Active { get; init; }
+    public bool Unread { get; init; }
+    public bool ShowUnreadDot { get; init; }
+    public string BadgeText { get; init; }
+    public Vector4 BadgeColor { get; init; }
+    public Dalamud.Interface.Textures.TextureWraps.IDalamudTextureWrap? Image { get; init; }
+}
+
+public readonly struct UiNavHit
+{
+    public bool Clicked { get; init; }
+    public bool Hovered { get; init; }
+}

@@ -86,7 +86,7 @@ public sealed partial class ChatboxWindow
 
         DrawInlineEmotes(inputMin, inputMax);
 
-        if (submitted && _autocomplete.IsOpen)
+        if (submitted && _autocomplete.HasMatches)
         {
             QueueCompletion(_autocomplete.Accept());
             submitted = false;
@@ -205,7 +205,7 @@ public sealed partial class ChatboxWindow
         QueueCompletion(_autocomplete.Draw(_inputMin.X, _inputWidth, bottom));
     }
 
-    private void QueueCompletion(EmojiSuggestion? suggestion)
+    private void QueueCompletion(ChatboxSuggestion? suggestion)
     {
         if (suggestion == null) return;
 

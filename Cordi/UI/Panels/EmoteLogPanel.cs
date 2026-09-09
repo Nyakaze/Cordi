@@ -7,19 +7,19 @@ using Dalamud.Interface.Utility.Raii;
 
 using Cordi.Core;
 using Cordi.Extensions;
+using Cordi.UI.Themes;
 
 namespace Cordi.UI.Panels;
 
 public class EmoteLogPanel
 {
     private readonly CordiPlugin _plugin;
+    private readonly UiTheme _theme;
 
-    private static readonly uint ShadowColor = ImGui.GetColorU32(new Vector4(0f, 0f, 0f, 0.8f));
-    private static readonly Vector2 ShadowOffset = new(1f, 1f);
-
-    public EmoteLogPanel(CordiPlugin plugin)
+    public EmoteLogPanel(CordiPlugin plugin, UiTheme theme)
     {
         _plugin = plugin;
+        _theme = theme;
     }
 
     public void Draw(bool textShadow = false)
@@ -42,12 +42,7 @@ public class EmoteLogPanel
                     text += $" [{entry.Count}]";
                 }
 
-                if (textShadow)
-                {
-                    var drawList = ImGui.GetWindowDrawList();
-                    drawList.AddText(ImGui.GetCursorScreenPos() + ShadowOffset, ShadowColor, text);
-                }
-                ImGui.TextUnformatted(text);
+                _theme.ShadowedText(text, textShadow);
 
                 if (_plugin.Config.EmoteLog.ShowReplyButton)
                 {

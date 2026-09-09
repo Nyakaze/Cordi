@@ -253,18 +253,9 @@ public partial class WatchersTab
         string tooltip,
         ref bool value)
     {
-        var draw = ImGui.GetWindowDrawList();
         var toggleSize = theme.ToggleSize();
 
-        using (ImRaii.PushFont(UiBuilder.IconFont))
-        {
-            var glyph = icon.ToIconString();
-            var glyphSize = ImGui.CalcTextSize(glyph);
-            draw.AddText(
-                new Vector2(pos.X + (iconWidth - glyphSize.X) * 0.5f, pos.Y + (rowHeight - glyphSize.Y) * 0.5f),
-                ImGui.GetColorU32(value ? theme.Accent : theme.FaintText),
-                glyph);
-        }
+        theme.IconGlyph(pos, new Vector2(iconWidth, rowHeight), icon, value ? theme.Accent : theme.FaintText);
 
         var iconMin = new Vector2(pos.X, pos.Y + (rowHeight - iconWidth) * 0.5f);
         if (ImGui.IsMouseHoveringRect(iconMin, iconMin + new Vector2(iconWidth, iconWidth)) && !string.IsNullOrEmpty(tooltip))

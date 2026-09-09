@@ -18,9 +18,9 @@ public sealed partial class ChatboxWindow : ThemedWindow, IDisposable
     private const string WindowId = "###CordiChatbox";
 
     private readonly CordiPlugin _plugin;
-    private readonly ChatboxInlineFlow _flow = new();
+    private readonly ChatboxInlineFlow _flow;
     private readonly ChatboxEmojiPicker _picker;
-    private readonly ChatboxEmojiAutocomplete _autocomplete;
+    private readonly ChatboxAutocomplete _autocomplete;
 
     private readonly ChatboxEmoteFont _emoteFont = new();
     private readonly ImGui.ImGuiInputTextCallbackPtrDelegate _inputCallback;
@@ -44,8 +44,9 @@ public sealed partial class ChatboxWindow : ThemedWindow, IDisposable
         "Chatbox" + WindowId, ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse)
     {
         _plugin = plugin;
+        _flow = new ChatboxInlineFlow(_theme);
         _picker = new ChatboxEmojiPicker(plugin, _theme);
-        _autocomplete = new ChatboxEmojiAutocomplete(plugin, _theme);
+        _autocomplete = new ChatboxAutocomplete(plugin, _theme);
         _inputCallback = InputCallback;
 
         SizeConstraints = new WindowSizeConstraints

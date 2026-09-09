@@ -20,8 +20,8 @@ public class CombinedWindow : ThemedWindow
         ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse)
     {
         _plugin = plugin;
-        _emoteLogPanel = new EmoteLogPanel(plugin);
-        _peepPanel = new CordiPeepPanel(plugin);
+        _emoteLogPanel = new EmoteLogPanel(plugin, _theme);
+        _peepPanel = new CordiPeepPanel(plugin, _theme);
 
         this.SizeConstraints = new WindowSizeConstraints
         {

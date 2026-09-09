@@ -1,11 +1,13 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Numerics;
 using Cordi.Configuration;
 using Cordi.Services.Chatbox;
 using Cordi.UI.Themes;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Interface;
+using Dalamud.Interface.Textures.TextureWraps;
 using Dalamud.Interface.Utility;
 using Dalamud.Interface.Utility.Raii;
 
@@ -13,22 +15,44 @@ namespace Cordi.UI.Windows;
 
 public sealed partial class ChatboxWindow
 {
-    private enum BadgePlacement
-    {
-        TopRight,
-        MiddleRight,
-    }
-
-    private readonly List<(ChatboxChannelState Channel, string Label, float Width)> _tabItems = new();
+    private readonly List<(ChatboxChannelState? Channel, string Label, float Width)> _tabItems = new();
     private readonly List<int> _tabRows = new();
 
-    private IEnumerable<ChatboxChannelState> NavChannels()
+    private List<(ChatboxChannelState? Channel, string Label)> NavItems()
     {
+        var states = new Dictionary<string, ChatboxChannelState>(StringComparer.Ordinal);
         foreach (var channel in Chatbox.Channels)
+            states[channel.Id] = channel;
+
+        var items = new List<(ChatboxChannelState? Channel, string Label)>();
+        string? pending = null;
+
+        var ordered = Config.Channels
+            .OrderBy(c => c.Order)
+            .ThenBy(c => c.Name, StringComparer.OrdinalIgnoreCase);
+
+        foreach (var config in ordered)
         {
-            if (!channel.Config.Enabled || !channel.Config.ShowInNav) continue;
-            yield return channel;
+            if (!config.Enabled || !config.ShowInNav) continue;
+
+            if (config.IsSeparator)
+            {
+                if (items.Count > 0) pending = config.Name.Trim();
+                continue;
+            }
+
+            if (!states.TryGetValue(config.Id, out var state)) continue;
+
+            if (pending != null)
+            {
+                items.Add((null, pending));
+                pending = null;
+            }
+
+            items.Add((state, string.Empty));
         }
+
+        return items;
     }
 
     private void DrawServerRail()
@@ -41,11 +65,26 @@ public sealed partial class ChatboxWindow
 
         ImGui.Dummy(new Vector2(0, _theme.Gap(0.4f)));
 
-        foreach (var channel in NavChannels())
+        foreach (var item in NavItems())
         {
-            DrawRailItem(channel, channel.Id == activeId, size, indicatorSpace, available);
+            if (item.Channel == null)
+            {
+                DrawRailSeparator(item.Label, size, indicatorSpace, available);
+                continue;
+            }
+
+            DrawRailItem(item.Channel, item.Channel.Id == activeId, size, indicatorSpace, available);
             ImGui.Dummy(new Vector2(0, _theme.Gap(0.5f)));
         }
+    }
+
+    private void DrawRailSeparator(string label, float size, float indicatorSpace, float available)
+    {
+        var width = MathF.Max(16f, size * 0.6f);
+        var offset = indicatorSpace + MathF.Max(0f, available - indicatorSpace - width) * 0.5f;
+
+        ImGui.SetCursorPosX(ImGui.GetCursorPosX() + offset);
+        _theme.DividerMark(width, label);
     }
 
     private void DrawRailItem(ChatboxChannelState channel, bool isActive, float size, float indicatorSpace, float available)
@@ -53,131 +92,69 @@ public sealed partial class ChatboxWindow
         var offset = indicatorSpace + MathF.Max(0f, available - indicatorSpace - size) * 0.5f;
         ImGui.SetCursorPosX(ImGui.GetCursorPosX() + offset);
 
-        var origin = ImGui.GetCursorScreenPos();
-        var clicked = ImGui.InvisibleButton($"##rail-{channel.Id}", new Vector2(size, size));
-        var hovered = ImGui.IsItemHovered();
-
-        var draw = ImGui.GetWindowDrawList();
-        var min = origin;
-        var max = origin + new Vector2(size, size);
-        var rounding = isActive || hovered ? size * 0.30f : size * 0.5f;
-        var accent = channel.Config.Color;
-
-        var background = isActive
-            ? accent
-            : hovered
-                ? new Vector4(accent.X * 0.55f, accent.Y * 0.55f, accent.Z * 0.55f, 1f)
-                : _theme.FrameBg;
-
-        draw.AddRectFilled(min, max, ImGui.GetColorU32(background), rounding);
-
         Chatbox.ImageCache.Request(channel.Config.IconUrl);
 
         var texture = string.IsNullOrWhiteSpace(channel.Config.IconUrl)
             ? null
             : Chatbox.ImageCache.Get(channel.Config.IconUrl);
 
-        if (texture != null)
-        {
-            AnimatedTextureWrap.MarkVisible(texture, min, max);
-            draw.AddImageRounded(
-                texture.Handle,
-                min,
-                max,
-                Vector2.Zero,
-                Vector2.One,
-                0xFFFFFFFF,
-                rounding);
-        }
-        else
-        {
-            var label = RailLabel(channel);
-            var textSize = ImGui.CalcTextSize(label);
-            var foreground = isActive ? new Vector4(1f, 1f, 1f, 1f) : _theme.Text;
-            draw.AddText(
-                min + (new Vector2(size, size) - textSize) * 0.5f,
-                ImGui.GetColorU32(foreground),
-                label);
-        }
+        var hit = _theme.NavRailTile(
+            $"##rail-{channel.Id}",
+            size,
+            NavVisual(channel, isActive, RailLabel(channel), texture),
+            AnimatedTextureWrap.MarkVisible);
 
-        DrawRailIndicator(draw, min, size, isActive, hovered, HasUnread(channel));
-        DrawMentionBadge(draw, min, max, channel, BadgePlacement.TopRight);
-        DrawChannelContext(channel, hovered);
+        DrawChannelContext(channel, hit.Hovered);
 
-        if (clicked) Activate(channel);
+        if (hit.Clicked) Activate(channel);
     }
 
-    private void DrawRailIndicator(ImDrawListPtr draw, Vector2 min, float size, bool isActive, bool hovered, bool unread)
+    private UiNavItem NavVisual(
+        ChatboxChannelState channel,
+        bool isActive,
+        string label,
+        IDalamudTextureWrap? image = null) => new()
     {
-        if (!isActive && !unread) return;
-        if (!isActive && !Config.ShowUnreadDot) return;
-
-        var width = 4f * ImGuiHelpers.GlobalScale;
-        var height = isActive ? size * 0.65f : hovered ? size * 0.4f : width * 2f;
-        var top = min.Y + (size - height) * 0.5f;
-        var left = min.X - width - 4f * ImGuiHelpers.GlobalScale;
-
-        draw.AddRectFilled(
-            new Vector2(left, top),
-            new Vector2(left + width, top + height),
-            ImGui.GetColorU32(_theme.Text),
-            width * 0.5f);
-    }
+        Label = label,
+        Accent = channel.Config.Color,
+        Active = isActive,
+        Unread = HasUnread(channel),
+        ShowUnreadDot = Config.ShowUnreadDot,
+        BadgeText = MentionBadgeText(channel),
+        BadgeColor = Config.UnreadBadgeColor,
+        Image = image,
+    };
 
     private void DrawChannelList()
     {
         var activeId = Chatbox.ResolveActiveChannelId();
         ImGui.Dummy(new Vector2(0, _theme.Gap(0.3f)));
 
-        foreach (var channel in NavChannels())
-            DrawChannelRow(channel, channel.Id == activeId);
+        foreach (var item in NavItems())
+        {
+            if (item.Channel == null)
+            {
+                DrawChannelListSeparator(item.Label);
+                continue;
+            }
+
+            DrawChannelRow(item.Channel, item.Channel.Id == activeId);
+        }
     }
+
+    private void DrawChannelListSeparator(string label) =>
+        _theme.DividerRow(label, MathF.Max(ImGui.GetContentRegionAvail().X, 24f), _theme.PadX(0.6f));
 
     private void DrawChannelRow(ChatboxChannelState channel, bool isActive)
     {
-        var height = ImGui.GetFrameHeight();
-        var width = ImGui.GetContentRegionAvail().X;
-        var origin = ImGui.GetCursorScreenPos();
+        var hit = _theme.NavListRow(
+            $"##row-{channel.Id}",
+            ImGui.GetContentRegionAvail().X,
+            NavVisual(channel, isActive, channel.Config.Name));
 
-        var clicked = ImGui.InvisibleButton($"##row-{channel.Id}", new Vector2(MathF.Max(width, 40f), height));
-        var hovered = ImGui.IsItemHovered();
+        DrawChannelContext(channel, hit.Hovered);
 
-        var draw = ImGui.GetWindowDrawList();
-        var min = origin;
-        var max = origin + new Vector2(MathF.Max(width, 40f), height);
-
-        if (isActive || hovered)
-        {
-            var background = isActive ? _theme.Active : _theme.Hover;
-            draw.AddRectFilled(min, max, ImGui.GetColorU32(background), _theme.Radius(0.5f));
-        }
-
-        var unread = HasUnread(channel);
-        var padding = _theme.PadX(0.6f);
-        var textY = min.Y + (height - ImGui.GetTextLineHeight()) * 0.5f;
-
-        if (unread && Config.ShowUnreadDot)
-        {
-            var radius = 3f * ImGuiHelpers.GlobalScale;
-            draw.AddCircleFilled(
-                new Vector2(min.X + radius + 1f, min.Y + height * 0.5f),
-                radius,
-                ImGui.GetColorU32(_theme.Text));
-        }
-
-        const string prefix = "# ";
-        var prefixSize = ImGui.CalcTextSize(prefix);
-        draw.AddText(new Vector2(min.X + padding, textY), ImGui.GetColorU32(channel.Config.Color), prefix);
-
-        var nameColor = isActive || unread ? _theme.Text : _theme.MutedText;
-        var nameX = min.X + padding + prefixSize.X;
-        var name = _theme.Fit(channel.Config.Name, max.X - padding - BadgeSpace(channel) - nameX);
-        draw.AddText(new Vector2(nameX, textY), ImGui.GetColorU32(nameColor), name);
-
-        DrawMentionBadge(draw, min, max, channel, BadgePlacement.MiddleRight, padding);
-        DrawChannelContext(channel, hovered);
-
-        if (clicked) Activate(channel);
+        if (hit.Clicked) Activate(channel);
     }
 
     private float LayoutTabs(float available)
@@ -190,12 +167,26 @@ public sealed partial class ChatboxWindow
         var fixedWidth = Config.TabWidth * scale;
         var rowWidth = 0f;
 
-        foreach (var channel in NavChannels())
+        foreach (var item in NavItems())
         {
-            var label = TabLabel(channel);
-            var width = fixedWidth > 1f
-                ? fixedWidth
-                : ImGui.CalcTextSize(label).X + _theme.PadX(1.4f) + BadgeSpace(channel);
+            string label;
+            float width;
+
+            if (item.Channel == null)
+            {
+                label = item.Label.Length > 0 ? item.Label.ToUpperInvariant() : string.Empty;
+                width = label.Length > 0
+                    ? ImGui.CalcTextSize(label).X + _theme.PadX(0.8f)
+                    : _theme.PadX(0.9f);
+            }
+            else
+            {
+                label = TabLabel(item.Channel);
+                width = fixedWidth > 1f
+                    ? fixedWidth
+                    : ImGui.CalcTextSize(label).X + _theme.PadX(1.4f) + BadgeSpace(item.Channel);
+            }
+
             width = MathF.Min(width, available);
 
             if (_tabItems.Count == 0 || rowWidth + spacing + width > available)
@@ -208,7 +199,7 @@ public sealed partial class ChatboxWindow
                 rowWidth += spacing + width;
             }
 
-            _tabItems.Add((channel, label, width));
+            _tabItems.Add((item.Channel, label, width));
         }
 
         return _tabRows.Count;
@@ -254,106 +245,37 @@ public sealed partial class ChatboxWindow
                 else ImGui.SetCursorPosX(startX + offset);
 
                 var item = _tabItems[i];
-                DrawNavTab(item.Channel, item.Channel.Id == activeId, item.Label, item.Width);
+                if (item.Channel == null)
+                    DrawNavSeparator(item.Label, item.Width);
+                else
+                    DrawNavTab(item.Channel, item.Channel.Id == activeId, item.Label, item.Width);
             }
         }
 
         if (Config.TabSide == ChatboxTabSide.Top) ImGui.Separator();
     }
 
+    private void DrawNavSeparator(string label, float width) =>
+        _theme.DividerCell(label, width, ImGui.GetFrameHeight());
+
     private void DrawNavTab(ChatboxChannelState channel, bool isActive, string label, float width)
     {
-        var height = ImGui.GetFrameHeight();
-        var origin = ImGui.GetCursorScreenPos();
-        var clicked = ImGui.InvisibleButton($"##tab-{channel.Id}", new Vector2(width, height));
-        var hovered = ImGui.IsItemHovered();
+        var hit = _theme.NavTab($"##tab-{channel.Id}", width, NavVisual(channel, isActive, label));
 
-        var draw = ImGui.GetWindowDrawList();
-        var min = origin;
-        var max = origin + new Vector2(width, height);
+        DrawChannelContext(channel, hit.Hovered);
 
-        var background = isActive ? _theme.TabActive : hovered ? _theme.TabHovered : _theme.Tab;
-        draw.AddRectFilled(min, max, ImGui.GetColorU32(background), _theme.Radius(0.6f));
-
-        if (isActive)
-        {
-            var barHeight = 2f * ImGuiHelpers.GlobalScale;
-            draw.AddRectFilled(
-                new Vector2(min.X + _theme.PadX(0.4f), max.Y - barHeight),
-                new Vector2(max.X - _theme.PadX(0.4f), max.Y),
-                ImGui.GetColorU32(channel.Config.Color),
-                barHeight);
-        }
-
-        var unread = HasUnread(channel);
-        var badgeSpace = BadgeSpace(channel);
-        var shown = _theme.Fit(label, width - badgeSpace - _theme.PadX(0.6f));
-        var textSize = ImGui.CalcTextSize(shown);
-        var color = isActive || unread ? _theme.Text : _theme.MutedText;
-        var textX = min.X + MathF.Max(_theme.PadX(0.3f), (width - badgeSpace - textSize.X) * 0.5f);
-        draw.AddText(
-            new Vector2(textX, min.Y + (height - textSize.Y) * 0.5f),
-            ImGui.GetColorU32(color),
-            shown);
-
-        if (unread && Config.ShowUnreadDot && badgeSpace <= 0f)
-        {
-            var radius = 3f * ImGuiHelpers.GlobalScale;
-            draw.AddCircleFilled(
-                new Vector2(max.X - radius - 2f, min.Y + radius + 2f),
-                radius,
-                ImGui.GetColorU32(_theme.Text));
-        }
-
-        DrawMentionBadge(draw, min, max, channel, BadgePlacement.MiddleRight, _theme.PadX(0.3f));
-        DrawChannelContext(channel, hovered);
-
-        if (clicked) Activate(channel);
+        if (hit.Clicked) Activate(channel);
     }
 
-    private Vector2 MentionBadgeSize(ChatboxChannelState channel)
+    private float BadgeSpace(ChatboxChannelState channel) =>
+        _theme.NavBadgeSpace(MentionBadgeText(channel));
+
+    private string MentionBadgeText(ChatboxChannelState channel)
     {
         if (!Config.ShowMentionBadge || channel.Config.MuteNotifications || channel.MentionCount <= 0)
-            return Vector2.Zero;
+            return string.Empty;
 
-        var textSize = ImGui.CalcTextSize(MentionBadgeText(channel));
-        var height = textSize.Y + 1f * ImGuiHelpers.GlobalScale;
-        return new Vector2(MathF.Max(height, textSize.X + 5f * ImGuiHelpers.GlobalScale), height);
-    }
-
-    private float BadgeSpace(ChatboxChannelState channel)
-    {
-        var size = MentionBadgeSize(channel);
-        return size.X > 0f ? size.X + _theme.Gap(0.4f) : 0f;
-    }
-
-    private static string MentionBadgeText(ChatboxChannelState channel) =>
-        channel.MentionCount > 99 ? "99+" : channel.MentionCount.ToString();
-
-    private void DrawMentionBadge(
-        ImDrawListPtr draw,
-        Vector2 itemMin,
-        Vector2 itemMax,
-        ChatboxChannelState channel,
-        BadgePlacement placement,
-        float inset = 0f)
-    {
-        var size = MentionBadgeSize(channel);
-        if (size.X <= 0f) return;
-
-        var right = itemMax.X - inset;
-        var bottom = placement == BadgePlacement.TopRight
-            ? itemMin.Y + inset + size.Y
-            : (itemMin.Y + itemMax.Y + size.Y) * 0.5f;
-
-        var max = new Vector2(right, bottom);
-        var min = max - size;
-
-        var text = MentionBadgeText(channel);
-        var textSize = ImGui.CalcTextSize(text);
-
-        draw.AddRectFilled(min, max, ImGui.GetColorU32(Config.UnreadBadgeColor), size.Y * 0.5f);
-        draw.AddText(min + (size - textSize) * 0.5f, 0xFFFFFFFF, text);
+        return channel.MentionCount > 99 ? "99+" : channel.MentionCount.ToString();
     }
 
     private void DrawChannelContext(ChatboxChannelState channel, bool hovered)

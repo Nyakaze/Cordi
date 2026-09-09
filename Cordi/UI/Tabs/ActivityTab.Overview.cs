@@ -202,20 +202,11 @@ public partial class ActivityTab
         int length = title.Length;
         bool overflowing = length > DiscordActivityConfig.MaxTitleLength;
 
-        var draw = ImGui.GetWindowDrawList();
         float height = theme.Scaled(UiTheme.ControlHeight);
         var min = ImGui.GetCursorScreenPos();
         var max = min + new Vector2(width, height);
 
-        if (active)
-        {
-            draw.AddRectFilled(min, max, ImGui.GetColorU32(theme.AccentSoft), theme.Radius());
-            draw.AddRect(min, max, ImGui.GetColorU32(theme.AccentBorder), theme.Radius());
-        }
-        else
-        {
-            draw.AddRectFilled(min, max, ImGui.GetColorU32(theme.RowBg), theme.Radius());
-        }
+        theme.RowSurface(min, max, active);
 
         var labelSize = theme.ChipSize(label);
         theme.ChipAt(

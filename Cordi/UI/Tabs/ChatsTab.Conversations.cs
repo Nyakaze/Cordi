@@ -191,26 +191,11 @@ public partial class ChatsTab
 
         string text = count == 1 ? "1 message" : $"{count:N0} messages";
 
-        theme.ApplyFontScale(0.78f);
-        var textSize = ImGui.CalcTextSize(text);
-        theme.ApplyFontScale();
-
         float height = lineHeight + theme.Scaled(2f);
-        float width = textSize.X + theme.PadX(0.7f) * 2f;
         var min = new Vector2(pos.X, pos.Y + (lineHeight - height) * 0.5f);
-        var max = min + new Vector2(width, height);
+        var max = min + new Vector2(theme.ChipPillWidth(text), height);
 
-        var draw = ImGui.GetWindowDrawList();
-        var tint = new Vector4(theme.Accent.X, theme.Accent.Y, theme.Accent.Z, 0.16f);
-        draw.AddRectFilled(min, max, ImGui.GetColorU32(tint), height * 0.5f);
-
-        theme.ApplyFontScale(0.78f);
-        using (ImRaii.PushColor(ImGuiCol.Text, theme.Accent))
-        {
-            ImGui.SetCursorScreenPos(new Vector2(min.X + theme.PadX(0.7f), min.Y + (height - textSize.Y) * 0.5f));
-            ImGui.TextUnformatted(text);
-        }
-        theme.ApplyFontScale();
+        theme.ChipPill(min, max, text);
     }
 
     private void DrawConversationHeaderControls(Vector2 rightAnchor)

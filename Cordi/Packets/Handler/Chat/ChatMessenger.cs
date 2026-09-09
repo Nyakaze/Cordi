@@ -83,18 +83,28 @@ public class ChatMessenger : IAsyncDisposable
                 return;
             }
 
-            var cmd = Cordi.Domain.ChatTypes.SendCommand(type);
-
-            if (cmd is null)
-            {
-                _chat.PrintError($"{type} is not a sendable channel.", "Cordi");
-                return;
-            }
-
             var msg = Sanitize(message, MaxLength);
-            string full = (type == XivChatType.TellOutgoing)
-                ? $"{cmd} {tellTarget} {msg}"
-                : $"{cmd} {msg}";
+            string full;
+
+            if (type == XivChatType.None)
+            {
+                if (msg.Length == 0) return;
+                full = msg;
+            }
+            else
+            {
+                var cmd = Cordi.Domain.ChatTypes.SendCommand(type);
+
+                if (cmd is null)
+                {
+                    _chat.PrintError($"{type} is not a sendable channel.", "Cordi");
+                    return;
+                }
+
+                full = (type == XivChatType.TellOutgoing)
+                    ? $"{cmd} {tellTarget} {msg}"
+                    : $"{cmd} {msg}";
+            }
 
 
             var now = DateTime.UtcNow;
@@ -142,6 +152,9 @@ public class ChatMessenger : IAsyncDisposable
 
     public Task SendTellAsync(string targetNameWorld, string message, bool echoLocally = false, CancellationToken ct = default)
         => SendAsync(XivChatType.TellOutgoing, message, targetNameWorld, echoLocally, ct);
+
+    public Task SendCommandAsync(string command, CancellationToken ct = default)
+        => SendAsync(XivChatType.None, command, ct: ct);
 
     public void SendMessage(string message)
     {

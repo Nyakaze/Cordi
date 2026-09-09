@@ -58,6 +58,7 @@ public class ChatboxChannelConfig
     public bool OverrideChatColor { get; set; }
     public bool Enabled { get; set; } = true;
     public bool ShowInNav { get; set; } = true;
+    public bool IsSeparator { get; set; }
     public int Order { get; set; }
 
     public List<XivChatType> GameChatTypes { get; set; } = new();

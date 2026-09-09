@@ -304,26 +304,16 @@ public sealed class ChatboxEmojiPicker
         var clicked = ImGui.IsItemClicked(ImGuiMouseButton.Left);
         rightClicked = ImGui.IsItemClicked(ImGuiMouseButton.Right);
 
-        var draw = ImGui.GetWindowDrawList();
-
-        if (hovered)
-            draw.AddRectFilled(min, max, ImGui.GetColorU32(_theme.Hover), _theme.Radius(0.4f));
-
-        if (favorite)
-            draw.AddRect(min, max, ImGui.GetColorU32(_theme.Accent), _theme.Radius(0.4f), ImDrawFlags.None, 1f);
-
         Chatbox.ImageCache.Request(url);
-        var texture = Chatbox.ImageCache.Get(url);
 
-        if (texture != null)
-        {
-            var pad = _cellSize * 0.12f;
-            var imageMin = min + new Vector2(pad, pad);
-            var imageMax = max - new Vector2(pad, pad);
-
-            AnimatedTextureWrap.MarkVisible(texture, imageMin, imageMax);
-            draw.AddImage(texture.Handle, imageMin, imageMax);
-        }
+        _theme.GridCell(
+            min,
+            max,
+            hovered,
+            favorite,
+            Chatbox.ImageCache.Get(url),
+            _cellSize * 0.12f,
+            AnimatedTextureWrap.MarkVisible);
 
         if (hovered && tooltip.Length > 0) ImGui.SetTooltip(tooltip);
 

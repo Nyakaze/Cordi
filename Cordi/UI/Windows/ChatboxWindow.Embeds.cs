@@ -117,14 +117,10 @@ public sealed partial class ChatboxWindow
 
         var draw = ImGui.GetWindowDrawList();
 
-        // Draw card background on channel 1 (behind text on channel 2, above row on channel 0)
         draw.ChannelsSetCurrent(1);
-        draw.AddRectFilled(origin, boxMax, ImGui.GetColorU32(_theme.CardBg), _theme.Radius(0.5f));
-        draw.AddRectFilled(origin, new Vector2(origin.X + barWidth, boxMax.Y),
-            ImGui.GetColorU32(Config.LinkColor), _theme.Radius(0.5f), ImDrawFlags.RoundCornersLeft);
+        _theme.AccentCard(draw, origin, boxMax, _theme.CardBg, Config.LinkColor, barWidth);
         draw.ChannelsSetCurrent(2);
 
-        // Remove/hide button 'X' in top-right corner
         var btnSize = 18f * scale;
         var btnPos = new Vector2(boxMax.X - btnSize - 3f * scale, origin.Y + 3f * scale);
         var btnMax = btnPos + new Vector2(btnSize, btnSize);
@@ -133,13 +129,7 @@ public sealed partial class ChatboxWindow
 
         if (cardHovered || btnHovered)
         {
-            draw.AddRectFilled(btnPos, btnMax, ImGui.GetColorU32(btnHovered ? UiTheme.ColorDanger : new Vector4(0f, 0f, 0f, 0.55f)), _theme.Radius(0.3f));
-            using (ImRaii.PushFont(UiBuilder.IconFont))
-            {
-                var icon = FontAwesomeIcon.Times.ToIconString();
-                var iconSize = ImGui.CalcTextSize(icon);
-                draw.AddText(btnPos + (new Vector2(btnSize, btnSize) - iconSize) * 0.5f, 0xFFFFFFFF, icon);
-            }
+            _theme.OverlayIconButton(btnPos, btnSize, FontAwesomeIcon.Times, btnHovered);
 
             if (btnHovered)
             {
@@ -247,14 +237,7 @@ public sealed partial class ChatboxWindow
 
         if (hovered || btnHovered)
         {
-            var draw = ImGui.GetWindowDrawList();
-            draw.AddRectFilled(btnPos, btnMax, ImGui.GetColorU32(btnHovered ? UiTheme.ColorDanger : new Vector4(0f, 0f, 0f, 0.65f)), _theme.Radius(0.3f));
-            using (ImRaii.PushFont(UiBuilder.IconFont))
-            {
-                var icon = FontAwesomeIcon.Times.ToIconString();
-                var iconSize = ImGui.CalcTextSize(icon);
-                draw.AddText(btnPos + (new Vector2(btnSize, btnSize) - iconSize) * 0.5f, 0xFFFFFFFF, icon);
-            }
+            _theme.OverlayIconButton(btnPos, btnSize, FontAwesomeIcon.Times, btnHovered, 0.65f);
 
             if (btnHovered)
             {

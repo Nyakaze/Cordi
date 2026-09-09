@@ -273,6 +273,39 @@ public sealed partial class UiTheme
         ApplyFontScale();
     }
 
+    public float ChipPillWidth(ReadOnlySpan<char> text, float fontScale = 0.78f)
+    {
+        ApplyFontScale(fontScale);
+        var textSize = ImGui.CalcTextSize(text.ToString());
+        ApplyFontScale();
+
+        return textSize.X + PadX(0.7f) * 2f;
+    }
+
+    public void ChipPill(Vector2 min, Vector2 max, ReadOnlySpan<char> text, Vector4? color = null, float fontScale = 0.78f)
+    {
+        var tint = color ?? Accent;
+        var height = max.Y - min.Y;
+
+        ImGui.GetWindowDrawList().AddRectFilled(
+            min,
+            max,
+            ImGui.GetColorU32(new Vector4(tint.X, tint.Y, tint.Z, 0.16f)),
+            height * 0.5f);
+
+        ApplyFontScale(fontScale);
+        var content = text.ToString();
+        var textSize = ImGui.CalcTextSize(content);
+
+        using (ImRaii.PushColor(ImGuiCol.Text, tint))
+        {
+            ImGui.SetCursorScreenPos(new Vector2(min.X + PadX(0.7f), min.Y + (height - textSize.Y) * 0.5f));
+            ImGui.TextUnformatted(content);
+        }
+
+        ApplyFontScale();
+    }
+
     public bool ColorSwatch(string id, Vector2 pos, float width, ref Vector4 color)
     {
         var draw = ImGui.GetWindowDrawList();

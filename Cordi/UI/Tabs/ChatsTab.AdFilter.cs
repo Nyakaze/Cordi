@@ -253,12 +253,10 @@ public partial class ChatsTab
 
         if (!validRegex)
         {
-            var draw = ImGui.GetWindowDrawList();
-            draw.AddRect(
+            theme.SurfaceOutline(
                 new Vector2(valueX, pos.Y),
                 new Vector2(valueX + valueWidth, pos.Y + height),
-                ImGui.GetColorU32(UiTheme.TileRed),
-                theme.Radius());
+                UiTheme.TileRed);
 
             if (ImGui.IsItemHovered())
                 ImGui.SetTooltip("Invalid regular expression, this pattern never matches");

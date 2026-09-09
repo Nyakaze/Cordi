@@ -213,14 +213,12 @@ public class CordiPlugin : IDalamudPlugin
             LogService.Debug("EmoteLog", "Initialized");
 
 
+        });
+
+        Task.Run(async () =>
+        {
             await Task.Delay(1000);
-            if (Service.ClientState.IsLoggedIn)
-            {
-                if (Config!.CordiPeep.OpenOnLogin) CordiPeepWindow.IsOpen = true;
-                if (Config!.EmoteLog.WindowOpenOnLogin) this.EmoteLogWindow.IsOpen = true;
-                if (Config!.CombinedWindow.OpenOnLogin) CombinedWindow.IsOpen = true;
-                if (Config!.Chatbox.Enabled && Config!.Chatbox.OpenOnLogin) ChatboxWindow.IsOpen = true;
-            }
+            if (Service.ClientState.IsLoggedIn) ApplyOpenOnLogin();
         });
 
         Service.Chat.ChatMessageUnhandled += ChatOnChatMessage;
@@ -416,22 +414,21 @@ public class CordiPlugin : IDalamudPlugin
         _prevComboPressed = comboPressed;
     }
 
+    private void ApplyOpenOnLogin()
+    {
+        if (Config == null) return;
+
+        if (Config.CordiPeep.OpenOnLogin) CordiPeepWindow.IsOpen = true;
+        if (Config.EmoteLog.WindowOpenOnLogin) EmoteLogWindow.IsOpen = true;
+        if (Config.CombinedWindow.OpenOnLogin) CombinedWindow.IsOpen = true;
+        if (Config.Chatbox.Enabled && Config.Chatbox.OpenOnLogin) ChatboxWindow.IsOpen = true;
+    }
+
     private async void OnLoginEvent()
     {
         LogService.Info("Plugin", "Player logged in");
+        ApplyOpenOnLogin();
         cachedLocalPlayer = await Service.Framework.RunOnFrameworkThread(() => Service.ObjectTable.LocalPlayer);
-        if (Config.CordiPeep.OpenOnLogin)
-        {
-            CordiPeepWindow.IsOpen = true;
-        }
-        if (Config.EmoteLog.WindowOpenOnLogin)
-        {
-            EmoteLogWindow.IsOpen = true;
-        }
-        if (Config.CombinedWindow.OpenOnLogin)
-        {
-            CombinedWindow.IsOpen = true;
-        }
     }
     private async void OnLogoutEvent(int type, int code)
     {

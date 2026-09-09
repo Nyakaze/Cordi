@@ -56,6 +56,34 @@ public partial class ChatboxTab
                 innerWidth, () => Cfg.TwemojiBaseUrl, v => Cfg.TwemojiBaseUrl = v, 260, "https://...", 320f);
         }, "Emotes");
 
+        Card.Draw("chatbox-animation", innerWidth =>
+        {
+            DrawToggleRow(
+                "chatbox-animate-gifs", FontAwesomeIcon.Film,
+                "Animate GIFs", "Plays animated GIFs from links and Discord emotes. Only GIFs on screen are animated.",
+                innerWidth,
+                () => Cfg.AnimateGifs,
+                v =>
+                {
+                    Cfg.AnimateGifs = v;
+                    plugin.Chatbox.ImageCache.ResetTextures();
+                });
+
+            if (!Cfg.AnimateGifs) return;
+
+            DrawToggleRow(
+                "chatbox-animate-focused", FontAwesomeIcon.Pause,
+                "Animate only while focused", "GIFs freeze on the current frame while the window is not focused.",
+                innerWidth, () => Cfg.AnimateOnlyWhenFocused, v => Cfg.AnimateOnlyWhenFocused = v);
+
+            DrawIntSliderRow(
+                "chatbox-animate-unload", FontAwesomeIcon.Stopwatch,
+                "Unload Idle GIFs after",
+                $"Seconds off screen before decoded frames are released. 0 keeps them in memory. Currently {plugin.Chatbox.ImageCache.AnimatedTextures} decoded.",
+                innerWidth, 0, 300,
+                () => Cfg.AnimateIdleUnloadSeconds, v => Cfg.AnimateIdleUnloadSeconds = v, " s");
+        }, "Animation");
+
         Card.Draw("chatbox-picker", innerWidth =>
         {
             DrawToggleRow(

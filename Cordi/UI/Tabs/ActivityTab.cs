@@ -187,17 +187,16 @@ public partial class ActivityTab : ConfigTabBase
         string shown = overflowing ? ActivityText.Truncate(title, DiscordActivityConfig.MaxTitleLength) : title;
         string counter = $"{length}/{DiscordActivityConfig.MaxTitleLength}";
 
-        var draw = ImGui.GetWindowDrawList();
         float height = theme.Scaled(58f);
         var min = ImGui.GetCursorScreenPos();
         var max = min + new Vector2(width, height);
 
-        draw.AddRectFilled(min, max, ImGui.GetColorU32(theme.RowBg), theme.Radius());
-        draw.AddRect(min, max, ImGui.GetColorU32(theme.Border), theme.Radius());
+        theme.Surface(min, max, theme.RowBg, theme.Border);
 
-        var accentMin = new Vector2(min.X + theme.Scaled(3f), min.Y + theme.Radius());
-        var accentMax = new Vector2(min.X + theme.Scaled(6f), max.Y - theme.Radius());
-        draw.AddRectFilled(accentMin, accentMax, ImGui.GetColorU32(live ? UiTheme.TileGreen : theme.Accent), theme.Scaled(1.5f));
+        theme.AccentBar(
+            new Vector2(min.X + theme.Scaled(3f), min.Y + theme.Radius()),
+            new Vector2(min.X + theme.Scaled(6f), max.Y - theme.Radius()),
+            live ? UiTheme.TileGreen : theme.Accent);
 
         float textX = min.X + theme.PadX(1.4f);
 

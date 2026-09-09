@@ -35,7 +35,15 @@ public sealed partial class ChatboxService
         if (text.Length == 0) return;
 
         var channel = GetChannel(channelId);
-        if (channel == null || !CanSend(channel)) return;
+        if (channel == null) return;
+
+        if (text[0] == '/')
+        {
+            SendGameCommand(text);
+            return;
+        }
+
+        if (!CanSend(channel)) return;
 
         var useReply = reply != null && Config.EnableReplies;
 
@@ -44,6 +52,14 @@ public sealed partial class ChatboxService
             SendToGame(channel, part, useReply ? reply : null);
             useReply = false;
         }
+    }
+
+    private void SendGameCommand(string text)
+    {
+        var command = _plugin.Emoji.ToGame(text, Config.RelayEmotesAsUrls);
+        if (command.Length == 0) return;
+
+        _ = _plugin._chat.SendCommandAsync(command);
     }
 
     private List<string> SplitForSending(string text)

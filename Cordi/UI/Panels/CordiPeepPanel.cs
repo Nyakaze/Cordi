@@ -10,6 +10,7 @@ using Cordi.Services.Features;
 using Cordi.Configuration;
 using Cordi.Core;
 using Cordi.Extensions;
+using Cordi.UI.Themes;
 
 namespace Cordi.UI.Panels;
 
@@ -27,12 +28,12 @@ public class CordiPeepPanel
     private ulong? _lastHoveredPeeperId;
     private ulong? _lastHoveredTargetId;
 
-    private static readonly uint ShadowColor = ImGui.GetColorU32(new Vector4(0f, 0f, 0f, 0.8f));
-    private static readonly Vector2 ShadowOffset = new(1f, 1f);
+    private readonly UiTheme _theme;
 
-    public CordiPeepPanel(CordiPlugin plugin)
+    public CordiPeepPanel(CordiPlugin plugin, UiTheme theme)
     {
         _plugin = plugin;
+        _theme = theme;
     }
 
     public void Draw(bool textShadow = false)
@@ -48,8 +49,7 @@ public class CordiPeepPanel
 
         if (cordiPeep.ActivePeepers.IsEmpty && cordiPeep.History.Count == 0)
         {
-            if (textShadow) DrawTextShadow("No detected peeps.");
-            ImGui.TextDisabled("No detected peeps.");
+            _theme.ShadowedText("No detected peeps.", textShadow, true);
         }
         else
         {
@@ -309,76 +309,54 @@ public class CordiPeepPanel
             textColor = ImGui.GetColorU32(ImGuiCol.TextDisabled);
         }
 
-        var shadowColor = ShadowColor;
-
-        // Draw direction arrow + distance + label
         float textX = pMin.X + style.ItemSpacing.X;
         float textY = pMin.Y + style.FramePadding.Y;
         float lineH = ImGui.GetTextLineHeight();
+
+        var mutedColor = ImGui.GetColorU32(ImGuiCol.TextDisabled);
 
         if (showArrow)
         {
             float arrowSize = lineH * 0.45f;
             var arrowCenter = new Vector2(textX + arrowSize + 1f, textY + lineH * 0.5f);
-            if (textShadow) DrawDirectionTriangle(drawList, arrowCenter + ShadowOffset, arrowSize, peeper.DirectionAngle, shadowColor);
-            DrawDirectionTriangle(drawList, arrowCenter, arrowSize, peeper.DirectionAngle, ImGui.GetColorU32(ImGuiCol.TextDisabled));
+
+            if (textShadow)
+                _theme.DirectionArrow(
+                    drawList,
+                    arrowCenter + UiTheme.TextShadowOffset,
+                    arrowSize,
+                    peeper.DirectionAngle,
+                    ImGui.GetColorU32(new Vector4(0f, 0f, 0f, 0.8f)));
+
+            _theme.DirectionArrow(drawList, arrowCenter, arrowSize, peeper.DirectionAngle, mutedColor);
             textX += arrowSize * 2f + 6f;
         }
 
         if (distText.Length > 0)
         {
-            if (textShadow) drawList.AddText(new Vector2(textX, textY) + ShadowOffset, shadowColor, distText);
-            drawList.AddText(new Vector2(textX, textY), ImGui.GetColorU32(ImGuiCol.TextDisabled), distText);
+            _theme.ShadowedTextAt(drawList, new Vector2(textX, textY), distText, mutedColor, textShadow);
             textX += ImGui.CalcTextSize(distText).X;
         }
 
-        if (textShadow) drawList.AddText(new Vector2(textX, textY) + ShadowOffset, shadowColor, label);
-        // Outline glow around the name of actively-targeting peepers
+        var labelPos = new Vector2(textX, textY);
+
+        if (textShadow) _theme.TextShadowAt(drawList, labelPos, label);
+
         if (isActive && config.TargetingGlowEnabled && config.TargetingGlowThickness > 0f)
-        {
-            DrawTextGlow(drawList, new Vector2(textX, textY), label, config.TargetingGlowColor, config.TargetingGlowThickness);
-        }
-        drawList.AddText(new Vector2(textX, textY), textColor, label);
+            _theme.TextGlow(drawList, labelPos, label, config.TargetingGlowColor, config.TargetingGlowThickness);
+
+        _theme.ShadowedTextAt(drawList, labelPos, label, textColor, false);
 
         var timeSize = ImGui.CalcTextSize(rightText);
         var timePos = new Vector2(pMax.X - timeSize.X - style.ItemSpacing.X, textY);
-        if (textShadow) drawList.AddText(timePos + ShadowOffset, shadowColor, rightText);
-        drawList.AddText(timePos, ImGui.GetColorU32(ImGuiCol.TextDisabled), rightText);
+        _theme.ShadowedTextAt(drawList, timePos, rightText, mutedColor, textShadow);
 
-        // Draw current target on second line
         if (showTarget)
         {
             var targetText = $"  \u2192 {peeper.CurrentTargetName}";
             var targetPos = new Vector2(targetItemMin.X + style.ItemSpacing.X, targetItemMin.Y);
-            if (textShadow) drawList.AddText(targetPos + ShadowOffset, shadowColor, targetText);
-            drawList.AddText(targetPos, ImGui.GetColorU32(ImGuiCol.TextDisabled), targetText);
+            _theme.ShadowedTextAt(drawList, targetPos, targetText, mutedColor, textShadow);
         }
-    }
-
-    // Draws a soft outline glow behind text by stamping it in a ring of offsets with fading alpha.
-    private static void DrawTextGlow(ImDrawListPtr drawList, Vector2 pos, string text, Vector4 color, float thickness)
-    {
-        const int layers = 3;
-        const int directions = 8;
-        for (int layer = layers; layer >= 1; layer--)
-        {
-            float radius = thickness * (layer / (float)layers);
-            float alpha = color.W * (1f - (layer - 1) / (float)layers) * 0.5f;
-            uint col = ImGui.GetColorU32(new Vector4(color.X, color.Y, color.Z, alpha));
-            for (int d = 0; d < directions; d++)
-            {
-                float angle = MathF.Tau * d / directions;
-                var off = new Vector2(MathF.Cos(angle) * radius, MathF.Sin(angle) * radius);
-                drawList.AddText(pos + off, col, text);
-            }
-        }
-    }
-
-    private static void DrawTextShadow(string text)
-    {
-        var drawList = ImGui.GetWindowDrawList();
-        var pos = ImGui.GetCursorScreenPos();
-        drawList.AddText(pos + ShadowOffset, ShadowColor, text);
     }
 
     private Dalamud.Game.ClientState.Objects.Types.IGameObject? FindPeeper(CordiPeepService.PeeperState peeper)
@@ -415,24 +393,6 @@ public class CordiPeepPanel
                 agent->OpenCharaCard((FFXIVClientStructs.FFXIV.Client.Game.Object.GameObject*)obj.Address);
             }
         }
-    }
-
-    private static void DrawDirectionTriangle(ImDrawListPtr drawList, Vector2 center, float size, float angle, uint color)
-    {
-        // angle: 0 = front, PI/2 = right, PI = behind, -PI/2 = left
-        // Screen coords: Y increases downward, so up = -Y
-        // angle 0 (front/up) → screen direction (0, -1) → screenAngle = -PI/2
-        float screenAngle = angle - MathF.PI / 2f;
-
-        // Tip points AWAY from player center, toward the peeper's direction
-        var dir = new Vector2(MathF.Cos(screenAngle), MathF.Sin(screenAngle));
-        var tip = center + dir * size;
-        var baseCenter = center - dir * size * 0.4f;
-        var perp = new Vector2(-dir.Y, dir.X);
-        var left = baseCenter + perp * size * 0.5f;
-        var right = baseCenter - perp * size * 0.5f;
-
-        drawList.AddTriangleFilled(tip, left, right, color);
     }
 
     private static bool MenuItem(string label)

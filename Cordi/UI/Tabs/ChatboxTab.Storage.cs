@@ -1,3 +1,6 @@
+using System;
+using System.Threading;
+using System.Threading.Tasks;
 using Cordi.UI.Themes;
 using Dalamud.Interface;
 
@@ -5,9 +8,54 @@ namespace Cordi.UI.Tabs;
 
 public partial class ChatboxTab
 {
+    private static readonly TimeSpan StorageSummaryInterval = TimeSpan.FromSeconds(3);
+
+    private DateTime storageSummaryProbedAt = DateTime.MinValue;
+    private int storageSummaryRefreshing;
+    private string storageSummary = "Reading...";
+    private string imageCacheSummary = "Reading...";
+
+    private void RefreshStorageSummaries(bool force)
+    {
+        var now = DateTime.UtcNow;
+
+        if (!force && now - storageSummaryProbedAt < StorageSummaryInterval)
+            return;
+
+        if (Interlocked.Exchange(ref storageSummaryRefreshing, 1) == 1)
+            return;
+
+        storageSummaryProbedAt = now;
+
+        Task.Run(() =>
+        {
+            try
+            {
+                storageSummary = plugin.Chatbox.StorageSummary();
+                imageCacheSummary = plugin.Chatbox.ImageCache.InspectSummary();
+            }
+            catch (Exception ex)
+            {
+                plugin.LogService.Error("UI", "Failed to read chatbox storage summary", ex);
+            }
+            finally
+            {
+                Volatile.Write(ref storageSummaryRefreshing, 0);
+            }
+        });
+    }
+
+    private void RunStorageAction(Action action)
+    {
+        action();
+        RefreshStorageSummaries(true);
+    }
+
     public void DrawStorage()
     {
         ConsumeScroll();
+
+        RefreshStorageSummaries(false);
 
         Layout.Draw("Storage", "History limits, the image cache and database maintenance.");
 
@@ -22,7 +70,7 @@ public partial class ChatboxTab
 
             DrawInfoRow(
                 "chatbox-storage-summary", FontAwesomeIcon.Hdd,
-                "Stored History", plugin.Chatbox.StorageSummary(),
+                "Stored History", storageSummary,
                 innerWidth);
 
             DrawInfoRow(
@@ -40,47 +88,21 @@ public partial class ChatboxTab
 
             DrawIntSliderRow(
                 "chatbox-cache-max", FontAwesomeIcon.Sort,
-                "Max Cached Images", plugin.Chatbox.ImageCache.InspectSummary(),
+                "Max Cached Images", imageCacheSummary,
                 innerWidth, 100, 5000,
                 () => Cfg.ImageCacheMaxEntries, v => Cfg.ImageCacheMaxEntries = v);
-
-            DrawToggleRow(
-                "chatbox-animate-gifs", FontAwesomeIcon.Film,
-                "Animate GIFs", "Plays animated GIFs from links and Discord emotes. Only GIFs on screen are animated.",
-                innerWidth,
-                () => Cfg.AnimateGifs,
-                v =>
-                {
-                    Cfg.AnimateGifs = v;
-                    plugin.Chatbox.ImageCache.ResetTextures();
-                });
-
-            if (Cfg.AnimateGifs)
-            {
-                DrawToggleRow(
-                    "chatbox-animate-focused", FontAwesomeIcon.Pause,
-                    "Animate only while focused", "GIFs freeze on the current frame while the window is not focused.",
-                    innerWidth, () => Cfg.AnimateOnlyWhenFocused, v => Cfg.AnimateOnlyWhenFocused = v);
-
-                DrawIntSliderRow(
-                    "chatbox-animate-unload", FontAwesomeIcon.Stopwatch,
-                    "Unload Idle GIFs after",
-                    $"Seconds off screen before decoded frames are released. 0 keeps them in memory. Currently {plugin.Chatbox.ImageCache.AnimatedTextures} decoded.",
-                    innerWidth, 0, 300,
-                    () => Cfg.AnimateIdleUnloadSeconds, v => Cfg.AnimateIdleUnloadSeconds = v, " s");
-            }
 
             DrawActionRow(
                 "chatbox-cache-clear", FontAwesomeIcon.Trash, UiTheme.TileRed,
                 "Clear Cache", "Removes every stored image.",
                 "Clear", innerWidth,
-                () => plugin.Chatbox.ImageCache.Clear());
+                () => RunStorageAction(() => plugin.Chatbox.ImageCache.Clear()));
 
             DrawActionRow(
                 "chatbox-cache-prune", FontAwesomeIcon.Cut, UiTheme.TileAmber,
                 "Prune Cache", "Trims the cache down to the configured maximum.",
                 "Prune", innerWidth,
-                () => plugin.Chatbox.ImageCache.PruneStored(Cfg.ImageCacheMaxEntries));
+                () => RunStorageAction(() => plugin.Chatbox.ImageCache.PruneStored(Cfg.ImageCacheMaxEntries)));
         }, "Image Cache");
 
         Card.Draw("chatbox-maintenance", innerWidth =>
@@ -89,7 +111,7 @@ public partial class ChatboxTab
                 "chatbox-clear-all", FontAwesomeIcon.TrashAlt, UiTheme.TileRed,
                 "Clear all Messages", "Empties every channel, in memory and on disk.",
                 "Clear All", innerWidth,
-                () => plugin.Chatbox.ClearAll());
+                () => RunStorageAction(() => plugin.Chatbox.ClearAll()));
 
             DrawActionRow(
                 "chatbox-reload-channels", FontAwesomeIcon.SyncAlt, UiTheme.TileBlue,
@@ -101,19 +123,19 @@ public partial class ChatboxTab
                 "chatbox-apply-retention", FontAwesomeIcon.Sort, UiTheme.TileBlue,
                 "Apply Limits now", "Trims every channel to its message limit.",
                 "Apply", innerWidth,
-                () => plugin.Chatbox.ApplyRetention());
+                () => RunStorageAction(() => plugin.Chatbox.ApplyRetention()));
 
             DrawActionRow(
                 "chatbox-prune-orphans", FontAwesomeIcon.Broom, UiTheme.TileAmber,
                 "Remove Orphaned History", "Deletes stored messages of channels that no longer exist.",
                 "Remove", innerWidth,
-                () => plugin.Chatbox.PruneOrphanedHistory());
+                () => RunStorageAction(() => plugin.Chatbox.PruneOrphanedHistory()));
 
             DrawActionRow(
                 "chatbox-compact-db", FontAwesomeIcon.Compress, UiTheme.TileTeal,
                 "Compact Database", "Reclaims disk space after large deletions.",
                 "Compact", innerWidth,
-                () => plugin.Chatbox.Database.Compact());
+                () => RunStorageAction(() => plugin.Chatbox.Database.Compact()));
         }, "Maintenance");
     }
 }
