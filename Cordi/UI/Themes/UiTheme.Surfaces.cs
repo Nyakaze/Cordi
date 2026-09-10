@@ -1,12 +1,117 @@
 using System;
 using System.Numerics;
 using Dalamud.Bindings.ImGui;
+using Dalamud.Interface;
 using Dalamud.Interface.Textures.TextureWraps;
+using Dalamud.Interface.Utility;
+using Dalamud.Interface.Utility.Raii;
 
 namespace Cordi.UI.Themes;
 
 public sealed partial class UiTheme
 {
+    private string _confirmArmedId = string.Empty;
+    private int _confirmArmFrame;
+
+    public void OpenConfirmDialog(string id)
+    {
+        ImGui.OpenPopup(id);
+
+        _confirmArmedId = id;
+        _confirmArmFrame = ImGui.GetFrameCount() + 1;
+    }
+
+    public UiConfirmResult ConfirmDialog(
+        string id,
+        string title,
+        string message,
+        string confirmLabel,
+        string cancelLabel,
+        FontAwesomeIcon icon = FontAwesomeIcon.ExclamationTriangle,
+        Vector4? accent = null)
+    {
+        if (!ImGui.IsPopupOpen(id)) return UiConfirmResult.None;
+
+        var viewport = ImGui.GetMainViewport();
+
+        ImGui.SetNextWindowViewport(viewport.ID);
+        ImGui.SetNextWindowPos(viewport.WorkPos + viewport.WorkSize * 0.5f, ImGuiCond.Always, new Vector2(0.5f, 0.5f));
+        ImGui.SetNextWindowSize(new Vector2(Scaled(ConfirmDialogWidth), 0f), ImGuiCond.Always);
+
+        using var color = ImRaii.PushColor(ImGuiCol.PopupBg, CardBg)
+            .Push(ImGuiCol.Border, WindowBorder)
+            .Push(ImGuiCol.Text, Text);
+        using var style = ImRaii.PushStyle(ImGuiStyleVar.PopupRounding, Radius(1.2f))
+            .Push(ImGuiStyleVar.WindowPadding, new Vector2(PadX(1.2f), PadY(1.2f)))
+            .Push(ImGuiStyleVar.WindowBorderSize, 1f * ImGuiHelpers.GlobalScale);
+
+        const ImGuiWindowFlags flags = ImGuiWindowFlags.NoTitleBar
+            | ImGuiWindowFlags.NoResize
+            | ImGuiWindowFlags.NoMove
+            | ImGuiWindowFlags.NoSavedSettings
+            | ImGuiWindowFlags.NoScrollbar;
+
+        if (!ImGui.BeginPopupModal(id, flags)) return UiConfirmResult.None;
+
+        var result = UiConfirmResult.None;
+
+        try
+        {
+            var tint = accent ?? TileAmber;
+            var glyph = Scaled(IconTileSize);
+            var origin = ImGui.GetCursorScreenPos();
+
+            Surface(origin, origin + new Vector2(glyph, glyph), new Vector4(tint.X, tint.Y, tint.Z, 0.18f), rounding: Radius(0.6f));
+            IconGlyph(origin, new Vector2(glyph, glyph), icon, tint);
+
+            ImGui.SetCursorScreenPos(new Vector2(origin.X + glyph + Gap(0.7f), origin.Y));
+
+            using (ImRaii.Group())
+            {
+                ImGui.TextUnformatted(title);
+                ImGui.PushTextWrapPos(0f);
+                ImGui.TextColored(MutedText, message);
+                ImGui.PopTextWrapPos();
+            }
+
+            var bottom = MathF.Max(ImGui.GetCursorScreenPos().Y, origin.Y + glyph);
+            ImGui.SetCursorScreenPos(new Vector2(origin.X, bottom));
+
+            SpacerY(0.4f);
+            DividerMark(ImGui.GetContentRegionAvail().X);
+
+            var height = Scaled(ControlHeight);
+            var width = MathF.Max(Scaled(110f), (ImGui.GetContentRegionAvail().X - Gap(0.6f)) * 0.5f);
+
+            if (SecondaryButton(cancelLabel + "##" + id, new Vector2(width, height)))
+                result = UiConfirmResult.Cancelled;
+
+            SameLineGap(0.6f);
+
+            if (PrimaryButton(confirmLabel + "##" + id, new Vector2(width, height)))
+                result = UiConfirmResult.Confirmed;
+
+            if (ConfirmKeysArmed(id))
+            {
+                if (ImGui.IsKeyPressed(ImGuiKey.Escape, false)) result = UiConfirmResult.Cancelled;
+                if (ImGui.IsKeyPressed(ImGuiKey.Enter, false) || ImGui.IsKeyPressed(ImGuiKey.KeypadEnter, false))
+                    result = UiConfirmResult.Confirmed;
+            }
+
+            if (result != UiConfirmResult.None) ImGui.CloseCurrentPopup();
+        }
+        finally
+        {
+            ImGui.EndPopup();
+        }
+
+        return result;
+    }
+
+    private bool ConfirmKeysArmed(string id) =>
+        !string.Equals(_confirmArmedId, id, StringComparison.Ordinal)
+        || ImGui.GetFrameCount() >= _confirmArmFrame;
+
     public void GridCell(
         Vector2 min,
         Vector2 max,

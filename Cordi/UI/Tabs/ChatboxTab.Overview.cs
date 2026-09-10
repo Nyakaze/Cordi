@@ -70,6 +70,12 @@ public partial class ChatboxTab
                 "Split long Messages",
                 $"Messages longer than {ChatboxConfig.MaxMessageLength} characters are sent in several parts. Off cuts them off instead.",
                 innerWidth, () => Cfg.SplitLongMessages, v => Cfg.SplitLongMessages = v);
+
+            DrawToggleRow(
+                "chatbox-warn-missing-slash", FontAwesomeIcon.ExclamationTriangle,
+                "Warn about Commands without Slash",
+                "In Say, Shout and Yell, asks for confirmation when the first word matches a plugin command but the leading slash is missing. Game commands and emotes are ignored.",
+                innerWidth, () => Cfg.WarnOnMissingSlash, v => Cfg.WarnOnMissingSlash = v);
         }, "Input");
     }
 

@@ -77,6 +77,43 @@ public static class ChatboxCommandCatalog
         return Lookup.TryGetValue(command, out var entry) ? entry : null;
     }
 
+    public static ChatboxCommandEntry? FindPlugin(string command)
+    {
+        if (command.Length < 2) return null;
+
+        foreach (var (name, info) in Service.CommandManager.Commands)
+        {
+            if (!string.Equals(name, command, StringComparison.OrdinalIgnoreCase)) continue;
+
+            return new ChatboxCommandEntry
+            {
+                Command = name,
+                Description = Clean(info.HelpMessage),
+                Source = ChatboxCommandSource.Plugin,
+            };
+        }
+
+        return null;
+    }
+
+    public static ChatboxCommandEntry? FindMissingSlash(string text)
+    {
+        if (string.IsNullOrEmpty(text)) return null;
+        if (text[0] == '/') return null;
+
+        var end = 0;
+        while (end < text.Length && !char.IsWhiteSpace(text[end])) end++;
+
+        if (end == 0) return null;
+
+        for (var i = 0; i < end; i++)
+        {
+            if (!char.IsLetterOrDigit(text[i])) return null;
+        }
+
+        return FindPlugin("/" + text[..end]);
+    }
+
     private static bool Matches(string command, string fragment)
     {
         if (command.Length < 2 || command[0] != '/') return false;

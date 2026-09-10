@@ -7,6 +7,7 @@ using Cordi.Domain;
 using Cordi.Services.Chatbox;
 using Cordi.UI.Components;
 using Cordi.UI.Panels;
+using Cordi.UI.Themes;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Game.Text;
 using Dalamud.Interface;
@@ -187,7 +188,26 @@ public sealed partial class ChatboxWindow
     {
         if (string.IsNullOrWhiteSpace(_input)) return;
 
-        Chatbox.Send(channel.Id, _emoteFont.Expand(_input), _replyTarget);
+        var text = _emoteFont.Expand(_input);
+
+        var sendType = Chatbox.ResolveSendType(channel.Config);
+
+        if (NeedsCommandConfirmation(sendType, text, out var command))
+        {
+            _pendingCommandChannel = channel.Id;
+            _pendingCommandText = text;
+            _pendingCommandReply = _replyTarget;
+            _pendingCommandName = command;
+            _pendingCommandTarget = ChatboxService.LabelFor(sendType);
+            return;
+        }
+
+        Dispatch(channel.Id, text, _replyTarget);
+    }
+
+    private void Dispatch(string channelId, string text, ChatboxReplyRef? reply)
+    {
+        Chatbox.Send(channelId, text, reply);
 
         _autocomplete.Reset();
         _pendingToken = null;
@@ -195,6 +215,65 @@ public sealed partial class ChatboxWindow
         _input = string.Empty;
         if (Config.KeepFocusAfterSend) _focusInput = true;
         _scrollToBottomFrames = ScrollSettleFrames;
+    }
+
+    private bool NeedsCommandConfirmation(XivChatType sendType, string text, out string command)
+    {
+        command = string.Empty;
+
+        if (!Config.WarnOnMissingSlash) return false;
+        if (!ChatTypes.IsPublic(sendType)) return false;
+
+        var entry = ChatboxCommandCatalog.FindMissingSlash(text.TrimStart());
+        if (entry == null) return false;
+
+        command = entry.Command;
+        return true;
+    }
+
+    private void DrawCommandGuard()
+    {
+        var text = _pendingCommandText;
+        if (text == null) return;
+
+        if (!_commandGuardOpen)
+        {
+            _theme.OpenConfirmDialog(CommandGuardPopupId);
+            _commandGuardOpen = true;
+        }
+
+        var result = _theme.ConfirmDialog(
+            CommandGuardPopupId,
+            "You really want to send that?",
+            $"\"{_pendingCommandName}\" is a plugin command, but the leading slash is missing. This will be sent as plain text to everyone in {_pendingCommandTarget}.",
+            "Send anyway",
+            "Keep editing");
+
+        if (result == UiConfirmResult.None)
+        {
+            if (ImGui.IsPopupOpen(CommandGuardPopupId)) return;
+
+            ClearCommandGuard();
+            _focusInput = true;
+            return;
+        }
+
+        if (result == UiConfirmResult.Confirmed)
+            Dispatch(_pendingCommandChannel, text, _pendingCommandReply);
+        else
+            _focusInput = true;
+
+        ClearCommandGuard();
+    }
+
+    private void ClearCommandGuard()
+    {
+        _pendingCommandText = null;
+        _pendingCommandReply = null;
+        _pendingCommandChannel = string.Empty;
+        _pendingCommandName = string.Empty;
+        _pendingCommandTarget = string.Empty;
+        _commandGuardOpen = false;
     }
 
     private void DrawAutocomplete()

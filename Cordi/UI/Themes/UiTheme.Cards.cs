@@ -500,7 +500,7 @@ public sealed partial class UiTheme
     }
     public void SpacerY(float mul = 1f) => ImGui.Dummy(new Vector2(0, Gap(mul)));
     public void SpacerX(float mul = 1f) => ImGui.Dummy(new Vector2(Gap(mul), 0));
-    public void SameLineGap(float mul = 1f) { ImGui.SameLine(); ImGui.Dummy(new Vector2(Gap(mul), 0)); ImGui.SameLine(); }
+    public void SameLineGap(float mul = 1f) => ImGui.SameLine(0f, Gap(mul));
 
     static Vector4 Lerp(in Vector4 a, in Vector4 b, float t)
         => new(a.X + (b.X - a.X) * t, a.Y + (b.Y - a.Y) * t, a.Z + (b.Z - a.Z) * t, a.W + (b.W - a.W) * t);

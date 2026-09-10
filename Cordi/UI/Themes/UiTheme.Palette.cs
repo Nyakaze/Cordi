@@ -127,6 +127,7 @@ public sealed partial class UiTheme
     public const float EmojiPickerMinWidth = 260f;
     public const float EmojiPickerMinHeight = 200f;
     public const float EmojiPickerGripSize = 14f;
+    public const float ConfirmDialogWidth = 380f;
 
     public float Radius(float mul = 1f) => RadiusBase * ImGuiHelpers.GlobalScale * mul;
     public float PadX(float mul = 1f) => PadBase * ImGuiHelpers.GlobalScale * mul;

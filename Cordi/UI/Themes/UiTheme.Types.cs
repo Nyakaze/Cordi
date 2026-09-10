@@ -91,3 +91,19 @@ public readonly struct UiNavHit
     public bool Clicked { get; init; }
     public bool Hovered { get; init; }
 }
+
+public enum UiConfirmResult
+{
+    None,
+    Confirmed,
+    Cancelled,
+}
+
+public readonly struct UiBarButton
+{
+    public required string Label { get; init; }
+    public float Width { get; init; }
+    public bool Primary { get; init; }
+    public string Tooltip { get; init; }
+    public Action? OnClick { get; init; }
+}

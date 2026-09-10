@@ -103,55 +103,33 @@ public partial class ChatboxTab
         Layout.Draw(
             "Channels",
             "A channel bundles the game chat types that share one tab.",
-            innerWidth =>
-            {
-                if (theme.PrimaryButton("Add Channel##chatbox", new Vector2(theme.Scaled(160f), theme.Scaled(UiTheme.ControlHeight))))
+            innerWidth => theme.ButtonRow(
+                innerWidth,
+                new UiBarButton
                 {
-                    var created = new ChatboxChannelConfig
-                    {
-                        Name = "New Channel",
-                        Order = Cfg.Channels.Count,
-                    };
-
-                    Cfg.Channels.Add(created);
-                    Save();
-                    plugin.Chatbox.RebuildChannels();
-                    OpenChannelEditor(created.Id);
-                }
-
-                theme.SameLineGap();
-
-                if (theme.SecondaryButton("Add Separator##chatbox", new Vector2(theme.Scaled(170f), theme.Scaled(UiTheme.ControlHeight))))
+                    Label = "Add Channel##chatbox",
+                    Width = 160f,
+                    Primary = true,
+                    OnClick = AddChannel,
+                },
+                new UiBarButton
                 {
-                    var divider = new ChatboxChannelConfig
-                    {
-                        Name = string.Empty,
-                        IsSeparator = true,
-                        Order = Cfg.Channels.Count,
-                    };
-
-                    Cfg.Channels.Add(divider);
-                    Save();
-                    plugin.Chatbox.RebuildChannels();
-                    OpenChannelEditor(divider.Id);
-                }
-
-                theme.SameLineGap();
-
-                if (theme.SecondaryButton("Create General Chat##chatbox", new Vector2(theme.Scaled(200f), theme.Scaled(UiTheme.ControlHeight))))
-                    CreateGeneralChannel();
-
-                theme.SameLineGap();
-
-                if (theme.SecondaryButton("Sort by Order##chatbox", new Vector2(theme.Scaled(160f), theme.Scaled(UiTheme.ControlHeight))))
+                    Label = "Add Separator##chatbox",
+                    Width = 170f,
+                    OnClick = AddSeparator,
+                },
+                new UiBarButton
                 {
-                    Cfg.Channels.Sort((a, b) => a.Order.CompareTo(b.Order));
-                    Save();
-                    plugin.Chatbox.RebuildChannels();
-                }
-
-                _ = innerWidth;
-            });
+                    Label = "Create General Chat##chatbox",
+                    Width = 200f,
+                    OnClick = CreateGeneralChannel,
+                },
+                new UiBarButton
+                {
+                    Label = "Sort by Order##chatbox",
+                    Width = 160f,
+                    OnClick = SortChannelsByOrder,
+                }));
 
         Card.Draw(
             "chatbox-channel-list",
@@ -178,39 +156,64 @@ public partial class ChatboxTab
     private static bool IsGeneralChannel(ChatboxChannelConfig channel) =>
         string.Equals(channel.Name, GeneralChannelName, StringComparison.OrdinalIgnoreCase);
 
+    private void AddChannel()
+    {
+        var created = new ChatboxChannelConfig
+        {
+            Name = "New Channel",
+            Order = Cfg.Channels.Count,
+        };
+
+        Cfg.Channels.Add(created);
+        Save();
+        plugin.Chatbox.RebuildChannels();
+        OpenChannelEditor(created.Id);
+    }
+
+    private void AddSeparator()
+    {
+        var divider = new ChatboxChannelConfig
+        {
+            Name = string.Empty,
+            IsSeparator = true,
+            Order = Cfg.Channels.Count,
+        };
+
+        Cfg.Channels.Add(divider);
+        Save();
+        plugin.Chatbox.RebuildChannels();
+        OpenChannelEditor(divider.Id);
+    }
+
+    private void SortChannelsByOrder()
+    {
+        Cfg.Channels.Sort((a, b) => a.Order.CompareTo(b.Order));
+        Save();
+        plugin.Chatbox.RebuildChannels();
+    }
+
     private void CreateGeneralChannel()
     {
         var general = Cfg.Channels.FirstOrDefault(IsGeneralChannel);
 
-        var types = general?.GameChatTypes.ToList() ?? new List<XivChatType>();
-
-        foreach (var type in Cfg.Channels.SelectMany(channel => channel.GameChatTypes))
-        {
-            if (!types.Contains(type))
-                types.Add(type);
-        }
-
-        if (types.Count == 0)
-            return;
-
-        if (types.Any(ChatTypes.IsTell) && !types.Contains(XivChatType.TellOutgoing))
-            types.Add(XivChatType.TellOutgoing);
-
         if (general == null)
         {
-            general = new ChatboxChannelConfig
-            {
-                Name = GeneralChannelName,
-                ShortLabel = "GEN",
-                Order = Cfg.Channels.Count,
-            };
-
-            Cfg.Channels.Add(general);
+            general = new ChatboxChannelConfig { Name = GeneralChannelName };
+            Cfg.Channels.Insert(0, general);
         }
 
+        general.ShortLabel = string.Empty;
         general.Enabled = true;
         general.ShowInNav = true;
-        general.GameChatTypes = types;
+        general.IsSeparator = false;
+        general.Order = 0;
+        general.SendGameChatType = XivChatType.None;
+        general.MuteNotifications = true;
+        general.TreatAllAsMention = false;
+        general.MaxMessages = 5000;
+        general.PersistHistory = false;
+        general.FilterAdvertisements = true;
+        general.GameChatTypes = ChatTypes.GeneralChannelTypes();
 
         Save();
         plugin.Chatbox.RebuildChannels();

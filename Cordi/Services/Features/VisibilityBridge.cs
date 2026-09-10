@@ -15,7 +15,6 @@ public static class VisibilityBridge
 {
     private static readonly IPluginLog Log = Service.Log;
 
-    // Track players temporarily unhidden
     private class TempUnhideState
     {
         public string Name = string.Empty;
@@ -31,10 +30,51 @@ public static class VisibilityBridge
     private static readonly ConcurrentDictionary<ulong, TempUnhideState> TempUnhiddenPlayers = new();
 
     private const string WhitelistReason = "Cordi Peeper";
+    private const string VisibilityInternalName = "Visibility";
 
-    // Visibility's official IPC. AddToWhitelist internally adds the entry AND calls
-    // RemoveChecked + ShowPlayer, which is the only reliable way to make Visibility itself
-    // keep a player shown. Reflecting into its internals raced Visibility's per-frame re-hide.
+    private static bool _visibilityInstalled;
+    private static DateTime _lastInstalledCheckTime = DateTime.MinValue;
+
+    public static bool IsVisibilityInstalled()
+    {
+        var now = DateTime.Now;
+        if ((now - _lastInstalledCheckTime).TotalSeconds < 5.0) return _visibilityInstalled;
+        _lastInstalledCheckTime = now;
+
+        var installed = false;
+
+        try
+        {
+            foreach (var plugin in Service.PluginInterface.InstalledPlugins)
+            {
+                if (!plugin.IsLoaded) continue;
+                if (!string.Equals(plugin.InternalName, VisibilityInternalName, StringComparison.OrdinalIgnoreCase)) continue;
+
+                installed = true;
+                break;
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Debug($"[VisibilityBridge] Failed to enumerate installed plugins: {ex.Message}");
+        }
+
+        if (!installed && _visibilityInstalled)
+        {
+            _visibilityPluginInstance = null;
+            _visibilityAssembly = null;
+            _pluginType = null;
+            _ipcAddToWhitelist = null;
+            _ipcRemoveFromWhitelist = null;
+            _lastInstanceCheckTime = DateTime.MinValue;
+            ResetReflectionCaches();
+            TempUnhiddenPlayers.Clear();
+        }
+
+        _visibilityInstalled = installed;
+        return installed;
+    }
+
     private static ICallGateSubscriber<string, uint, string, object>? _ipcAddToWhitelist;
     private static ICallGateSubscriber<string, uint, object>? _ipcRemoveFromWhitelist;
 
@@ -93,7 +133,6 @@ public static class VisibilityBridge
         {
             var visited = new HashSet<object>();
 
-            // 1. Search static fields/properties in Visibility assembly
             if (_visibilityAssembly != null)
             {
                 foreach (var type in _visibilityAssembly.GetTypes())
@@ -105,7 +144,7 @@ public static class VisibilityBridge
                             var val = field.GetValue(null);
                             if (val != null && val.GetType().FullName == pluginTypeName)
                             {
-                                Log.Info($"[VisibilityBridge] Found plugin instance in Visibility static field: {type.FullName}.{field.Name}");
+                                Log.Debug($"[VisibilityBridge] Found plugin instance in Visibility static field: {type.FullName}.{field.Name}");
                                 return val;
                             }
                         }
@@ -118,7 +157,7 @@ public static class VisibilityBridge
                             var val = prop.GetValue(null);
                             if (val != null && val.GetType().FullName == pluginTypeName)
                             {
-                                Log.Info($"[VisibilityBridge] Found plugin instance in Visibility static property: {type.FullName}.{prop.Name}");
+                                Log.Debug($"[VisibilityBridge] Found plugin instance in Visibility static property: {type.FullName}.{prop.Name}");
                                 return val;
                             }
                         }
@@ -127,7 +166,6 @@ public static class VisibilityBridge
                 }
             }
 
-            // 2. Directly search InstalledPlugins on PluginInterface
             var pi = Service.PluginInterface;
             if (pi != null)
             {
@@ -142,11 +180,10 @@ public static class VisibilityBridge
                             if (wrapper == null) continue;
                             var wrapperType = wrapper.GetType();
 
-                            // Use CrawlObject to recursively search this wrapper's fields
                             var res = CrawlObject(wrapper, pluginTypeName, visited, 0);
                             if (res != null)
                             {
-                                Log.Info($"[VisibilityBridge] Found plugin instance by crawling wrapper {wrapperType.FullName}");
+                                Log.Debug($"[VisibilityBridge] Found plugin instance by crawling wrapper {wrapperType.FullName}");
                                 return res;
                             }
                         }
@@ -154,73 +191,11 @@ public static class VisibilityBridge
                 }
             }
 
-            // 3. Search static fields/properties in Dalamud assembly
-            var dalamudAssembly = AppDomain.CurrentDomain.GetAssemblies().FirstOrDefault(a => a.GetName().Name == "Dalamud");
-            if (dalamudAssembly != null)
-            {
-                foreach (var type in dalamudAssembly.GetTypes())
-                {
-                    foreach (var field in type.GetFields(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static))
-                    {
-                        try
-                        {
-                            if (field.FieldType.IsPrimitive || field.FieldType == typeof(string) || field.FieldType.IsEnum) continue;
-                            var val = field.GetValue(null);
-                            if (val == null) continue;
-
-                            if (val.GetType().FullName == pluginTypeName)
-                            {
-                                Log.Info($"[VisibilityBridge] Found plugin instance in Dalamud static field: {type.FullName}.{field.Name}");
-                                return val;
-                            }
-
-                            if (val.GetType().Name.Contains("PluginManager") || val.GetType().Name.Contains("PluginLoader"))
-                            {
-                                Log.Info($"[VisibilityBridge] Found manager {val.GetType().FullName} in Dalamud static field: {type.FullName}.{field.Name}, crawling...");
-                                var res = CrawlObject(val, pluginTypeName, visited, 0);
-                                if (res != null) return res;
-                            }
-                        }
-                        catch {}
-                    }
-
-                    foreach (var prop in type.GetProperties(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static))
-                    {
-                        try
-                        {
-                            if (prop.PropertyType.IsPrimitive || prop.PropertyType == typeof(string) || prop.PropertyType.IsEnum) continue;
-                            var val = prop.GetValue(null);
-                            if (val == null) continue;
-
-                            if (val.GetType().FullName == pluginTypeName)
-                            {
-                                Log.Info($"[VisibilityBridge] Found plugin instance in Dalamud static property: {type.FullName}.{prop.Name}");
-                                return val;
-                            }
-
-                            if (val.GetType().Name.Contains("PluginManager") || val.GetType().Name.Contains("PluginLoader"))
-                            {
-                                Log.Info($"[VisibilityBridge] Found manager {val.GetType().FullName} in Dalamud static property: {type.FullName}.{prop.Name}, crawling...");
-                                var res = CrawlObject(val, pluginTypeName, visited, 0);
-                                if (res != null) return res;
-                            }
-                        }
-                        catch {}
-                    }
-                }
-            }
-
-            // 4. Fallback: crawl from PluginInterface
-            if (pi != null)
-            {
-                return CrawlObject(pi, pluginTypeName, visited, depth: 0);
-            }
-
             return null;
         }
         catch (Exception ex)
         {
-            Log.Info($"[VisibilityBridge] Error in FindPluginInstance: {ex}");
+            Log.Debug($"[VisibilityBridge] Error in FindPluginInstance: {ex.Message}");
             return null;
         }
     }
@@ -233,7 +208,6 @@ public static class VisibilityBridge
         var type = obj.GetType();
         if (type.FullName == targetTypeName) return obj;
 
-        // If it's a dictionary, crawl keys and values
         if (obj is System.Collections.IDictionary dict)
         {
             foreach (System.Collections.DictionaryEntry entry in dict)
@@ -250,7 +224,6 @@ public static class VisibilityBridge
                 }
             }
         }
-        // If it's a collection or array, crawl items
         else if (obj is System.Collections.IEnumerable enumerable && obj is not string)
         {
             foreach (var item in enumerable)
@@ -263,7 +236,6 @@ public static class VisibilityBridge
             }
         }
 
-        // Crawl instance fields
         var currType = type;
         while (currType != null)
         {
@@ -293,6 +265,7 @@ public static class VisibilityBridge
 
     private static object? GetVisibilityPluginInstance()
     {
+        if (!IsVisibilityInstalled()) return null;
         if (_visibilityPluginInstance != null) return _visibilityPluginInstance;
 
         var now = DateTime.Now;
@@ -303,19 +276,12 @@ public static class VisibilityBridge
         {
             if (_visibilityAssembly == null)
             {
-                var assemblies = AppDomain.CurrentDomain.GetAssemblies();
-                _visibilityAssembly = assemblies.FirstOrDefault(a => a.GetName().Name == "Visibility");
+                _visibilityAssembly = AppDomain.CurrentDomain.GetAssemblies()
+                    .FirstOrDefault(a => a.GetName().Name == VisibilityInternalName);
+
                 if (_visibilityAssembly == null)
                 {
-                    Log.Info("[VisibilityBridge] Visibility assembly not found in AppDomain. Current assemblies containing 'Vis':");
-                    foreach (var asm in assemblies)
-                    {
-                        var name = asm.GetName().Name;
-                        if (name != null && (name.Contains("Vis") || name.Contains("Plugin")))
-                        {
-                            Log.Info($"  - {name}");
-                        }
-                    }
+                    Log.Debug("[VisibilityBridge] Visibility assembly not found in AppDomain.");
                     return null;
                 }
             }
@@ -326,7 +292,7 @@ public static class VisibilityBridge
                            ?? _visibilityAssembly.GetType("Visibility.Plugin");
                 if (_pluginType == null)
                 {
-                    Log.Info($"[VisibilityBridge] VisibilityPlugin type not found in assembly {_visibilityAssembly.FullName}");
+                    Log.Debug($"[VisibilityBridge] VisibilityPlugin type not found in assembly {_visibilityAssembly.FullName}");
                     return null;
                 }
             }
@@ -336,26 +302,19 @@ public static class VisibilityBridge
             {
                 _visibilityPluginInstance = instance;
 
-                // Rebind all reflection metadata to the instance's ACTUAL type/assembly.
-                // Dalamud loads each plugin in its own AssemblyLoadContext, so the "Visibility"
-                // assembly we discovered by scanning the AppDomain can be a different load
-                // context than the live plugin instance. Both produce a Type named
-                // "Visibility.VisibilityPlugin", but a FieldInfo obtained from one cannot read
-                // an instance of the other ("Field 'configuration' ... is not a field on the
-                // target object"). Always trust the instance's own type.
                 _pluginType = instance.GetType();
                 _visibilityAssembly = _pluginType.Assembly;
-                ResetReflectionCaches(); // force re-resolve from the correct assembly
+                ResetReflectionCaches();
             }
             else
             {
-                Log.Info($"[VisibilityBridge] FindPluginInstance returned null for {_pluginType.FullName}");
+                Log.Debug($"[VisibilityBridge] FindPluginInstance returned null for {_pluginType.FullName}");
             }
             return instance;
         }
         catch (Exception ex)
         {
-            Log.Info($"[VisibilityBridge] Failed to get plugin instance: {ex}");
+            Log.Debug($"[VisibilityBridge] Failed to get plugin instance: {ex.Message}");
             return null;
         }
     }
@@ -369,7 +328,6 @@ public static class VisibilityBridge
 
         try
         {
-            // Resolve the member once; this runs every framework tick.
             _configMember ??= (MemberInfo?)_pluginType!.GetProperty("Configuration", BindingFlags.Public | BindingFlags.Instance)
                           ?? (MemberInfo?)_pluginType.GetProperty("Config", BindingFlags.Public | BindingFlags.Instance)
                           ?? (MemberInfo?)_pluginType.GetField("configuration", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)
@@ -381,14 +339,11 @@ public static class VisibilityBridge
         }
         catch (Exception ex)
         {
-            // Throttle: this runs every framework tick, so an unthrottled log floods the console.
             if ((DateTime.Now - _lastConfigErrorLogTime).TotalSeconds > 10.0)
             {
                 _lastConfigErrorLogTime = DateTime.Now;
                 Log.Debug($"[VisibilityBridge] Failed to get config instance: {ex.Message}");
             }
-            // The cached instance is likely stale (e.g. Visibility was reloaded); drop it and
-            // its reflection caches so the next lookup re-discovers the live instance.
             _visibilityPluginInstance = null;
             ResetReflectionCaches();
             return null;
@@ -402,9 +357,6 @@ public static class VisibilityBridge
     private static MemberInfo? _hidePlayerMember;
     private static bool _disabledMembersResolved;
 
-    // Reset every cached MemberInfo/Type so they are re-resolved against the live plugin.
-    // Called when the instance is (re)discovered or dropped, since a Visibility reload swaps
-    // the AssemblyLoadContext and invalidates all previously cached reflection metadata.
     private static void ResetReflectionCaches()
     {
         _configMember = null;
@@ -414,8 +366,6 @@ public static class VisibilityBridge
         _disabledMembersResolved = false;
     }
 
-    // True when Visibility is enabled AND configured to hide players in the current territory.
-    // Caches the member lookups because this is evaluated on every framework tick.
     private static bool IsVisibilityHidingPlayers(object config)
     {
         try
@@ -452,16 +402,12 @@ public static class VisibilityBridge
         catch (Exception ex)
         {
             Log.Debug($"[VisibilityBridge] Error checking visibility configuration state: {ex.Message}");
-            // On error, assume Visibility is hiding players so we still attempt to unhide.
             return true;
         }
     }
 
     private static DateTime _lastHidingDecisionLogTime = DateTime.MinValue;
 
-    // Throttled diagnostic: when we conclude Visibility is NOT hiding players (which triggers the
-    // tracked-player release), record why and against which type, so a schema/reflection mismatch
-    // is easy to spot instead of silently un-hiding everyone.
     private static void LogHidingDecision(string reason, object config)
     {
         if ((DateTime.Now - _lastHidingDecisionLogTime).TotalSeconds <= 10.0) return;
@@ -551,6 +497,7 @@ public static class VisibilityBridge
     public static unsafe void UnhidePlayer(IPlayerCharacter player, bool allowVoided, bool isEmote)
     {
         if (player == null) return;
+        if (!IsVisibilityInstalled()) return;
 
         var charStruct = (FFXIVClientStructs.FFXIV.Client.Game.Character.Character*)player.Address;
         var invisibleFlags = FFXIVClientStructs.FFXIV.Client.Game.Object.VisibilityFlags.Model | 
@@ -584,7 +531,6 @@ public static class VisibilityBridge
 
         try
         {
-            // Check if they are already in our temporary state tracking
             if (TempUnhiddenPlayers.TryGetValue(objectId, out var state))
             {
                 if (isEmote)
@@ -596,15 +542,9 @@ public static class VisibilityBridge
                     state.LastTargetedTime = DateTime.Now;
                 }
 
-                // Steady state: the IPC whitelist entry is sticky, so Visibility keeps the player
-                // shown with no per-frame work from us. Only re-assert (cheaply) if Visibility has
-                // actually re-hidden them - e.g. its runtime caches were cleared on a zone change.
-                // Detected by a direct render-flag read; no reflection, no per-frame logging.
                 if (charStruct != null && (charStruct->GameObject.RenderFlags & invisibleFlags) != 0)
                 {
                     IpcAddToWhitelist(name, (uint)homeworldId, WhitelistReason);
-                    // Re-override the void cache for voided players (see new-player path); must run
-                    // after AddToWhitelist's internal RemoveChecked, same ordering reason.
                     if (state.WasVoided)
                     {
                         ManipulateVisibilityCaches(objectId, unhide: true);
@@ -614,8 +554,6 @@ public static class VisibilityBridge
                 return;
             }
 
-            // Look up in Visibility plugin's VoidList (stored in config) to honor the
-            // "don't unhide voided players" option before whitelisting them.
             var voidListProp = config.GetType().GetProperty("VoidList");
             if (voidListProp == null) return;
 
@@ -623,7 +561,6 @@ public static class VisibilityBridge
 
             if (voidList == null) return;
 
-            // Check if player is voided/blocked
             object? matchingVoidItem = null;
             foreach (var item in voidList)
             {
@@ -656,29 +593,14 @@ public static class VisibilityBridge
 
             if (wasVoided && !allowVoided)
             {
-                // Player is on VoidList, but we are NOT allowed to unhide voided players.
                 return;
             }
 
-            // Whitelist via Visibility's official IPC. This is the only path that reliably keeps
-            // the player shown: AddToWhitelist adds the entry AND internally calls RemoveChecked +
-            // ShowPlayer, so Visibility's own per-frame check stops re-hiding them. The previous
-            // reflection re-implementation raced Visibility and lost (the player just flickered).
             if (!IpcAddToWhitelist(name, (uint)homeworldId, WhitelistReason))
             {
-                // Visibility/IPC unavailable - nothing we can do reliably; don't track a player
-                // we can't actually keep visible.
                 return;
             }
 
-            // Voided players need extra handling: Visibility checks the void list BEFORE the
-            // whitelist and hides+returns immediately, so an IPC whitelist alone can never show a
-            // voided looker (it just flickers). Override Visibility's in-memory void cache for this
-            // object so its void check short-circuits to "not voided", letting the whitelist show
-            // them. This leaves the user's persistent void list config untouched - the player is
-            // automatically re-voided once we stop (RestorePlayerHiddenState's RemoveChecked forces
-            // Visibility to re-derive the void status from config). Must run AFTER AddToWhitelist,
-            // whose internal RemoveChecked would otherwise wipe this override the same frame.
             if (wasVoided)
             {
                 ManipulateVisibilityCaches(objectId, unhide: true);
@@ -698,8 +620,6 @@ public static class VisibilityBridge
 
             Log.Info($"[VisibilityBridge] Temporarily {(wasVoided ? "un-voiding + whitelisting" : "whitelisting")} {name}@{world} (ObjectId: {objectId:X}) via Visibility IPC");
 
-            // Clear the invisible flags this frame too, so targeting/focus works immediately,
-            // before Visibility's own update runs.
             if (charStruct != null)
             {
                 charStruct->GameObject.RenderFlags &= ~invisibleFlags;
@@ -713,8 +633,7 @@ public static class VisibilityBridge
 
     public static unsafe void OnFrameworkUpdate()
     {
-        // 1. Guard check: if Visibility integration is disabled in Peeper config, restore any unhidden players and return.
-        if (!CordiPlugin.Plugin.Config.CordiPeep.UnhideFromVisibilityEffective)
+        if (!CordiPlugin.Plugin.Config.CordiPeep.UnhideFromVisibilityEffective || !IsVisibilityInstalled())
         {
             if (!TempUnhiddenPlayers.IsEmpty)
             {
@@ -726,8 +645,6 @@ public static class VisibilityBridge
             return;
         }
 
-        // Targeting/focusing a player must respect the same "Allow unhiding voided players" toggle
-        // as lookers - otherwise a voided player could be revealed simply by targeting them.
         bool allowVoided = CordiPlugin.Plugin.Config.CordiPeep.UnhideVoidedPlayers;
 
         var myTarget = Service.TargetManager.Target as IPlayerCharacter;
@@ -747,9 +664,6 @@ public static class VisibilityBridge
                              FFXIVClientStructs.FFXIV.Client.Game.Object.VisibilityFlags.Nameplate;
         bool isVisibilityDisabled = config != null && !IsVisibilityHidingPlayers(config);
 
-        // When Visibility is disabled/unchecked, release ONLY the players Cordi itself temporarily
-        // unhid. We must never touch the whole ObjectTable here: doing so pushes every player into
-        // Visibility's whitelist caches and forces everyone visible regardless of the user's config.
         if (config != null && isVisibilityDisabled && !TempUnhiddenPlayers.IsEmpty)
         {
             try
@@ -766,7 +680,6 @@ public static class VisibilityBridge
                     }
                 }
 
-                // Stop tracking everyone; Visibility is no longer hiding, so there is nothing to restore.
                 TempUnhiddenPlayers.Clear();
             }
             catch (Exception ex)
@@ -787,10 +700,8 @@ public static class VisibilityBridge
             {
                 bool stillLooking = false;
                 
-                // For lookers: check if they are still actively targeting us
                 if (state.LastTargetedTime.HasValue)
                 {
-                    // If they targeted us in the last 2 seconds, consider them still looking
                     if ((now - state.LastTargetedTime.Value).TotalSeconds < 2.0)
                     {
                         stillLooking = true;
@@ -806,7 +717,6 @@ public static class VisibilityBridge
                     }
                 }
 
-                // If WE target or focus them, keep them visible!
                 if ((myTarget != null && myTarget.GameObjectId == state.ObjectId) ||
                     (myFocus != null && myFocus.GameObjectId == state.ObjectId))
                 {
@@ -837,15 +747,12 @@ public static class VisibilityBridge
     public static void RestorePlayerHiddenState(ulong id)
     {
         if (!TempUnhiddenPlayers.TryRemove(id, out var state)) return;
+        if (!IsVisibilityInstalled()) return;
 
         try
         {
             Log.Info($"[VisibilityBridge] Restoring hidden state for {state.Name}@{state.World}");
 
-            // Remove our temporary whitelist entry via the official IPC. RemoveFromWhitelist only
-            // drops the config entry though - it does NOT re-hide. We additionally invalidate
-            // Visibility's runtime "checked" cache so its next frame re-evaluates this player and
-            // hides them again (since they're a normally-hidden player no longer whitelisted).
             IpcRemoveFromWhitelist(state.Name, state.HomeworldId);
             ClearVisibilityCache(id);
         }
@@ -984,6 +891,12 @@ public static class VisibilityBridge
 
     public static void DumpDebugInfo()
     {
+        if (!IsVisibilityInstalled())
+        {
+            Log.Info("[VisibilityBridge] Visibility plugin is not installed or not loaded.");
+            return;
+        }
+
         InspectPluginInterface();
 
         var config = GetVisibilityConfig();

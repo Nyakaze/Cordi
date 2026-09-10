@@ -92,7 +92,32 @@ public sealed partial class UiTheme
         return new UiNavHit { Clicked = clicked, Hovered = hovered };
     }
 
-    public UiNavHit NavListRow(string id, float width, UiNavItem item)
+    public float NavIconSize() => ImGui.GetTextLineHeight();
+
+    public float NavIconSpace(IDalamudTextureWrap? image) => image != null ? NavIconSize() + Gap(0.35f) : 0f;
+
+    public float NavIconSpace(UiNavItem item) => NavIconSpace(item.Image);
+
+    private void NavIcon(
+        ImDrawListPtr draw,
+        Vector2 min,
+        float size,
+        UiNavItem item,
+        Action<IDalamudTextureWrap?, Vector2, Vector2>? onImage)
+    {
+        if (item.Image == null) return;
+
+        var max = min + new Vector2(size, size);
+
+        onImage?.Invoke(item.Image, min, max);
+        draw.AddImageRounded(item.Image.Handle, min, max, Vector2.Zero, Vector2.One, 0xFFFFFFFF, Radius(0.35f));
+    }
+
+    public UiNavHit NavListRow(
+        string id,
+        float width,
+        UiNavItem item,
+        Action<IDalamudTextureWrap?, Vector2, Vector2>? onImage = null)
     {
         var height = ImGui.GetFrameHeight();
         var rowWidth = MathF.Max(width, 40f);
@@ -121,12 +146,25 @@ public sealed partial class UiTheme
                 ImGui.GetColorU32(Text));
         }
 
-        const string prefix = "# ";
-        var prefixSize = ImGui.CalcTextSize(prefix);
-        draw.AddText(new Vector2(min.X + padding, textY), ImGui.GetColorU32(item.Accent), prefix);
+        float leadWidth;
+
+        if (item.Image != null)
+        {
+            var iconSize = NavIconSize();
+
+            NavIcon(draw, new Vector2(min.X + padding, textY), iconSize, item, onImage);
+            leadWidth = iconSize + Gap(0.35f);
+        }
+        else
+        {
+            const string prefix = "# ";
+
+            draw.AddText(new Vector2(min.X + padding, textY), ImGui.GetColorU32(item.Accent), prefix);
+            leadWidth = ImGui.CalcTextSize(prefix).X;
+        }
 
         var nameColor = item.Active || item.Unread ? Text : MutedText;
-        var nameX = min.X + padding + prefixSize.X;
+        var nameX = min.X + padding + leadWidth;
         var name = Fit(item.Label, max.X - padding - NavBadgeSpace(item.BadgeText) - nameX);
 
         draw.AddText(new Vector2(nameX, textY), ImGui.GetColorU32(nameColor), name);
@@ -136,7 +174,12 @@ public sealed partial class UiTheme
         return new UiNavHit { Clicked = clicked, Hovered = hovered };
     }
 
-    public UiNavHit NavTab(string id, float width, UiNavItem item, float height = 0f)
+    public UiNavHit NavTab(
+        string id,
+        float width,
+        UiNavItem item,
+        float height = 0f,
+        Action<IDalamudTextureWrap?, Vector2, Vector2>? onImage = null)
     {
         if (height <= 0f) height = ImGui.GetFrameHeight();
         var origin = ImGui.GetCursorScreenPos();
@@ -163,12 +206,23 @@ public sealed partial class UiTheme
         }
 
         var badgeSpace = NavBadgeSpace(item.BadgeText);
-        var shown = Fit(item.Label, width - badgeSpace - PadX(0.6f));
+        var iconSpace = NavIconSpace(item);
+        var shown = Fit(item.Label, width - badgeSpace - iconSpace - PadX(0.6f));
         var textSize = ImGui.CalcTextSize(shown);
         var color = item.Active || item.Unread ? Text : MutedText;
-        var textX = min.X + MathF.Max(PadX(0.3f), (width - badgeSpace - textSize.X) * 0.5f);
+        var groupX = min.X + MathF.Max(PadX(0.3f), (width - badgeSpace - iconSpace - textSize.X) * 0.5f);
 
-        draw.AddText(new Vector2(textX, min.Y + (height - textSize.Y) * 0.5f), ImGui.GetColorU32(color), shown);
+        if (item.Image != null)
+        {
+            var iconSize = NavIconSize();
+
+            NavIcon(draw, new Vector2(groupX, min.Y + (height - iconSize) * 0.5f), iconSize, item, onImage);
+        }
+
+        draw.AddText(
+            new Vector2(groupX + iconSpace, min.Y + (height - textSize.Y) * 0.5f),
+            ImGui.GetColorU32(color),
+            shown);
 
         if (item.Unread && item.ShowUnreadDot && badgeSpace <= 0f)
         {

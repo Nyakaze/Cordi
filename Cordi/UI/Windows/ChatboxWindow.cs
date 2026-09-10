@@ -16,6 +16,7 @@ namespace Cordi.UI.Windows;
 public sealed partial class ChatboxWindow : ThemedWindow, IDisposable
 {
     private const string WindowId = "###CordiChatbox";
+    private const string CommandGuardPopupId = "##chatbox-command-guard";
 
     private readonly CordiPlugin _plugin;
     private readonly ChatboxInlineFlow _flow;
@@ -39,6 +40,12 @@ public sealed partial class ChatboxWindow : ThemedWindow, IDisposable
     private DateTime _highlightUntil = DateTime.MinValue;
     private int _scrollToBottomFrames = ScrollSettleFrames;
     private bool _focusInput;
+    private string? _pendingCommandText;
+    private ChatboxReplyRef? _pendingCommandReply;
+    private string _pendingCommandChannel = string.Empty;
+    private string _pendingCommandName = string.Empty;
+    private string _pendingCommandTarget = string.Empty;
+    private bool _commandGuardOpen;
 
     public ChatboxWindow(CordiPlugin plugin) : base(
         "Chatbox" + WindowId, ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse)
@@ -135,6 +142,8 @@ public sealed partial class ChatboxWindow : ThemedWindow, IDisposable
                 DrawBody(inputHeight);
                 break;
         }
+
+        DrawCommandGuard();
     }
 
     private void DrawWithTabs(float inputHeight)

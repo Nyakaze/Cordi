@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using Dalamud.Game.Text;
 
@@ -153,6 +154,37 @@ public static class ChatTypes
         }),
     };
 
+    private const string BattleGroup = "Battle";
+
+    private static readonly XivChatType[] GeneralExcluded =
+    {
+        XivChatType.GlamourNotifications,
+        XivChatType.SystemError,
+        XivChatType.PeriodicRecruitmentNotification,
+    };
+
+    public static List<XivChatType> GeneralChannelTypes()
+    {
+        var types = new List<XivChatType>();
+
+        foreach (var group in SelectableGroups)
+        {
+            if (string.Equals(group.Group, BattleGroup, StringComparison.Ordinal)) continue;
+
+            foreach (var type in group.Types)
+            {
+                if (Array.IndexOf(GeneralExcluded, type) >= 0) continue;
+                if (types.Contains(type)) continue;
+
+                types.Add(type);
+
+                if (type == XivChatType.TellIncoming) types.Add(XivChatType.TellOutgoing);
+            }
+        }
+
+        return types;
+    }
+
     public static int LinkshellSlot(XivChatType type) => Array.IndexOf(Linkshells, type);
 
     public static int CrossWorldLinkshellSlot(XivChatType type) => Array.IndexOf(CrossWorldLinkshells, type);
@@ -160,6 +192,9 @@ public static class ChatTypes
     public static bool IsTell(XivChatType type) => type is XivChatType.TellIncoming or XivChatType.TellOutgoing;
 
     public static bool IsSendable(XivChatType type) => Array.IndexOf(Sendable, type) >= 0;
+
+    public static bool IsPublic(XivChatType type) =>
+        type is XivChatType.Say or XivChatType.Shout or XivChatType.Yell;
 
     public static bool IsGameMaster(XivChatType type) =>
         Array.IndexOf(GameMasterLinkshells, type) >= 0

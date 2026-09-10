@@ -180,6 +180,7 @@ public class ChatboxConfig : IWindowChromeConfig
     public const int InputBufferLength = 2048;
 
     public bool KeepFocusAfterSend { get; set; } = true;
+    public bool WarnOnMissingSlash { get; set; } = true;
     public bool SplitLongMessages { get; set; } = true;
     public int MaxMessagesPerChannel { get; set; } = 5000;
     public XivChatType LastSendChatType { get; set; } = XivChatType.Say;

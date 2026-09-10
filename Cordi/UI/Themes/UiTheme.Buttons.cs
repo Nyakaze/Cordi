@@ -66,6 +66,42 @@ public sealed partial class UiTheme
         return IconAction(id, pos, FontAwesomeIcon.PowerOff, color, tooltip, width, height, color);
     }
 
+    public void ButtonRow(float available, params UiBarButton[] buttons)
+    {
+        if (buttons.Length == 0) return;
+
+        var width = MathF.Max(available, Scaled(80f));
+        var gap = Gap();
+        var height = Scaled(ControlHeight);
+        var used = 0f;
+        var started = false;
+
+        foreach (var button in buttons)
+        {
+            var buttonWidth = MathF.Min(Scaled(button.Width), width);
+
+            if (started && used + gap + buttonWidth <= width)
+            {
+                SameLineGap();
+                used += gap + buttonWidth;
+            }
+            else
+            {
+                used = buttonWidth;
+                started = true;
+            }
+
+            var clicked = button.Primary
+                ? PrimaryButton(button.Label, new Vector2(buttonWidth, height))
+                : SecondaryButton(button.Label, new Vector2(buttonWidth, height));
+
+            if (!string.IsNullOrEmpty(button.Tooltip) && ImGui.IsItemHovered())
+                Tooltip(button.Tooltip);
+
+            if (clicked) button.OnClick?.Invoke();
+        }
+    }
+
     public bool PrimaryButton(string label, Vector2 size = default)
     {
         using var color = ImRaii.PushColor(ImGuiCol.Button, Accent)

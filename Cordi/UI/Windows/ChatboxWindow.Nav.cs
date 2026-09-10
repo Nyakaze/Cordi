@@ -92,21 +92,25 @@ public sealed partial class ChatboxWindow
         var offset = indicatorSpace + MathF.Max(0f, available - indicatorSpace - size) * 0.5f;
         ImGui.SetCursorPosX(ImGui.GetCursorPosX() + offset);
 
-        Chatbox.ImageCache.Request(channel.Config.IconUrl);
-
-        var texture = string.IsNullOrWhiteSpace(channel.Config.IconUrl)
-            ? null
-            : Chatbox.ImageCache.Get(channel.Config.IconUrl);
-
         var hit = _theme.NavRailTile(
             $"##rail-{channel.Id}",
             size,
-            NavVisual(channel, isActive, RailLabel(channel), texture),
+            NavVisual(channel, isActive, RailLabel(channel), ChannelIcon(channel)),
             AnimatedTextureWrap.MarkVisible);
 
         DrawChannelContext(channel, hit.Hovered);
 
         if (hit.Clicked) Activate(channel);
+    }
+
+    private IDalamudTextureWrap? ChannelIcon(ChatboxChannelState channel)
+    {
+        var url = channel.Config.IconUrl;
+        if (string.IsNullOrWhiteSpace(url)) return null;
+
+        Chatbox.ImageCache.Request(url);
+
+        return Chatbox.ImageCache.Get(url);
     }
 
     private UiNavItem NavVisual(
@@ -150,7 +154,8 @@ public sealed partial class ChatboxWindow
         var hit = _theme.NavListRow(
             $"##row-{channel.Id}",
             ImGui.GetContentRegionAvail().X,
-            NavVisual(channel, isActive, channel.Config.Name));
+            NavVisual(channel, isActive, channel.Config.Name, ChannelIcon(channel)),
+            AnimatedTextureWrap.MarkVisible);
 
         DrawChannelContext(channel, hit.Hovered);
 
@@ -184,7 +189,10 @@ public sealed partial class ChatboxWindow
                 label = TabLabel(item.Channel);
                 width = fixedWidth > 1f
                     ? fixedWidth
-                    : ImGui.CalcTextSize(label).X + _theme.PadX(1.4f) + BadgeSpace(item.Channel);
+                    : ImGui.CalcTextSize(label).X
+                      + _theme.PadX(1.4f)
+                      + BadgeSpace(item.Channel)
+                      + _theme.NavIconSpace(ChannelIcon(item.Channel));
             }
 
             width = MathF.Min(width, available);
@@ -260,7 +268,11 @@ public sealed partial class ChatboxWindow
 
     private void DrawNavTab(ChatboxChannelState channel, bool isActive, string label, float width)
     {
-        var hit = _theme.NavTab($"##tab-{channel.Id}", width, NavVisual(channel, isActive, label));
+        var hit = _theme.NavTab(
+            $"##tab-{channel.Id}",
+            width,
+            NavVisual(channel, isActive, label, ChannelIcon(channel)),
+            onImage: AnimatedTextureWrap.MarkVisible);
 
         DrawChannelContext(channel, hit.Hovered);
 
