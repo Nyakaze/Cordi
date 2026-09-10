@@ -11,11 +11,14 @@ using Cordi.UI.Themes;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Game.Text;
 using Dalamud.Interface;
+using FFXIVClientStructs.FFXIV.Client.UI;
 
 namespace Cordi.UI.Windows;
 
 public sealed partial class ChatboxWindow
 {
+    private const uint InputFocusSoundEffect = 35;
+
     private void DrawInputBar(ChatboxChannelState channel)
     {
         var startY = ImGui.GetCursorPosY();
@@ -108,6 +111,8 @@ public sealed partial class ChatboxWindow
             CancelReply();
 
         if (!inputActive && !_inputWasActive && _pendingToken == null) _autocomplete.Reset();
+
+        if (inputActive && !_inputWasActive) OnInputFocused();
 
         _inputWasActive = inputActive;
 
@@ -213,8 +218,27 @@ public sealed partial class ChatboxWindow
         _pendingToken = null;
         _replyTarget = null;
         _input = string.Empty;
-        if (Config.KeepFocusAfterSend) _focusInput = true;
+
+        if (Config.KeepFocusAfterSend)
+        {
+            _focusInput = true;
+            _silentFocus = true;
+        }
+
         _scrollToBottomFrames = ScrollSettleFrames;
+    }
+
+    private unsafe void OnInputFocused()
+    {
+        if (_silentFocus)
+        {
+            _silentFocus = false;
+            return;
+        }
+
+        if (!Config.PlaySoundOnInputFocus) return;
+
+        UIGlobals.PlaySoundEffect(InputFocusSoundEffect);
     }
 
     private bool NeedsCommandConfirmation(XivChatType sendType, string text, out string command)

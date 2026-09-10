@@ -323,7 +323,6 @@ public sealed partial class ChatboxWindow
         _scrollToSeq = 0;
         _scrollToBottomFrames = ScrollSettleFrames;
         ScrollToUnread(channel, dividerSeq);
-        _focusInput = true;
     }
 
     private static string RailLabel(ChatboxChannelState channel)

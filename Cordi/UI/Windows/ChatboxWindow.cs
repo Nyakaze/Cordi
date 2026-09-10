@@ -31,6 +31,7 @@ public sealed partial class ChatboxWindow : ThemedWindow, IDisposable
     private int _pendingStart;
     private int _pendingLength;
     private bool _inputWasActive;
+    private bool _silentFocus;
     private float _measuredInputHeight;
     private bool _clearSelection;
     private Vector2 _inputMin;

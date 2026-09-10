@@ -66,6 +66,12 @@ public partial class ChatboxTab
                 innerWidth, () => Cfg.KeepFocusAfterSend, v => Cfg.KeepFocusAfterSend = v);
 
             DrawToggleRow(
+                "chatbox-focus-sound", FontAwesomeIcon.VolumeUp,
+                "Play Sound on Focus",
+                "Plays the game's chat click when the input field gains focus, like the vanilla chat log.",
+                innerWidth, () => Cfg.PlaySoundOnInputFocus, v => Cfg.PlaySoundOnInputFocus = v);
+
+            DrawToggleRow(
                 "chatbox-split-messages", FontAwesomeIcon.Cut,
                 "Split long Messages",
                 $"Messages longer than {ChatboxConfig.MaxMessageLength} characters are sent in several parts. Off cuts them off instead.",
