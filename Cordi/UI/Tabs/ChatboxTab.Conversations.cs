@@ -1,24 +1,13 @@
 using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Numerics;
 using Cordi.Configuration;
 using Cordi.Services.Chatbox;
 using Cordi.UI.Themes;
-using Dalamud.Bindings.ImGui;
 using Dalamud.Interface;
 
 namespace Cordi.UI.Tabs;
 
 public partial class ChatboxTab
 {
-    private const float ConversationRowControlBand = 220f;
-
-    private string conversationDraftName = string.Empty;
-    private string conversationDraftWorld = string.Empty;
-    private string conversationFilter = string.Empty;
-    private string? pendingConversationRemoveId;
-
     private ConversationSettings Ccfg => plugin.Config.Chatbox.Conversations;
 
     public void DrawConversations()
@@ -33,12 +22,11 @@ public partial class ChatboxTab
         if (!Ccfg.Enabled)
             return;
 
-        DrawConversationStartCard();
-        DrawConversationListCard();
         DrawConversationRoutingCard();
         DrawConversationAlertCard();
         DrawConversationAppearanceCard();
         DrawConversationHistoryCard();
+        DrawConversationListCard();
 
         ApplyPendingConversationChanges();
     }
@@ -66,272 +54,6 @@ public partial class ChatboxTab
         Ccfg.Enabled = value;
         Save();
         plugin.Chatbox.RefreshConversationChannels();
-    }
-
-    private void DrawConversationStartCard() =>
-        Card.Draw(
-            "conversation-start",
-            innerWidth =>
-            {
-                DrawConversationDraftRow(
-                    "conversation-draft-name",
-                    FontAwesomeIcon.User,
-                    "Character name",
-                    "The full name of the character you want to write to.",
-                    innerWidth,
-                    () => conversationDraftName,
-                    value => conversationDraftName = value,
-                    "Firstname Lastname");
-
-                DrawConversationDraftRow(
-                    "conversation-draft-world",
-                    FontAwesomeIcon.Globe,
-                    "World",
-                    "Leave empty for a character on your own world.",
-                    innerWidth,
-                    () => conversationDraftWorld,
-                    value => conversationDraftWorld = value,
-                    "Omega");
-
-                bool ready = conversationDraftName.Trim().Length > 0;
-
-                DrawActionRow(
-                    "conversation-draft-open",
-                    FontAwesomeIcon.PaperPlane,
-                    ready ? Ccfg.Color : theme.MutedText,
-                    ready ? $"Open a tab for {DraftLabel()}" : "Nothing to open yet",
-                    ready
-                        ? "Creates the tab and loads whatever history Cordi already has for them."
-                        : "Enter a character name first.",
-                    "Open",
-                    innerWidth,
-                    StartDraftConversation);
-
-                DrawToggleRow(
-                    "conversation-context-menu",
-                    FontAwesomeIcon.MousePointer,
-                    "Add \"Message\" to the game context menu",
-                    "Right-click a player anywhere in the game to open a conversation with them.",
-                    innerWidth,
-                    () => Ccfg.ContextMenuEntry,
-                    value => Ccfg.ContextMenuEntry = value,
-                    Ccfg.Color);
-            },
-            "Start a Conversation");
-
-    private string DraftLabel()
-    {
-        var name = conversationDraftName.Trim();
-        var world = conversationDraftWorld.Trim();
-
-        return world.Length == 0 ? name : $"{name}@{world}";
-    }
-
-    private void StartDraftConversation()
-    {
-        var name = conversationDraftName.Trim();
-        if (name.Length == 0)
-            return;
-
-        var state = plugin.Chatbox.OpenConversation(name, conversationDraftWorld.Trim(), true);
-        if (state == null)
-            return;
-
-        if (!plugin.Chatbox.IsConversationDetached(state.Id))
-            plugin.ChatboxWindow.IsOpen = true;
-
-        conversationDraftName = string.Empty;
-        conversationDraftWorld = string.Empty;
-    }
-
-    private void DrawConversationDraftRow(
-        string id,
-        FontAwesomeIcon icon,
-        string title,
-        string subtitle,
-        float rowWidth,
-        Func<string> get,
-        Action<string> set,
-        string hint)
-    {
-        string current = get();
-
-        Row.Draw(
-            id: id,
-            icon: icon,
-            iconColor: current.Trim().Length == 0 ? theme.MutedText : theme.Accent,
-            title: title,
-            subtitle: subtitle,
-            controlWidth: 280f,
-            drawControl: (pos, width) =>
-            {
-                string value = current;
-
-                theme.PushInputScope();
-                if (theme.TextInput($"##{id}-input", pos, width, ref value, 64, hint))
-                    set(value);
-                theme.PopInputScope();
-            },
-            rowWidth: rowWidth);
-    }
-
-    private void DrawConversationListCard()
-    {
-        var all = Ccfg.Items;
-        var matches = FilteredConversations();
-
-        Card.Draw(
-            "conversation-list",
-            innerWidth =>
-            {
-                DrawConversationFilterRow(innerWidth);
-
-                if (all.Count == 0)
-                {
-                    ImGui.TextColored(theme.FaintText, "No conversations yet. Open one above, or wait for a tell.");
-                    return;
-                }
-
-                if (matches.Count == 0)
-                {
-                    ImGui.TextColored(theme.FaintText, $"No conversation matches \"{conversationFilter.Trim()}\".");
-                    return;
-                }
-
-                foreach (var entry in matches)
-                    DrawConversationListRow(entry, innerWidth);
-            },
-            "Conversations",
-            anchor => DrawCountChip(anchor, all.Count == 1 ? "1 person" : $"{all.Count} people"));
-    }
-
-    private void DrawConversationFilterRow(float rowWidth)
-    {
-        if (Ccfg.Items.Count == 0)
-            return;
-
-        DrawConversationDraftRow(
-            "conversation-filter",
-            FontAwesomeIcon.Search,
-            "Find a conversation",
-            "History is kept forever, so the list grows. Filter it by name or world.",
-            rowWidth,
-            () => conversationFilter,
-            value => conversationFilter = value,
-            "Search");
-    }
-
-    private List<ConversationConfig> FilteredConversations()
-    {
-        var ordered = Ccfg.Items
-            .OrderByDescending(c => c.Pinned)
-            .ThenByDescending(c => c.Open)
-            .ThenByDescending(c => c.LastActivityTicks)
-            .ThenBy(c => c.Name, StringComparer.OrdinalIgnoreCase);
-
-        var needle = conversationFilter.Trim();
-
-        if (needle.Length == 0)
-            return ordered.ToList();
-
-        return ordered
-            .Where(c => c.Label.Contains(needle, StringComparison.OrdinalIgnoreCase))
-            .ToList();
-    }
-
-    private void DrawConversationListRow(ConversationConfig entry, float rowWidth)
-    {
-        Row.Draw(
-            id: $"conversation-{entry.Id}",
-            icon: entry.Pinned ? FontAwesomeIcon.Thumbtack : FontAwesomeIcon.Comment,
-            iconColor: Ccfg.Color,
-            title: entry.Label,
-            subtitle: $"Last message {DescribeConversationAge(entry.LastActivityTicks)}",
-            controlWidth: ConversationRowControlBand,
-            drawControl: (pos, width) =>
-            {
-                float size = theme.Scaled(UiTheme.ActionButtonSize);
-                float step = (width - size) / 3f;
-
-                if (theme.IconAction(
-                        $"conversation-pin-{entry.Id}",
-                        pos,
-                        FontAwesomeIcon.Thumbtack,
-                        UiTheme.TileAmber,
-                        entry.Pinned ? "Unpin" : "Pin to the top",
-                        restColor: entry.Pinned ? UiTheme.TileAmber : null))
-                {
-                    entry.Pinned = !entry.Pinned;
-                    Save();
-                }
-
-                var openPos = new Vector2(pos.X + step, pos.Y);
-
-                if (theme.IconAction(
-                        $"conversation-open-{entry.Id}",
-                        openPos,
-                        FontAwesomeIcon.ExternalLinkAlt,
-                        UiTheme.TileGreen,
-                        "Open the tab"))
-                {
-                    plugin.Chatbox.OpenConversationFor(entry.Name, entry.World);
-                }
-
-                var clearPos = new Vector2(pos.X + step * 2f, pos.Y);
-
-                if (theme.IconAction(
-                        $"conversation-clear-{entry.Id}",
-                        clearPos,
-                        FontAwesomeIcon.Eraser,
-                        UiTheme.TileAmber,
-                        "Clear this conversation's history"))
-                {
-                    plugin.Chatbox.ForgetChannel(entry.Id);
-                }
-
-                var removePos = new Vector2(pos.X + width - size, pos.Y);
-
-                if (theme.DeleteAction($"conversation-del-{entry.Id}", removePos, "Forget this person and their history"))
-                    pendingConversationRemoveId = entry.Id;
-            },
-            rowWidth: rowWidth);
-    }
-
-    private static string DescribeConversationAge(long ticks)
-    {
-        if (ticks <= 0)
-            return "never";
-
-        var age = DateTime.UtcNow - new DateTime(ticks, DateTimeKind.Utc);
-
-        if (age < TimeSpan.Zero)
-            return "just now";
-
-        if (age.TotalMinutes < 1)
-            return "just now";
-
-        if (age.TotalHours < 1)
-            return $"{(int)age.TotalMinutes} min ago";
-
-        if (age.TotalDays < 1)
-            return $"{(int)age.TotalHours} h ago";
-
-        if (age.TotalDays < 30)
-            return $"{(int)age.TotalDays} d ago";
-
-        return new DateTime(ticks, DateTimeKind.Utc).ToLocalTime().ToString("d");
-    }
-
-    private void ApplyPendingConversationChanges()
-    {
-        if (pendingConversationRemoveId == null)
-            return;
-
-        var id = pendingConversationRemoveId;
-        pendingConversationRemoveId = null;
-
-        plugin.Chatbox.RemoveConversation(id);
-        plugin.Chatbox.ForgetChannel(id);
     }
 
     private void DrawConversationRoutingCard() =>

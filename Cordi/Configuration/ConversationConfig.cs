@@ -52,8 +52,7 @@ public class ConversationSettings
     public bool AutoOpenOutgoing { get; set; } = true;
     public bool AutoFocusOutgoing { get; set; } = true;
     public bool ReopenOnLogin { get; set; }
-    public bool OpenInOwnWindow { get; set; }
-    public bool ContextMenuEntry { get; set; } = true;
+    public bool OpenInOwnWindow { get; set; } = true;
     public bool SuppressGameLog { get; set; }
     public ConversationWindowChrome Window { get; set; } = new();
 
@@ -78,7 +77,7 @@ public class ConversationSettings
     public bool NoFlashing { get; set; }
     public int FlashPeriodMs { get; set; } = 1000;
 
-    public bool FlashTaskbar { get; set; }
+    public bool FlashTaskbar { get; set; } = true;
     public bool FocusGameWindow { get; set; }
 
     public List<ConversationConfig> Items { get; set; } = new();

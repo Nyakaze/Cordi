@@ -6,7 +6,7 @@ namespace Cordi.Services.Chatbox;
 
 public sealed partial class ChatboxService
 {
-    private const uint ContextMenuPrefixRgb = 0x241D34;
+    private const uint ContextMenuPrefixRgb = 0x5534C2;
 
     private static ushort? _contextMenuPrefixColor;
 
@@ -18,7 +18,7 @@ public sealed partial class ChatboxService
     {
         try
         {
-            if (!Config.Enabled || !ConversationSettings.Enabled || !ConversationSettings.ContextMenuEntry) return;
+            if (!Config.Enabled || !ConversationSettings.Enabled) return;
             if (args.MenuType != ContextMenuType.Default) return;
             if (args.Target is not MenuTargetDefault target) return;
 

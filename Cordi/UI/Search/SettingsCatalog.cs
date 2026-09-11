@@ -61,10 +61,27 @@ public static class SettingsCatalog
             ("", "Notification channel", "tell notification target"),
             ("", "Conversation cooldown", "tell notification seconds"));
 
-        Page(index, PageIds.ActiveConversations, "Active Conversations", FontAwesomeIcon.Comments,
-            ("", "Tell forum channel", "conversation forum thread mapping"),
-            ("", "Conversations", "conversation thread correspondent unlink"),
-            ("", "Sort conversations", "sort order name world message count"));
+        Page(index, PageIds.Conversations, "Conversations", FontAwesomeIcon.Envelope,
+            ("", "Conversations", "tell dm direct message whisper per person"),
+            ("", "Find a conversation", "filter search correspondent"),
+            ("", "Sort the list", "sort order recent name world message count"),
+            ("", "Discord thread", "conversation forum thread mapping unlink"),
+            ("Routing", "Where tells go", "conversations only channels both routing"),
+            ("Routing", "Open on an incoming tell", "auto open tab"),
+            ("Routing", "Open on an outgoing tell", "auto open tab"),
+            ("Routing", "Focus the input after an outgoing tell", "keyboard cursor"),
+            ("Routing", "Reopen tabs on login", "restore conversations startup"),
+            ("Routing", "Hide tells from the game chat log", "suppress game log"),
+            ("Alerts", "Play a sound on a new tell", "conversation sound effect custom wav mp3"),
+            ("Alerts", "Mute the game's own tell sound", "silence tell"),
+            ("Alerts", "Flash the game in the Windows taskbar", "taskbar flash alert"),
+            ("Alerts", "Bring the game to the foreground", "focus game window"),
+            ("Appearance", "Every conversation gets its own window", "pop out separate window"),
+            ("Appearance", "Section label", "channel list heading"),
+            ("Appearance", "Conversation colour", "tab rail tile colour"),
+            ("Appearance", "Flash the tab while unread", "pulse blink accent"),
+            ("History", "Messages shown on open", "history window"),
+            ("History", "Messages per \"Load older\"", "history page size"));
 
         Page(index, "chats/Custom Avatars", "Custom Avatars", FontAwesomeIcon.UserCircle,
             ("", "Character Avatars", "avatar portrait webhook image"));

@@ -9,6 +9,7 @@ public enum ConversationSort
     Name,
     World,
     MessageCount,
+    Recent,
 }
 
 [Serializable]
