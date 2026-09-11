@@ -21,6 +21,7 @@ public class Configuration : IPluginConfiguration
     public DiscordConfig Discord { get; set; } = new();
     public ChatConfig Chat { get; set; } = new();
     public ChatboxConfig Chatbox { get; set; } = new();
+    public TranslationConfig Translation { get; set; } = new();
     public DiscordActivityConfig ActivityConfig { get; set; } = new();
     public PartyConfig Party { get; set; } = new();
     public RememberMeConfig RememberMe { get; set; } = new();
@@ -50,6 +51,7 @@ public class Configuration : IPluginConfiguration
         this.pluginInterface = pluginInterface;
         MigrateConfig();
         MigrateAudioDevice();
+        Translation.Normalize();
         BuildCache();
 
         // Initialize advertisement filter defaults on first load

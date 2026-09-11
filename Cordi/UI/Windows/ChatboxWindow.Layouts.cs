@@ -30,6 +30,7 @@ public sealed partial class ChatboxWindow
         ImGui.BeginGroup();
         if (!grouped) DrawHeaderLine(message);
         DrawContent(message, width - gutter, TextColorFor(message), null);
+        DrawTranslationLine(message, width - gutter);
         DrawAttachments(message, width - gutter);
         DrawEmbeds(message, width - gutter);
         ImGui.EndGroup();
@@ -52,6 +53,7 @@ public sealed partial class ChatboxWindow
             DrawTellDirectionInline(message);
             DrawAuthorNameInline(message);
         });
+        DrawTranslationLine(message, width);
         DrawAttachments(message, width);
         DrawEmbeds(message, width);
     }

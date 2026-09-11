@@ -11,6 +11,7 @@ using Cordi.UI.Themes;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Game.Text;
 using Dalamud.Interface;
+using Dalamud.Interface.Utility.Raii;
 using FFXIVClientStructs.FFXIV.Client.UI;
 
 namespace Cordi.UI.Windows;
@@ -37,9 +38,15 @@ public sealed partial class ChatboxWindow
             return;
         }
 
+        DrainOutgoingTranslation();
+
         var spacing = _theme.Gap(0.4f);
         var buttonWidth = ImGui.GetFrameHeight();
-        var buttons = Config.ShowEmojiPicker ? 1 : 0;
+        var translateVisible = OutgoingButtonVisible;
+
+        var reserved = 0f;
+        if (translateVisible) reserved += spacing + IconButtonWidth(FontAwesomeIcon.Language);
+        if (Config.ShowEmojiPicker) reserved += spacing + IconButtonWidth(FontAwesomeIcon.Smile);
 
         ImGui.SetCursorPosY(ImGui.GetCursorPosY() + _theme.PickerCaptionHeight());
 
@@ -54,9 +61,7 @@ public sealed partial class ChatboxWindow
         DrawSendTargetPicker(channel, buttonWidth);
         ImGui.SameLine(0, spacing);
 
-        ImGui.SetNextItemWidth(MathF.Max(
-            80f,
-            ImGui.GetContentRegionAvail().X - buttonWidth * buttons - spacing * buttons));
+        ImGui.SetNextItemWidth(MathF.Max(80f, ImGui.GetContentRegionAvail().X - reserved));
 
         if (_focusInput)
         {
@@ -89,12 +94,15 @@ public sealed partial class ChatboxWindow
         _inputWidth = ImGui.GetItemRectSize().X;
 
         DrawInlineEmotes(inputMin, inputMax);
+        DrawOutgoingMarker(inputMin, inputMax);
 
         if (submitted && _autocomplete.HasMatches)
         {
             QueueCompletion(_autocomplete.Accept());
             submitted = false;
         }
+
+        if (translateVisible) DrawOutgoingButton(spacing);
 
         if (Config.ShowEmojiPicker)
         {
@@ -117,6 +125,13 @@ public sealed partial class ChatboxWindow
         _inputWasActive = inputActive;
 
         if (submitted) Submit(channel);
+    }
+
+    private static float IconButtonWidth(FontAwesomeIcon icon)
+    {
+        using var font = ImRaii.PushFont(UiBuilder.IconFont);
+
+        return ImGui.CalcTextSize(icon.ToIconString()).X + ImGui.GetStyle().FramePadding.X * 2f;
     }
 
     private void DrawSendTargetPicker(ChatboxChannelState channel, float size)

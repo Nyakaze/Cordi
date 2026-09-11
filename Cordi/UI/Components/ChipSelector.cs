@@ -42,7 +42,8 @@ public sealed class ChipSelector
         Action<IReadOnlyList<string>, bool>? onSetMany = null,
         bool advanced = false,
         Action<bool>? onViewChanged = null,
-        Func<string, bool>? isPartial = null)
+        Func<string, bool>? isPartial = null,
+        string noun = "chat type")
     {
         var origin = ImGui.GetCursorScreenPos();
         float controlHeight = theme.Scaled(UiTheme.ControlHeight);
@@ -56,7 +57,7 @@ public sealed class ChipSelector
         float clearWidth = MiniWidth("Clear all");
         float searchWidth = MathF.Max(theme.Scaled(120f), width - clearWidth - theme.Gap());
 
-        theme.TextInput($"##chip-search-{id}", origin, searchWidth, ref search, SearchMaxLength, "Search chat types");
+        theme.TextInput($"##chip-search-{id}", origin, searchWidth, ref search, SearchMaxLength, $"Search {noun}s");
         searches[id] = search;
 
         if (MiniButton(
@@ -120,7 +121,7 @@ public sealed class ChipSelector
             using (ImRaii.PushColor(ImGuiCol.Text, theme.FaintText))
             {
                 ImGui.SetCursorScreenPos(new Vector2(origin.X, y));
-                ImGui.TextUnformatted($"No chat type matches \"{search}\".");
+                ImGui.TextUnformatted($"No {noun} matches \"{search}\".");
             }
             y += ImGui.GetTextLineHeight();
             theme.ApplyFontScale();

@@ -332,6 +332,8 @@ public sealed partial class ChatboxService
 
         Persist(entry, target);
 
+        Translator.Consider(entry);
+
         MessageAdded?.Invoke(entry);
 
         if (notify && !entry.IsSelf && !target.Config.MuteNotifications)

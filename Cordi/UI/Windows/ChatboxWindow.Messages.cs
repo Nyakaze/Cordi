@@ -41,6 +41,9 @@ public sealed partial class ChatboxWindow
     {
         _drawChannel = channel.Config;
 
+        HookTranslation();
+        DrainTranslationDirty();
+
         channel.SnapshotInto(_drawBuffer);
         if (_drawBuffer.Count == 0)
         {
@@ -167,7 +170,8 @@ public sealed partial class ChatboxWindow
                 Config.CompactSystemMessages,
                 Config.JumboLoneEmotes,
                 ImGuiHelpers.GlobalScale,
-                ImGui.GetTextLineHeight()));
+                ImGui.GetTextLineHeight()),
+            TranslationMetricsKey());
 
         if (key != _rowMetricsKey)
         {
@@ -312,6 +316,8 @@ public sealed partial class ChatboxWindow
         DrawRowBackground(draw, message, rowMin, rowMax, hovered);
         draw.ChannelsSetCurrent(2);
 
+        if (hovered && !concealed) DrawTranslationTooltip(message);
+
         if (hovered && Config.ShowHoverToolbar && !message.IsSystem && !concealed)
             DrawHoverToolbar(message, rowMin, rowMax);
 
@@ -339,7 +345,9 @@ public sealed partial class ChatboxWindow
     {
         _flow.Begin(MathF.Max(wrapWidth, 60f), MeasureLineHeight(message), Config.LineSpacing * ImGuiHelpers.GlobalScale);
         prefix?.Invoke();
-        DrawSegments(message, textColor, EmoteSizeFor(message));
+
+        if (ReplacesContent(message)) DrawTranslatedContent(message);
+        else DrawSegments(message, textColor, EmoteSizeFor(message));
 
         if (_rowRepeats > 1) _flow.Text($"  ({_rowRepeats}x)", _theme.FaintText);
 

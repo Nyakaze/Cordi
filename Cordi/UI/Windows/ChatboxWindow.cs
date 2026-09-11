@@ -324,6 +324,7 @@ public sealed partial class ChatboxWindow : ThemedWindow, IDisposable
 
     public void Dispose()
     {
+        UnhookTranslation();
         _emoteFont.Dispose();
     }
 }

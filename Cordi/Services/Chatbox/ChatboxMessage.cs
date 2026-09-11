@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Numerics;
+using Cordi.Services.Translation;
 using Dalamud.Game.Text;
 using Dalamud.Game.Text.SeStringHandling;
 
@@ -112,6 +113,12 @@ public sealed class ChatboxMessage
     public bool OnlyEmotes { get; set; }
     public bool SegmentsReady { get; set; }
     public bool FilteredAsAd { get; set; }
+
+    public TranslationState TranslationState { get; set; }
+    public string? TranslatedText { get; set; }
+    public string? TranslationSource { get; set; }
+    public string? TranslationProvider { get; set; }
+    public bool HasTranslation => TranslationState == TranslationState.Translated && !string.IsNullOrEmpty(TranslatedText);
 
     public string DisplayName(Configuration.ChatboxNameStyle style)
     {

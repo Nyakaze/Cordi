@@ -7,6 +7,7 @@ using Cordi.Configuration;
 using Cordi.Core;
 using Cordi.Domain;
 using Cordi.Services.Features;
+using Cordi.Services.Translation;
 using Dalamud.Game.Text;
 
 namespace Cordi.Services.Chatbox;
@@ -38,6 +39,7 @@ public sealed partial class ChatboxService : IDisposable
         EmbedCache = new ChatboxEmbedCache(Database, () => plugin.Config.Chatbox.EmbedCacheDays);
         Emotes = new ChatboxEmoteLibrary(Database, () => plugin.Config.Chatbox.SeenEmoteLimit);
         _sequence = Store.HighestSeq();
+        Translator = new TranslationService(configDirectory, () => plugin.Config.Translation, plugin.LogService);
 
         RebuildChannels();
         LoadHiddenEmbeds();
@@ -85,6 +87,8 @@ public sealed partial class ChatboxService : IDisposable
     public ChatboxEmbedCache EmbedCache { get; }
 
     public ChatboxEmoteLibrary Emotes { get; }
+
+    public TranslationService Translator { get; }
 
     private ChatboxConfig Config => _plugin.Config.Chatbox;
 
@@ -267,6 +271,7 @@ public sealed partial class ChatboxService : IDisposable
         DisposeSourceHook();
         RestoreGameChat();
         PersistAllState();
+        Translator.Dispose();
         EmbedCache.Dispose();
         ImageCache.Dispose();
         Store.Dispose();
