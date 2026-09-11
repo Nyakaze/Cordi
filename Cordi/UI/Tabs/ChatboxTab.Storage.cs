@@ -63,8 +63,8 @@ public partial class ChatboxTab
         {
             DrawIntSliderRow(
                 "chatbox-default-limit", FontAwesomeIcon.Database,
-                "Default Messages per Channel",
-                "Used for channels that do not set their own limit, and for the combined view.",
+                "Default Messages loaded",
+                "How many messages a channel loads when it has no limit of its own. Nothing is deleted.",
                 innerWidth, 100, 50000,
                 () => Cfg.MaxMessagesPerChannel, v => Cfg.MaxMessagesPerChannel = v);
 
@@ -120,9 +120,15 @@ public partial class ChatboxTab
                 () => plugin.Chatbox.RebuildChannels());
 
             DrawActionRow(
-                "chatbox-apply-retention", FontAwesomeIcon.Sort, UiTheme.TileBlue,
-                "Apply Limits now", "Trims every channel to its message limit.",
-                "Apply", innerWidth,
+                "chatbox-release-history", FontAwesomeIcon.Sort, UiTheme.TileBlue,
+                "Unload extra History", "Drops loaded messages back to each channel's limit. Nothing is deleted.",
+                "Unload", innerWidth,
+                () => plugin.Chatbox.ReleaseAllHistory());
+
+            DrawActionRow(
+                "chatbox-apply-retention", FontAwesomeIcon.Broom, UiTheme.TileBlue,
+                "Prune Caches", "Trims the image cache and drops expired link previews.",
+                "Prune", innerWidth,
                 () => RunStorageAction(() => plugin.Chatbox.ApplyRetention()));
 
             DrawActionRow(

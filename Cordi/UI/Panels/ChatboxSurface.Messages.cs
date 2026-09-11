@@ -16,7 +16,7 @@ public sealed partial class ChatboxSurface
     private const int ScrollSettleFrames = 3;
     private const float CullMargin = 240f;
 
-    private readonly record struct RowMetrics(float Height, bool Grouped, int Repeats);
+    private readonly record struct RowMetrics(float Height, bool Grouped, int Repeats, bool Collapsed);
 
     private int _rowRepeats = 1;
     private long _scrollToSeq;
@@ -30,7 +30,13 @@ public sealed partial class ChatboxSurface
     private readonly System.Collections.Generic.HashSet<long> _revealedAds = new();
     private readonly System.Collections.Generic.List<ChatboxMessage> _drawBuffer = new();
     private readonly System.Collections.Generic.Dictionary<long, RowMetrics> _rowMetrics = new();
+    private readonly System.Collections.Generic.List<float> _rowTops = new();
     private int _rowMetricsKey;
+    private int _rowTopsValid;
+    private long _rowTopsSeq0;
+    private long _metricsScrollToSeq;
+    private long _metricsHighlightSeq;
+    private long _metricsDividerSeq;
 
     private bool HoveringRect(Vector2 min, Vector2 max) =>
         ImGui.IsWindowHovered(ImGuiHoveredFlags.ChildWindows)
@@ -40,6 +46,9 @@ public sealed partial class ChatboxSurface
     private void DrawMessages(ChatboxChannelState channel)
     {
         _drawChannel = channel.Config;
+
+        if (Config.AutoScroll && _stickToBottom && _scrollToSeq == 0 && _scrollToBottomFrames == 0)
+            Chatbox.ReleaseOlderHistory(channel);
 
         HookTranslation();
         DrainTranslationDirty();
@@ -58,7 +67,7 @@ public sealed partial class ChatboxSurface
 
         if (DrawHistoryLoader(channel)) channel.SnapshotInto(_drawBuffer);
 
-        SyncRowMetrics(MathF.Max(ImGui.GetContentRegionAvail().X, 80f), _drawBuffer.Count);
+        SyncRowMetrics(MathF.Max(ImGui.GetContentRegionAvail().X, 80f), dividerSeq);
 
         var scrollY = ImGui.GetScrollY();
         var viewTop = scrollY - CullMargin;
@@ -77,29 +86,72 @@ public sealed partial class ChatboxSurface
         var nextAnchorSeq = 0L;
         var nextAnchorTop = 0f;
 
-        for (var index = 0; index < _drawBuffer.Count; index++)
+        var baseTop = ImGui.GetCursorPosY();
+        var start = ResolveFirstRow(viewTop - baseTop);
+        var culled = start > 0 ? _rowTops[start] : 0f;
+        var cursor = baseTop + culled;
+
+        if (start > 0 && dividerSeq != 0 && _drawBuffer[start - 1].Seq >= dividerSeq) dividerDone = true;
+
+        for (var index = start; index < _drawBuffer.Count; index++)
         {
             var message = _drawBuffer[index];
+            var pinned = message.Seq == _scrollToSeq || message.Seq == _highlightSeq;
+
+            WriteRowTop(index, cursor - baseTop);
+
             if (dividerSeq != 0 && !dividerDone && message.Seq >= dividerSeq)
             {
                 dividerPending = true;
                 dividerDone = true;
             }
 
-            if (index + 1 < _drawBuffer.Count && CollapsesInto(message, _drawBuffer[index + 1]))
+            RowMetrics metrics = default;
+            var cached = !pinned && _rowMetrics.TryGetValue(message.Seq, out metrics);
+            bool grouped;
+
+            if (cached)
             {
-                repeats++;
+                if (metrics.Collapsed && index + 1 < _drawBuffer.Count)
+                {
+                    repeats++;
+                    continue;
+                }
+
+                grouped = metrics.Grouped;
+            }
+            else
+            {
+                if (index + 1 < _drawBuffer.Count && CollapsesInto(message, _drawBuffer[index + 1]))
+                {
+                    _rowMetrics[message.Seq] = new RowMetrics(0f, false, 0, true);
+                    repeats++;
+                    continue;
+                }
+
+                grouped = ShouldGroup(previous, message);
+            }
+
+            previous = message;
+
+            if (cached
+                && metrics.Repeats == repeats
+                && (cursor + metrics.Height < viewTop || cursor > viewBottom))
+            {
+                if (message.Seq == _anchorSeq) anchorTop = cursor;
+                if (nextAnchorSeq == 0 && cursor >= scrollY)
+                {
+                    nextAnchorSeq = message.Seq;
+                    nextAnchorTop = cursor;
+                }
+
+                culled += metrics.Height;
+                cursor += metrics.Height;
+                repeats = 1;
                 continue;
             }
 
-            if (dividerPending)
-            {
-                DrawNewMessageDivider();
-                dividerPending = false;
-            }
-
-            var grouped = ShouldGroup(previous, message);
-            previous = message;
+            FlushCulledRows(ref culled, spacing);
 
             var top = ImGui.GetCursorPosY();
             if (message.Seq == _anchorSeq) anchorTop = top;
@@ -109,14 +161,21 @@ public sealed partial class ChatboxSurface
                 nextAnchorTop = top;
             }
 
-            if (!TryCullRow(message, grouped, repeats, top, viewTop, viewBottom, spacing))
+            if (dividerPending)
             {
-                DrawMessage(draw, channel, message, grouped, repeats);
-                _rowMetrics[message.Seq] = new RowMetrics(ImGui.GetCursorPosY() - top, grouped, repeats);
+                DrawNewMessageDivider();
+                dividerPending = false;
             }
+
+            DrawMessage(draw, channel, message, grouped, repeats);
+
+            cursor = ImGui.GetCursorPosY();
+            _rowMetrics[message.Seq] = new RowMetrics(cursor - top, grouped, repeats, false);
 
             repeats = 1;
         }
+
+        FlushCulledRows(ref culled, spacing);
 
         draw.ChannelsMerge();
 
@@ -169,7 +228,7 @@ public sealed partial class ChatboxSurface
         return true;
     }
 
-    private void SyncRowMetrics(float width, int count)
+    private void SyncRowMetrics(float width, long dividerSeq)
     {
         var key = HashCode.Combine(
             HashCode.Combine(
@@ -190,16 +249,109 @@ public sealed partial class ChatboxSurface
                 Config.JumboLoneEmotes,
                 ImGuiHelpers.GlobalScale,
                 ImGui.GetTextLineHeight()),
-            TranslationMetricsKey());
+            HashCode.Combine(
+                Config.GroupWindowSeconds,
+                Config.CollapseRepeats,
+                Config.CollapseWindowSeconds,
+                Config.EnableReplies,
+                TranslationMetricsKey()));
 
-        if (key != _rowMetricsKey)
+        if (key != _rowMetricsKey || dividerSeq != _metricsDividerSeq)
         {
             _rowMetricsKey = key;
-            _rowMetrics.Clear();
+            _metricsDividerSeq = dividerSeq;
+            _metricsScrollToSeq = _scrollToSeq;
+            _metricsHighlightSeq = _highlightSeq;
+            ResetRowMetrics();
             return;
         }
 
-        if (_rowMetrics.Count > count * 2 + 64) _rowMetrics.Clear();
+        if (_scrollToSeq != _metricsScrollToSeq)
+        {
+            ForgetRow(_metricsScrollToSeq);
+            ForgetRow(_scrollToSeq);
+            _metricsScrollToSeq = _scrollToSeq;
+        }
+
+        if (_highlightSeq != _metricsHighlightSeq)
+        {
+            ForgetRow(_metricsHighlightSeq);
+            ForgetRow(_highlightSeq);
+            _metricsHighlightSeq = _highlightSeq;
+        }
+
+        if (_rowMetrics.Count > _drawBuffer.Count * 2 + 64)
+        {
+            ResetRowMetrics();
+            return;
+        }
+
+        if (_rowTopsValid == 0)
+        {
+            _rowTopsSeq0 = _drawBuffer[0].Seq;
+            return;
+        }
+
+        if (_drawBuffer[0].Seq != _rowTopsSeq0) InvalidateRowTops();
+        else if (_rowTopsValid > _drawBuffer.Count) _rowTopsValid = _drawBuffer.Count;
+    }
+
+    private void ResetRowMetrics()
+    {
+        _rowMetrics.Clear();
+        InvalidateRowTops();
+    }
+
+    private void InvalidateRowTops()
+    {
+        _rowTops.Clear();
+        _rowTopsValid = 0;
+        _rowTopsSeq0 = _drawBuffer.Count > 0 ? _drawBuffer[0].Seq : 0;
+    }
+
+    internal void ForgetRow(long seq)
+    {
+        if (seq == 0) return;
+        if (!_rowMetrics.Remove(seq)) return;
+
+        InvalidateRowTops();
+    }
+
+    private void WriteRowTop(int index, float top)
+    {
+        if (index < _rowTops.Count) _rowTops[index] = top;
+        else if (index == _rowTops.Count) _rowTops.Add(top);
+        else return;
+
+        if (index >= _rowTopsValid) _rowTopsValid = index + 1;
+    }
+
+    private int ResolveFirstRow(float viewTop)
+    {
+        var limit = Math.Min(_rowTopsValid, _drawBuffer.Count);
+        if (limit <= 1 || viewTop <= 0f) return 0;
+
+        var lo = 0;
+        var hi = limit - 1;
+        var found = 0;
+
+        while (lo <= hi)
+        {
+            var mid = (lo + hi) >> 1;
+            if (_rowTops[mid] <= viewTop)
+            {
+                found = mid;
+                lo = mid + 1;
+            }
+            else
+            {
+                hi = mid - 1;
+            }
+        }
+
+        while (found > 0 && _rowTops[found - 1] >= _rowTops[found]) found--;
+
+        return found;
     }
 
     private bool CollapsesInto(ChatboxMessage message, ChatboxMessage next)
@@ -217,16 +369,12 @@ public sealed partial class ChatboxSurface
         return (next.Timestamp - message.Timestamp).TotalSeconds <= Config.CollapseWindowSeconds;
     }
 
-    private bool TryCullRow(
-        ChatboxMessage message, bool grouped, int repeats, float top, float viewTop, float viewBottom, float spacing)
+    private static void FlushCulledRows(ref float height, float spacing)
     {
-        if (message.Seq == _scrollToSeq || message.Seq == _highlightSeq) return false;
-        if (!_rowMetrics.TryGetValue(message.Seq, out var metrics)) return false;
-        if (metrics.Grouped != grouped || metrics.Repeats != repeats) return false;
-        if (top + metrics.Height >= viewTop && top <= viewBottom) return false;
+        if (height <= 0f) return;
 
-        ImGui.Dummy(new Vector2(0f, MathF.Max(metrics.Height - spacing, 0f)));
-        return true;
+        ImGui.Dummy(new Vector2(0f, MathF.Max(height - spacing, 0f)));
+        height = 0f;
     }
 
     private void ApplyScrollAnchor(float anchorTop)

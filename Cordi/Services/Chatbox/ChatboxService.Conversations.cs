@@ -14,6 +14,22 @@ public sealed partial class ChatboxService
     public const uint MaxConversationSound = 16;
 
     private readonly Dictionary<string, ChatboxChannelConfig> _conversationConfigs = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, ConversationConfig> _conversationIndex = new(StringComparer.Ordinal);
+    private readonly List<ConversationConfig> _conversationOrder = new();
+    private readonly List<ChatboxChannelState> _openConversations = new();
+
+    private readonly object _conversationIndexGate = new();
+
+    private List<ConversationConfig>? _indexedItems;
+    private int _indexedCount = -1;
+
+    private static readonly Comparison<ConversationConfig> ConversationOrder = (a, b) =>
+    {
+        if (a.Pinned != b.Pinned) return a.Pinned ? -1 : 1;
+
+        var activity = b.LastActivityTicks.CompareTo(a.LastActivityTicks);
+        return activity != 0 ? activity : string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase);
+    };
 
     private static readonly TimeSpan TellFailureWindow = TimeSpan.FromSeconds(10);
 
@@ -43,28 +59,48 @@ public sealed partial class ChatboxService
 
     public IReadOnlyList<ChatboxChannelState> OpenConversations()
     {
-        var result = new List<ChatboxChannelState>();
+        _openConversations.Clear();
 
-        foreach (var entry in OrderedConversations())
+        if (ConversationSettings.OpenInOwnWindow) return _openConversations;
+
+        _conversationOrder.Clear();
+
+        foreach (var entry in ConversationSettings.Items)
         {
-            if (ConversationSettings.OpenInOwnWindow) continue;
-
-            var state = GetChannel(entry.Id);
-            if (state != null) result.Add(state);
+            if (entry.Open) _conversationOrder.Add(entry);
         }
 
-        return result;
+        _conversationOrder.Sort(ConversationOrder);
+
+        foreach (var entry in _conversationOrder)
+        {
+            var state = GetChannel(entry.Id);
+            if (state != null) _openConversations.Add(state);
+        }
+
+        return _openConversations;
     }
 
-    private IEnumerable<ConversationConfig> OrderedConversations() =>
-        ConversationSettings.Items
-            .Where(c => c.Open)
-            .OrderByDescending(c => c.Pinned)
-            .ThenByDescending(c => c.LastActivityTicks)
-            .ThenBy(c => c.Name, StringComparer.OrdinalIgnoreCase);
+    public ConversationConfig? FindConversation(string id)
+    {
+        var items = ConversationSettings.Items;
 
-    public ConversationConfig? FindConversation(string id) =>
-        ConversationSettings.Items.FirstOrDefault(c => string.Equals(c.Id, id, StringComparison.Ordinal));
+        lock (_conversationIndexGate)
+        {
+            if (!ReferenceEquals(items, _indexedItems) || items.Count != _indexedCount)
+            {
+                _conversationIndex.Clear();
+
+                foreach (var entry in items)
+                    _conversationIndex[entry.Id] = entry;
+
+                _indexedItems = items;
+                _indexedCount = items.Count;
+            }
+
+            return _conversationIndex.TryGetValue(id, out var found) ? found : null;
+        }
+    }
 
     public ChatboxChannelState? OpenConversation(string name, string world, bool activate)
     {
@@ -148,6 +184,7 @@ public sealed partial class ChatboxService
         try
         {
             _channels.Remove(id);
+            _channelsDirty = true;
         }
         finally
         {
@@ -234,6 +271,8 @@ public sealed partial class ChatboxService
                 created = new ChatboxChannelState(config);
                 _channels[entry.Id] = created;
             }
+
+            _channelsDirty = true;
         }
         finally
         {
@@ -276,6 +315,8 @@ public sealed partial class ChatboxService
         config.MaxMessages = 0;
         config.PersistHistory = true;
         config.FilterAdvertisements = false;
+
+        InvalidateChannelOrder();
 
         return config;
     }

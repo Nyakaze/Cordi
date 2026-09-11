@@ -16,6 +16,8 @@ public sealed class ConversationWindow : ThemedWindow, IDisposable
     private readonly string _windowId;
     private readonly ConversationConfig _entry;
     private bool _bodyDrawn;
+    private bool _titleUnread;
+    private string _titleLabel = string.Empty;
 
     public ConversationWindow(CordiPlugin plugin, ConversationConfig entry) : base(
         entry.Label + "###CordiConversation-" + entry.Id,
@@ -92,9 +94,14 @@ public sealed class ConversationWindow : ThemedWindow, IDisposable
         var entry = Chatbox.FindConversation(ChannelId);
         var label = entry?.Label ?? ChannelId;
         var channel = Chatbox.GetChannel(ChannelId);
-        var unread = channel?.UnreadCount ?? 0;
+        var unread = (channel?.UnreadCount ?? 0) > 0;
 
-        WindowName = (unread > 0 ? label + " •" : label) + _windowId;
+        if (unread == _titleUnread && string.Equals(label, _titleLabel, StringComparison.Ordinal)) return;
+
+        _titleUnread = unread;
+        _titleLabel = label;
+
+        WindowName = (unread ? label + " •" : label) + _windowId;
     }
 
     public void Activate()

@@ -74,6 +74,7 @@ public sealed partial class ChatboxSurface : IDisposable
 
     public void Draw()
     {
+        _navDirty = true;
         _picker.SetChatboxBounds(ImGui.GetWindowPos(), ImGui.GetWindowSize());
         _theme.ApplyFontScale();
         UpdateItemTooltip();
@@ -287,7 +288,7 @@ public sealed partial class ChatboxSurface : IDisposable
             return;
         }
 
-        using (var list = ImRaii.Child($"##chatbox-messages-{channel.Id}", new Vector2(0, -inputHeight), false))
+        using (var list = ImRaii.Child(WidgetIds(channel.Id).Body, new Vector2(0, -inputHeight), false))
         {
             if (list)
             {

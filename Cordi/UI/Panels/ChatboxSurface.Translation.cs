@@ -123,7 +123,7 @@ public sealed partial class ChatboxSurface
     private void DrainTranslationDirty()
     {
         while (_translationDirty.TryDequeue(out var seq))
-            _rowMetrics.Remove(seq);
+            ForgetRow(seq);
     }
 
     private bool ReplacesContent(ChatboxMessage message) =>

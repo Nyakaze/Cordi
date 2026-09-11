@@ -12,24 +12,20 @@ namespace Cordi.Services.Chatbox;
 
 public sealed class ChatboxMessageStore : IDisposable
 {
-    private const int TrimSlack = 250;
     private const int FlushIntervalMs = 750;
 
     private static readonly JsonSerializerOptions Json = new() { IncludeFields = false };
 
     private readonly ChatboxDatabase _database;
-    private readonly Func<string, int> _limitFor;
     private readonly BlockingCollection<ChatboxMessage> _pending = new(new ConcurrentQueue<ChatboxMessage>());
-    private readonly ConcurrentDictionary<string, int> _writtenSinceTrim = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, (long Divider, long LastRead)> _pendingState = new(StringComparer.Ordinal);
     private readonly Thread _writer;
     private volatile bool _stopping;
     private bool _disposed;
 
-    public ChatboxMessageStore(ChatboxDatabase database, Func<string, int> limitFor)
+    public ChatboxMessageStore(ChatboxDatabase database)
     {
         _database = database;
-        _limitFor = limitFor;
 
         _writer = new Thread(WriterLoop)
         {
@@ -231,20 +227,6 @@ public sealed class ChatboxMessageStore : IDisposable
         command.ExecuteNonQuery();
     }, "save state " + channelId);
 
-    public void Trim(string channelId, int limit)
-    {
-        if (limit <= 0) return;
-
-        _database.Write(connection =>
-        {
-            using var command = connection.CreateCommand();
-            command.CommandText = TrimSql;
-            command.Parameters.AddWithValue("$channel", channelId);
-            command.Parameters.AddWithValue("$limit", limit);
-            command.ExecuteNonQuery();
-        }, "trim " + channelId);
-    }
-
     private void WriterLoop()
     {
         var batch = new List<ChatboxMessage>(128);
@@ -345,22 +327,8 @@ public sealed class ChatboxMessageStore : IDisposable
                     : message.TellTarget;
 
                 command.ExecuteNonQuery();
-                _writtenSinceTrim.AddOrUpdate(message.ChannelId, 1, (_, existing) => existing + 1);
             }
         }, "flush messages");
-
-        TrimDirtyChannels();
-    }
-
-    private void TrimDirtyChannels()
-    {
-        foreach (var pair in _writtenSinceTrim)
-        {
-            if (pair.Value < TrimSlack) continue;
-            if (!_writtenSinceTrim.TryUpdate(pair.Key, 0, pair.Value)) continue;
-
-            Trim(pair.Key, _limitFor(pair.Key));
-        }
     }
 
     private static string SerializeAttachments(IReadOnlyList<string> attachments) =>
@@ -497,14 +465,4 @@ public sealed class ChatboxMessageStore : IDisposable
         ON CONFLICT(channel_id) DO UPDATE SET divider_seq = $divider, last_read_seq = $lastRead;
         """;
 
-    private const string TrimSql = """
-        DELETE FROM messages
-        WHERE channel_id = $channel
-          AND seq <= (
-              SELECT seq FROM messages
-              WHERE channel_id = $channel
-              ORDER BY seq DESC
-              LIMIT 1 OFFSET $limit
-          );
-        """;
 }

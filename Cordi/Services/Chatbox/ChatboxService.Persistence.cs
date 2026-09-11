@@ -7,8 +7,12 @@ namespace Cordi.Services.Chatbox;
 
 public sealed partial class ChatboxService
 {
+    private static readonly TimeSpan ResolverLifetime = TimeSpan.FromSeconds(2);
+
     private readonly Dictionary<string, (MentionResolver Resolver, DateTime At)> _resolverCache =
         new(StringComparer.Ordinal);
+
+    private readonly List<string> _staleResolvers = new();
 
     private readonly object _resolverGate = new();
 
@@ -16,29 +20,36 @@ public sealed partial class ChatboxService
 
     public ChatboxMessageStore Store { get; }
 
-    public int LimitFor(string channelId)
-    {
-        if (IsConversationId(channelId)) return 0;
-
-        var channel = GetChannel(channelId);
-        if (channel is null) return Config.MaxMessagesPerChannel;
-
-        var limit = channel.Config.MaxMessages;
-        return limit > 0 ? limit : Config.MaxMessagesPerChannel;
-    }
-
     public int ViewLimitFor(string channelId)
     {
-        if (!IsConversationId(channelId)) return LimitFor(channelId);
+        if (IsConversationId(channelId)) return Math.Max(50, Config.Conversations.HistoryWindow);
 
-        return Math.Max(50, Config.Conversations.HistoryWindow);
+        var channel = GetChannel(channelId);
+        if (channel is null) return Math.Max(50, Config.MaxMessagesPerChannel);
+
+        var limit = channel.Config.MaxMessages;
+        return Math.Max(50, limit > 0 ? limit : Config.MaxMessagesPerChannel);
     }
 
-    private int MemoryCapFor(ChatboxChannelState channel)
-    {
-        if (!IsConversationId(channel.Id)) return LimitFor(channel.Id);
+    private int MemoryCapFor(ChatboxChannelState channel) =>
+        Math.Max(channel.HistoryWindow, ViewLimitFor(channel.Id));
 
-        return Math.Max(channel.HistoryWindow, ViewLimitFor(channel.Id));
+    public void ReleaseAllHistory()
+    {
+        foreach (var channel in Channels)
+            ReleaseOlderHistory(channel);
+    }
+
+    public void ReleaseOlderHistory(ChatboxChannelState channel)
+    {
+        if (!channel.TracksHistory) return;
+
+        var window = ViewLimitFor(channel.Id);
+        if (channel.HistoryWindow <= window && channel.Count <= window) return;
+
+        channel.HistoryWindow = window;
+
+        if (channel.TrimTo(window)) channel.HasMoreHistory = true;
     }
 
     private void Persist(ChatboxMessage entry, ChatboxChannelState target)
@@ -56,7 +67,8 @@ public sealed partial class ChatboxService
         var history = Store.Load(channel.Id, window);
 
         channel.HistoryWindow = window;
-        channel.HasMoreHistory = IsConversationId(channel.Id) && history.Count >= window;
+        channel.TracksHistory = true;
+        channel.HasMoreHistory = history.Count >= window;
 
         if (history.Count == 0) return;
 
@@ -104,6 +116,7 @@ public sealed partial class ChatboxService
             message.Segments = ParseGameContent(source, CachedResolver(channel), out var sourceOnlyEmotes, out _);
             message.OnlyEmotes = sourceOnlyEmotes;
             Emotes.Record(message);
+            ReleaseSource(message, dropPayload: true);
             return;
         }
 
@@ -116,7 +129,28 @@ public sealed partial class ChatboxService
         Emotes.Record(message);
     }
 
-    private static SeString? RestoreSource(ChatboxMessage message)
+    internal static void ReleaseSource(ChatboxMessage message, bool dropPayload)
+    {
+        if (HoldsPluginLink(message)) return;
+
+        message.Source = null;
+
+        if (dropPayload) message.SourcePayload = null;
+    }
+
+    private static bool HoldsPluginLink(ChatboxMessage message)
+    {
+        var segments = message.Segments;
+
+        for (var i = 0; i < segments.Count; i++)
+        {
+            if (segments[i].LinkKind == GameLinkKind.Plugin) return true;
+        }
+
+        return false;
+    }
+
+    internal static SeString? RestoreSource(ChatboxMessage message)
     {
         if (message.Source != null) return message.Source;
         if (message.SourcePayload == null || message.SourcePayload.Length == 0) return null;
@@ -141,13 +175,32 @@ public sealed partial class ChatboxService
         lock (_resolverGate)
         {
             if (_resolverCache.TryGetValue(channel.Id, out var cached)
-                && now - cached.At < TimeSpan.FromSeconds(2))
+                && now - cached.At < ResolverLifetime)
                 return cached.Resolver;
+
+            EvictResolvers(now);
 
             var resolver = BuildResolver(channel);
             _resolverCache[channel.Id] = (resolver, now);
             return resolver;
         }
+    }
+
+    private void EvictResolvers(DateTime now)
+    {
+        if (_resolverCache.Count < 16) return;
+
+        _staleResolvers.Clear();
+
+        foreach (var pair in _resolverCache)
+        {
+            if (now - pair.Value.At >= ResolverLifetime) _staleResolvers.Add(pair.Key);
+        }
+
+        foreach (var key in _staleResolvers)
+            _resolverCache.Remove(key);
+
+        _staleResolvers.Clear();
     }
 
     internal void PersistState(ChatboxChannelState channel)
@@ -171,9 +224,6 @@ public sealed partial class ChatboxService
 
     public void ApplyRetention()
     {
-        foreach (var channel in Channels)
-            Store.Trim(channel.Id, LimitFor(channel.Id));
-
         ImageCache.PruneStored(Config.ImageCacheMaxEntries);
         EmbedCache.PruneExpired();
     }

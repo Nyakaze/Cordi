@@ -16,6 +16,11 @@ public sealed class ChatboxWindow : ThemedWindow, IDisposable
     private readonly CordiPlugin _plugin;
     private readonly ChatboxSurface _surface;
 
+    private int _titleMentions = -1;
+    private bool _titleUnread;
+    private bool _titleFlash;
+    private bool _titleDot;
+
     public ChatboxWindow(CordiPlugin plugin) : base(
         "Chatbox" + WindowId, ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse)
     {
@@ -53,6 +58,17 @@ public sealed class ChatboxWindow : ThemedWindow, IDisposable
     {
         var mentions = Chatbox.TotalMentions;
         var unread = Chatbox.TotalUnread;
+
+        if (mentions == _titleMentions
+            && (unread > 0) == _titleUnread
+            && Config.FlashTitleOnMention == _titleFlash
+            && Config.ShowUnreadDot == _titleDot)
+            return;
+
+        _titleMentions = mentions;
+        _titleUnread = unread > 0;
+        _titleFlash = Config.FlashTitleOnMention;
+        _titleDot = Config.ShowUnreadDot;
 
         var badge = mentions > 0 && Config.FlashTitleOnMention
             ? $"Chatbox ({mentions})"

@@ -367,6 +367,7 @@ public sealed partial class ChatboxService
         entry.SegmentsReady = true;
 
         Emotes.Record(entry);
+        ReleaseSource(entry, dropPayload: false);
 
         var isActive = IsChannelViewed(target.Id);
 

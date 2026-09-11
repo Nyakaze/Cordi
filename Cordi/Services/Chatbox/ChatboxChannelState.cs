@@ -11,6 +11,8 @@ public sealed class ChatboxChannelState
     private readonly object _gate = new();
     private readonly HashSet<string> _authors = new(StringComparer.OrdinalIgnoreCase);
 
+    private string[]? _authorCache;
+
     public ChatboxChannelState(ChatboxChannelConfig config)
     {
         Config = config;
@@ -28,6 +30,7 @@ public sealed class ChatboxChannelState
 
     public int HistoryWindow { get; set; }
     public bool HasMoreHistory { get; set; }
+    public bool TracksHistory { get; set; }
 
     public int Count
     {
@@ -54,11 +57,29 @@ public sealed class ChatboxChannelState
             _messages.InsertRange(0, older);
 
             foreach (var message in older)
-            {
-                if (!string.IsNullOrWhiteSpace(message.AuthorName))
-                    _authors.Add(message.AuthorName);
-            }
+                TrackAuthor(message);
         }
+    }
+
+    public bool TrimTo(int cap)
+    {
+        if (cap <= 0) return false;
+
+        lock (_gate)
+        {
+            if (_messages.Count <= cap) return false;
+
+            _messages.RemoveRange(0, _messages.Count - cap);
+            return true;
+        }
+    }
+
+    private void TrackAuthor(ChatboxMessage message)
+    {
+        if (string.IsNullOrWhiteSpace(message.AuthorName)) return;
+        if (!_authors.Add(message.AuthorName)) return;
+
+        _authorCache = null;
     }
 
     public void Append(ChatboxMessage message, int cap, bool markUnread)
@@ -66,8 +87,7 @@ public sealed class ChatboxChannelState
         lock (_gate)
         {
             _messages.Add(message);
-            if (!string.IsNullOrWhiteSpace(message.AuthorName))
-                _authors.Add(message.AuthorName);
+            TrackAuthor(message);
 
             if (cap > 0 && _messages.Count > cap)
                 _messages.RemoveRange(0, _messages.Count - cap);
@@ -129,6 +149,7 @@ public sealed class ChatboxChannelState
         {
             _messages.Clear();
             _authors.Clear();
+            _authorCache = null;
             _messages.AddRange(history);
 
             UnreadCount = 0;
@@ -139,8 +160,7 @@ public sealed class ChatboxChannelState
 
             foreach (var message in _messages)
             {
-                if (!string.IsNullOrWhiteSpace(message.AuthorName))
-                    _authors.Add(message.AuthorName);
+                TrackAuthor(message);
 
                 if (message.Seq <= lastReadSeq || message.IsSelf) continue;
 
@@ -171,13 +191,22 @@ public sealed class ChatboxChannelState
     public ChatboxMessage? FindBySeq(long seq)
     {
         lock (_gate)
-            return _messages.FirstOrDefault(m => m.Seq == seq);
+        {
+            for (var i = _messages.Count - 1; i >= 0; i--)
+            {
+                var message = _messages[i];
+                if (message.Seq == seq) return message;
+                if (message.Seq < seq) return null;
+            }
+
+            return null;
+        }
     }
 
     public IReadOnlyCollection<string> RecentAuthors()
     {
         lock (_gate)
-            return _authors.ToArray();
+            return _authorCache ??= _authors.ToArray();
     }
 
     public void Clear()
@@ -186,6 +215,7 @@ public sealed class ChatboxChannelState
         {
             _messages.Clear();
             _authors.Clear();
+            _authorCache = null;
             UnreadCount = 0;
             MentionCount = 0;
             FirstUnreadSeq = 0;

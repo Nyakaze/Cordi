@@ -81,7 +81,10 @@ public sealed partial class ChatboxSurface
             ImGui.GetColorU32(hovered ? _theme.Text : _theme.MutedText), caption);
 
         if (hovered) ImGui.SetTooltip("Click to reveal the blocked message");
-        if (clicked) _revealedAds.Add(message.Seq);
+        if (!clicked) return;
+
+        _revealedAds.Add(message.Seq);
+        ForgetRow(message.Seq);
     }
 
     private static bool CanOpenPlayerMenu(ChatboxMessage message) =>

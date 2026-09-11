@@ -30,7 +30,7 @@ public sealed partial class ChatboxService : IDisposable
         ChatboxImageCache.RemoveLegacyDirectory(configDirectory);
 
         Database = new ChatboxDatabase(configDirectory);
-        Store = new ChatboxMessageStore(Database, LimitFor);
+        Store = new ChatboxMessageStore(Database);
         ImageCache = new ChatboxImageCache(
             Database,
             () => plugin.Config.Chatbox.ImageCacheMaxEntries,
@@ -103,31 +103,69 @@ public sealed partial class ChatboxService : IDisposable
 
     public event Action<ChatboxMessage>? MessageAdded;
 
+    private ChatboxChannelState[] _orderedChannels = Array.Empty<ChatboxChannelState>();
+    private volatile bool _channelsDirty = true;
+
+    private static readonly Comparison<ChatboxChannelState> ChannelOrder = (a, b) =>
+    {
+        var order = a.Config.Order.CompareTo(b.Config.Order);
+        return order != 0
+            ? order
+            : string.Compare(a.Config.Name, b.Config.Name, StringComparison.OrdinalIgnoreCase);
+    };
+
+    internal void InvalidateChannelOrder() => _channelsDirty = true;
+
     public IReadOnlyList<ChatboxChannelState> Channels
     {
         get
         {
+            if (!_channelsDirty) return Volatile.Read(ref _orderedChannels);
+
+            _channelsDirty = false;
+
+            ChatboxChannelState[] snapshot;
+
             _channelLock.EnterReadLock();
             try
             {
-                return _channels.Values
-                    .OrderBy(c => c.Config.Order)
-                    .ThenBy(c => c.Config.Name, StringComparer.OrdinalIgnoreCase)
-                    .ToList();
+                snapshot = new ChatboxChannelState[_channels.Count];
+                _channels.Values.CopyTo(snapshot, 0);
             }
             finally
             {
                 _channelLock.ExitReadLock();
             }
+
+            Array.Sort(snapshot, ChannelOrder);
+            Volatile.Write(ref _orderedChannels, snapshot);
+
+            return snapshot;
         }
     }
 
     public Vector4 ColorFor(ChatboxChannelConfig config, XivChatType type) =>
         config.OverrideChatColor ? config.Color : Config.ChatTypeColor(type) ?? config.Color;
 
-    public int TotalUnread => Channels.Where(c => !c.Config.MuteNotifications).Sum(c => c.UnreadCount);
+    public int TotalUnread => SumChannels(false);
 
-    public int TotalMentions => Channels.Where(c => !c.Config.MuteNotifications).Sum(c => c.MentionCount);
+    public int TotalMentions => SumChannels(true);
+
+    private int SumChannels(bool mentions)
+    {
+        var channels = Channels;
+        var total = 0;
+
+        for (var i = 0; i < channels.Count; i++)
+        {
+            var channel = channels[i];
+            if (channel.Config.MuteNotifications) continue;
+
+            total += mentions ? channel.MentionCount : channel.UnreadCount;
+        }
+
+        return total;
+    }
 
     public ChatboxChannelState? GetChannel(string id)
     {
@@ -269,6 +307,8 @@ public sealed partial class ChatboxService : IDisposable
 
             foreach (var stale in _channels.Keys.Where(k => !seen.Contains(k) && !IsConversationId(k)).ToList())
                 _channels.Remove(stale);
+
+            _channelsDirty = true;
         }
         finally
         {

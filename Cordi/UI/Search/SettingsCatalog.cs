@@ -123,7 +123,7 @@ public static class SettingsCatalog
             ("", "Treat every Message as Mention", "channel ping"),
             ("", "Hide Advertisements", "spam filter per channel"),
             ("", "Save History", "persist history per channel"),
-            ("", "Messages kept", "history buffer per channel"),
+            ("", "Messages loaded", "history buffer window per channel"),
             ("", "Delete History", "clear channel messages"));
 
         Page(index, PageIds.ChatboxAppearance, "Appearance", FontAwesomeIcon.PaintRoller,
@@ -203,7 +203,7 @@ public static class SettingsCatalog
             ("", "Embed Cache", "url preview cache reset"));
 
         Page(index, PageIds.ChatboxStorage, "Storage", FontAwesomeIcon.Database,
-            ("", "Default Messages per Channel", "history buffer"),
+            ("", "Default Messages loaded", "history buffer window"),
             ("", "Stored History", "database size"),
             ("", "Database", "sqlite file path"),
             ("", "Enable Image Cache", "cache memory"),
@@ -215,7 +215,8 @@ public static class SettingsCatalog
             ("", "Prune Cache", "image cache trim"),
             ("", "Clear all Messages", "cleanup reset"),
             ("", "Reload Channels", "rebuild channels"),
-            ("", "Apply Limits now", "retention trim"),
+            ("", "Unload extra History", "release loaded messages memory"),
+            ("", "Prune Caches", "image cache embed trim"),
             ("", "Remove Orphaned History", "cleanup orphan"),
             ("", "Compact Database", "vacuum sqlite"));
     }

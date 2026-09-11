@@ -20,6 +20,40 @@ public sealed partial class ChatboxSurface
 {
     private const uint InputFocusSoundEffect = 35;
 
+    private static readonly Dictionary<XivChatType, string> SendTypeKeys = new();
+
+    private readonly List<DropdownItem> _sendTargets = new();
+
+    private ulong _sendTargetMask;
+    private string _sendTargetLabel = string.Empty;
+    private string _sendTargetTooltip = string.Empty;
+    private bool _sendTargetPinned;
+    private bool _sendTargetsBuilt;
+    private string _inputHint = string.Empty;
+    private string _inputHintName = string.Empty;
+    private string _tellTargetId = string.Empty;
+    private string _tellRecipient = string.Empty;
+    private string _tellTooltip = string.Empty;
+
+    private static string SendTypeKey(XivChatType type)
+    {
+        if (SendTypeKeys.TryGetValue(type, out var key)) return key;
+
+        key = type.ToString();
+        SendTypeKeys[type] = key;
+        return key;
+    }
+
+    private string InputHint(string channelName)
+    {
+        if (_inputHintName.Equals(channelName, StringComparison.Ordinal)) return _inputHint;
+
+        _inputHintName = channelName;
+        _inputHint = "Message " + channelName;
+
+        return _inputHint;
+    }
+
     private void DrawInputBar(ChatboxChannelState channel)
     {
         var startY = ImGui.GetCursorPosY();
@@ -75,7 +109,7 @@ public sealed partial class ChatboxSurface
         _theme.PushInputScope();
         var submitted = ImGui.InputTextWithHint(
             "##chatbox-input",
-            $"Message {channel.Config.Name}",
+            InputHint(channel.Config.Name),
             ref _input,
             ChatboxConfig.InputBufferLength,
             ImGuiInputTextFlags.EnterReturnsTrue
@@ -149,21 +183,7 @@ public sealed partial class ChatboxSurface
             ? ChatboxService.LabelFor(active)
             : "Pick a channel";
 
-        var items = new List<DropdownItem>();
-        foreach (var type in ChatTypes.Sendable)
-        {
-            if (!ChatboxService.IsSendTargetAvailable(type)) continue;
-            items.Add(new DropdownItem
-            {
-                Key = type.ToString(),
-                Label = ChatboxService.LabelFor(type),
-                Group = ChatTypes.SendGroup(type),
-            });
-        }
-
-        var tooltip = pinned
-            ? $"Sending as {label}\nFixed by this channel's \"Send as\" setting."
-            : $"Sending as {label}\nPick the game chat channel to send in.";
+        SyncSendTargets(label, pinned);
 
         _theme.IconPicker(
             "chatbox-send-target",
@@ -171,8 +191,8 @@ public sealed partial class ChatboxSurface
             FontAwesomeIcon.CommentDots,
             label,
             MathF.Max(_theme.Scaled(120f), ImGui.GetContentRegionAvail().X * 0.5f),
-            items,
-            active.ToString(),
+            _sendTargets,
+            SendTypeKey(active),
             key =>
             {
                 if (!Enum.TryParse<XivChatType>(key, out var parsed)) return;
@@ -182,13 +202,62 @@ public sealed partial class ChatboxSurface
             },
             _theme.Scaled(260f),
             !pinned,
-            tooltip,
+            _sendTargetTooltip,
             active == XivChatType.None ? null : Chatbox.ColorFor(channel.Config, active));
+    }
+
+    private void SyncSendTargets(string label, bool pinned)
+    {
+        var mask = 0UL;
+        for (var i = 0; i < ChatTypes.Sendable.Length && i < 64; i++)
+        {
+            if (ChatboxService.IsSendTargetAvailable(ChatTypes.Sendable[i])) mask |= 1UL << i;
+        }
+
+        if (_sendTargetsBuilt
+            && mask == _sendTargetMask
+            && pinned == _sendTargetPinned
+            && label.Equals(_sendTargetLabel, StringComparison.Ordinal))
+            return;
+
+        _sendTargetsBuilt = true;
+        _sendTargetMask = mask;
+        _sendTargetPinned = pinned;
+        _sendTargetLabel = label;
+
+        _sendTargets.Clear();
+
+        for (var i = 0; i < ChatTypes.Sendable.Length && i < 64; i++)
+        {
+            if ((mask & (1UL << i)) == 0) continue;
+
+            var type = ChatTypes.Sendable[i];
+
+            _sendTargets.Add(new DropdownItem
+            {
+                Key = SendTypeKey(type),
+                Label = ChatboxService.LabelFor(type),
+                Group = ChatTypes.SendGroup(type),
+            });
+        }
+
+        _sendTargetTooltip = pinned
+            ? $"Sending as {label}\nFixed by this channel's \"Send as\" setting."
+            : $"Sending as {label}\nPick the game chat channel to send in.";
     }
 
     private void DrawConversationTarget(ChatboxChannelState channel, float size)
     {
-        var recipient = Chatbox.ConversationTargetFor(channel);
+        if (!channel.Id.Equals(_tellTargetId, StringComparison.Ordinal))
+        {
+            _tellTargetId = channel.Id;
+            _tellRecipient = Chatbox.ConversationTargetFor(channel);
+            _tellTooltip = _tellRecipient.Length == 0
+                ? "This conversation has no recipient."
+                : "Sending a tell to " + _tellRecipient;
+        }
+
+        var recipient = _tellRecipient;
         var label = recipient.Length == 0 ? "No recipient" : recipient;
 
         _theme.IconPicker(
@@ -202,9 +271,7 @@ public sealed partial class ChatboxSurface
             _ => { },
             _theme.Scaled(260f),
             false,
-            recipient.Length == 0
-                ? "This conversation has no recipient."
-                : $"Sending a tell to {recipient}",
+            _tellTooltip,
             Config.Conversations.Color);
     }
 

@@ -17,24 +17,59 @@ public sealed partial class ChatboxSurface
 {
     private readonly List<(ChatboxChannelState? Channel, string Label, float Width, bool Closable)> _tabItems = new();
     private readonly List<int> _tabRows = new();
+    private readonly List<(ChatboxChannelState? Channel, string Label, bool Closable)> _navItems = new();
+    private readonly List<ChatboxChannelConfig> _navConfigs = new();
+    private readonly Dictionary<string, ChatboxChannelState> _navStates = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, ChannelWidgetIds> _widgetIds = new(StringComparer.Ordinal);
+
+    private bool _navDirty = true;
+
+    private static readonly Comparison<ChatboxChannelConfig> NavConfigOrder = (a, b) =>
+    {
+        var order = a.Order.CompareTo(b.Order);
+        return order != 0 ? order : string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase);
+    };
+
+    private readonly record struct ChannelWidgetIds(string Rail, string Row, string Tab, string Context, string Body);
+
+    private ChannelWidgetIds WidgetIds(string channelId)
+    {
+        if (_widgetIds.TryGetValue(channelId, out var ids)) return ids;
+
+        ids = new ChannelWidgetIds(
+            "##rail-" + channelId,
+            "##row-" + channelId,
+            "##tab-" + channelId,
+            "##ctx-" + channelId,
+            "##chatbox-messages-" + channelId);
+
+        _widgetIds[channelId] = ids;
+        return ids;
+    }
 
     private List<(ChatboxChannelState? Channel, string Label, bool Closable)> NavItems()
     {
-        var states = new Dictionary<string, ChatboxChannelState>(StringComparer.Ordinal);
-        foreach (var channel in Chatbox.Channels)
-            states[channel.Id] = channel;
+        if (!_navDirty) return _navItems;
 
-        var items = new List<(ChatboxChannelState? Channel, string Label, bool Closable)>();
+        _navDirty = false;
+        _navItems.Clear();
+        _navStates.Clear();
+
+        var channels = Chatbox.Channels;
+        for (var i = 0; i < channels.Count; i++)
+            _navStates[channels[i].Id] = channels[i];
+
+        var items = _navItems;
 
         AppendConversationItems(items);
 
         string? pending = null;
 
-        var ordered = Config.Channels
-            .OrderBy(c => c.Order)
-            .ThenBy(c => c.Name, StringComparer.OrdinalIgnoreCase);
+        _navConfigs.Clear();
+        _navConfigs.AddRange(Config.Channels);
+        _navConfigs.Sort(NavConfigOrder);
 
-        foreach (var config in ordered)
+        foreach (var config in _navConfigs)
         {
             if (!config.Enabled || !config.ShowInNav) continue;
 
@@ -44,7 +79,7 @@ public sealed partial class ChatboxSurface
                 continue;
             }
 
-            if (!states.TryGetValue(config.Id, out var state)) continue;
+            if (!_navStates.TryGetValue(config.Id, out var state)) continue;
 
             if (pending != null)
             {
@@ -55,7 +90,16 @@ public sealed partial class ChatboxSurface
             items.Add((state, string.Empty, false));
         }
 
+        PruneWidgetIds();
+
         return items;
+    }
+
+    private void PruneWidgetIds()
+    {
+        if (_widgetIds.Count <= _navStates.Count + 16) return;
+
+        _widgetIds.Clear();
     }
 
     private void AppendConversationItems(List<(ChatboxChannelState? Channel, string Label, bool Closable)> items)
@@ -119,7 +163,7 @@ public sealed partial class ChatboxSurface
         ImGui.SetCursorPosX(ImGui.GetCursorPosX() + offset);
 
         var hit = _theme.NavRailTile(
-            $"##rail-{channel.Id}",
+            WidgetIds(channel.Id).Rail,
             size,
             NavVisual(channel, isActive, RailLabel(channel), ChannelIcon(channel), closable),
             AnimatedTextureWrap.MarkVisible);
@@ -193,7 +237,7 @@ public sealed partial class ChatboxSurface
     private void DrawChannelRow(ChatboxChannelState channel, bool isActive, bool closable)
     {
         var hit = _theme.NavListRow(
-            $"##row-{channel.Id}",
+            WidgetIds(channel.Id).Row,
             ImGui.GetContentRegionAvail().X,
             NavVisual(channel, isActive, channel.Config.Name, ChannelIcon(channel), closable),
             AnimatedTextureWrap.MarkVisible);
@@ -311,7 +355,7 @@ public sealed partial class ChatboxSurface
     private void DrawNavTab(ChatboxChannelState channel, bool isActive, string label, float width, bool closable)
     {
         var hit = _theme.NavTab(
-            $"##tab-{channel.Id}",
+            WidgetIds(channel.Id).Tab,
             width,
             NavVisual(channel, isActive, label, ChannelIcon(channel), closable),
             onImage: AnimatedTextureWrap.MarkVisible);
@@ -344,7 +388,7 @@ public sealed partial class ChatboxSurface
             ImGui.SetTooltip(tooltip);
         }
 
-        using var popup = ImRaii.ContextPopupItem($"##ctx-{channel.Id}");
+        using var popup = ImRaii.ContextPopupItem(WidgetIds(channel.Id).Context);
         if (!popup) return;
 
         if (ImGui.MenuItem("Mark as read"))

@@ -653,10 +653,10 @@ public partial class ChatboxTab
 
             DrawIntSliderRow(
                 $"chatbox-limit-{channel.Id}", FontAwesomeIcon.Sort,
-                "Messages kept",
+                "Messages loaded",
                 channel.MaxMessages <= 0
                     ? $"0 uses the global default ({Cfg.MaxMessagesPerChannel})."
-                    : "How many messages this channel keeps.",
+                    : "How many messages this channel loads. Older ones stay on disk and load on demand.",
                 innerWidth, 0, 50000,
                 () => channel.MaxMessages, v => channel.MaxMessages = v);
 
