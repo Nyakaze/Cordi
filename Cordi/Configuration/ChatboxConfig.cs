@@ -80,6 +80,7 @@ public class ChatboxChannelConfig
     public int MaxMessages { get; set; } = 5000;
     public bool PersistHistory { get; set; } = true;
     public bool FilterAdvertisements { get; set; } = true;
+    public bool ScrollToFirstUnread { get; set; }
 }
 
 [Serializable]
@@ -127,7 +128,6 @@ public class ChatboxConfig : IWindowChromeConfig
     public bool ColorNamesByChannel { get; set; } = true;
     public bool CompactSystemMessages { get; set; } = true;
     public bool ShowNewMessageDivider { get; set; } = true;
-    public bool ScrollToFirstUnread { get; set; } = true;
     public bool ShowHoverToolbar { get; set; } = true;
     public bool AutoScroll { get; set; } = true;
 

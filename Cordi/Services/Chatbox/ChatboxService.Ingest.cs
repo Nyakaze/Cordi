@@ -473,14 +473,20 @@ public sealed partial class ChatboxService
     {
         var payloads = message.Sender?.Payloads;
 
-        if (payloads == null || payloads.All(p => p.Type != PayloadType.Player))
-            return (string.Empty, null);
+        if (payloads == null || payloads.Count == 0) return (string.Empty, null);
 
         var builder = new StringBuilder();
         Vector4? color = null;
+        var tagged = false;
 
-        foreach (var payload in payloads.TakeWhile(p => p.Type != PayloadType.Player))
+        foreach (var payload in payloads)
         {
+            if (payload.Type == PayloadType.Player)
+            {
+                tagged = true;
+                break;
+            }
+
             switch (payload)
             {
                 case UIForegroundPayload foreground when foreground.IsEnabled:
@@ -494,7 +500,17 @@ public sealed partial class ChatboxService
 
         var prefix = builder.ToString().Trim();
 
+        if (!tagged) prefix = StripTrailingName(prefix, CordiPlugin.Plugin.cachedLocalPlayer?.Name.TextValue);
+
         return (IsRolePlate(prefix) ? prefix : string.Empty, color);
+    }
+
+    private static string StripTrailingName(string prefix, string? name)
+    {
+        if (prefix.Length == 0 || string.IsNullOrEmpty(name)) return prefix;
+        if (!prefix.EndsWith(name, StringComparison.Ordinal)) return prefix;
+
+        return prefix[..^name.Length].TrimEnd();
     }
 
     public static (string Name, string World) SenderOf(ChatMessage message) => ResolveGameSender(message);
