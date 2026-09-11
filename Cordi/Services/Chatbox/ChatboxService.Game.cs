@@ -1,4 +1,7 @@
 using System;
+using System.Collections.Generic;
+using Dalamud.Game.Config;
+using Dalamud.Game.Text;
 using FFXIVClientStructs.FFXIV.Client.UI;
 using FFXIVClientStructs.FFXIV.Component.GUI;
 
@@ -18,6 +21,43 @@ public sealed partial class ChatboxService
         "ChatLogPanel_3",
     };
 
+    private static readonly IReadOnlyDictionary<XivChatType, UiConfigOption> GameSoundOptions =
+        new Dictionary<XivChatType, UiConfigOption>
+        {
+            [XivChatType.TellIncoming] = UiConfigOption.IsLogTell,
+            [XivChatType.Party] = UiConfigOption.IsLogParty,
+            [XivChatType.CrossParty] = UiConfigOption.IsLogParty,
+            [XivChatType.Alliance] = UiConfigOption.IsLogAlliance,
+            [XivChatType.Ls1] = UiConfigOption.IsLogLs1,
+            [XivChatType.Ls2] = UiConfigOption.IsLogLs2,
+            [XivChatType.Ls3] = UiConfigOption.IsLogLs3,
+            [XivChatType.Ls4] = UiConfigOption.IsLogLs4,
+            [XivChatType.Ls5] = UiConfigOption.IsLogLs5,
+            [XivChatType.Ls6] = UiConfigOption.IsLogLs6,
+            [XivChatType.Ls7] = UiConfigOption.IsLogLs7,
+            [XivChatType.Ls8] = UiConfigOption.IsLogLs8,
+            [XivChatType.CrossLinkShell1] = UiConfigOption.IsLogCwls,
+            [XivChatType.CrossLinkShell2] = UiConfigOption.IsLogCwls2,
+            [XivChatType.CrossLinkShell3] = UiConfigOption.IsLogCwls3,
+            [XivChatType.CrossLinkShell4] = UiConfigOption.IsLogCwls4,
+            [XivChatType.CrossLinkShell5] = UiConfigOption.IsLogCwls5,
+            [XivChatType.CrossLinkShell6] = UiConfigOption.IsLogCwls6,
+            [XivChatType.CrossLinkShell7] = UiConfigOption.IsLogCwls7,
+            [XivChatType.CrossLinkShell8] = UiConfigOption.IsLogCwls8,
+            [XivChatType.FreeCompany] = UiConfigOption.IsLogFc,
+            [XivChatType.NoviceNetwork] = UiConfigOption.IsLogBeginner,
+            [XivChatType.PvPTeam] = UiConfigOption.IsLogPvpTeam,
+        };
+
+    private readonly Dictionary<UiConfigOption, bool> _gameSoundOriginals = new();
+    private readonly HashSet<UiConfigOption> _gameSoundMuted = new();
+    private readonly HashSet<UiConfigOption> _gameSoundDesired = new();
+    private readonly HashSet<UiConfigOption> _gameSoundUnmuted = new();
+
+    private const long GameSoundPollMs = 1000;
+
+    private bool _gameSoundLoggedIn;
+    private long _gameSoundCheckedAt;
     private bool _gameChatHidden;
     private bool _enterHeld;
 
@@ -32,9 +72,139 @@ public sealed partial class ChatboxService
         if (!_plugin.ChatboxWindow.IsOpen) InputActive = false;
 
         UpdateGameChatVisibility();
+        UpdateGameSoundMutes();
         UpdateEnterCapture();
         SyncFromGameChatInput();
     }
+
+    private void UpdateGameSoundMutes()
+    {
+        var loggedIn = Service.ClientState.IsLoggedIn;
+
+        if (loggedIn != _gameSoundLoggedIn)
+        {
+            _gameSoundLoggedIn = loggedIn;
+
+            if (!loggedIn)
+            {
+                RestoreGameSounds();
+                return;
+            }
+
+            _gameSoundMuted.Clear();
+            _gameSoundOriginals.Clear();
+            _gameSoundCheckedAt = 0;
+        }
+
+        if (!loggedIn) return;
+
+        var now = Environment.TickCount64;
+        if (_gameSoundCheckedAt != 0 && now - _gameSoundCheckedAt < GameSoundPollMs) return;
+
+        _gameSoundCheckedAt = now;
+
+        CollectDesiredGameSoundMutes();
+
+        if (_gameSoundDesired.SetEquals(_gameSoundMuted)) return;
+
+        foreach (var option in GameSoundOptions.Values)
+        {
+            var mute = _gameSoundDesired.Contains(option);
+            if (mute == _gameSoundMuted.Contains(option)) continue;
+
+            if (mute)
+            {
+                if (MuteGameSound(option)) _gameSoundMuted.Add(option);
+                continue;
+            }
+
+            UnmuteGameSound(option);
+            _gameSoundMuted.Remove(option);
+        }
+    }
+
+    private void CollectDesiredGameSoundMutes()
+    {
+        _gameSoundDesired.Clear();
+        _gameSoundUnmuted.Clear();
+
+        if (!Config.Enabled) return;
+
+        foreach (var channel in Channels)
+        {
+            var config = channel.Config;
+            if (config.IsSeparator || !config.Enabled) continue;
+
+            var target = config.MuteGameSound ? _gameSoundDesired : _gameSoundUnmuted;
+
+            foreach (var type in config.GameChatTypes)
+            {
+                if (GameSoundOptions.TryGetValue(type, out var option)) target.Add(option);
+            }
+        }
+
+        _gameSoundDesired.ExceptWith(_gameSoundUnmuted);
+    }
+
+    private bool MuteGameSound(UiConfigOption option)
+    {
+        try
+        {
+            if (!Service.GameConfig.TryGet(option, out bool enabled)) return false;
+            if (!enabled) return false;
+
+            _gameSoundOriginals[option] = true;
+            Service.GameConfig.Set(option, false);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            LogGameSoundFailure(option, ex);
+            return false;
+        }
+    }
+
+    private void UnmuteGameSound(UiConfigOption option)
+    {
+        if (!_gameSoundOriginals.Remove(option, out var original)) return;
+
+        try
+        {
+            Service.GameConfig.Set(option, original);
+        }
+        catch (Exception ex)
+        {
+            LogGameSoundFailure(option, ex);
+        }
+    }
+
+    private void RestoreGameSounds()
+    {
+        _gameSoundMuted.Clear();
+
+        if (_gameSoundOriginals.Count == 0) return;
+
+        foreach (var (option, original) in new List<KeyValuePair<UiConfigOption, bool>>(_gameSoundOriginals))
+        {
+            try
+            {
+                Service.GameConfig.Set(option, original);
+            }
+            catch (Exception ex)
+            {
+                LogGameSoundFailure(option, ex);
+            }
+        }
+
+        _gameSoundOriginals.Clear();
+    }
+
+    private void LogGameSoundFailure(UiConfigOption option, Exception ex) =>
+        _plugin.LogService.Log(
+            "Chatbox",
+            CordiLogLevel.Warning,
+            $"Could not change the game chat sound setting {option}",
+            ex);
 
     private unsafe void SyncFromGameChatInput()
     {

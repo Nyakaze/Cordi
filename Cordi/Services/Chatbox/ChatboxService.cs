@@ -270,6 +270,7 @@ public sealed partial class ChatboxService : IDisposable
 
         DisposeSourceHook();
         RestoreGameChat();
+        RestoreGameSounds();
         PersistAllState();
         Translator.Dispose();
         EmbedCache.Dispose();

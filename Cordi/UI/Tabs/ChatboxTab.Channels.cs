@@ -628,6 +628,11 @@ public partial class ChatboxTab
                 innerWidth, () => channel.MuteNotifications, v => channel.MuteNotifications = v);
 
             DrawToggleRow(
+                $"chatbox-gamesound-{channel.Id}", FontAwesomeIcon.VolumeMute,
+                "Mute the Game Sound", "Turns off the game's own arrival sound for this channel's chat types.",
+                innerWidth, () => channel.MuteGameSound, v => channel.MuteGameSound = v);
+
+            DrawToggleRow(
                 $"chatbox-allmention-{channel.Id}", FontAwesomeIcon.At,
                 "Treat every Message as Mention", "Every message here counts as a mention.",
                 innerWidth, () => channel.TreatAllAsMention, v => channel.TreatAllAsMention = v);
