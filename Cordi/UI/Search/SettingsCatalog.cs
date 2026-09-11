@@ -81,7 +81,10 @@ public static class SettingsCatalog
             ("Appearance", "Conversation colour", "tab rail tile colour"),
             ("Appearance", "Flash the tab while unread", "pulse blink accent"),
             ("History", "Messages shown on open", "history window"),
-            ("History", "Messages per \"Load older\"", "history page size"));
+            ("History", "Messages per \"Load older\"", "history page size"),
+            ("XIVInstantMessenger", "Import when a conversation opens", "xivim messenger migrate old chatlog"),
+            ("XIVInstantMessenger", "Log folder", "xivim messenger path folder"),
+            ("XIVInstantMessenger", "Import everything now", "xivim messenger bulk port history"));
 
         Page(index, "chats/Custom Avatars", "Custom Avatars", FontAwesomeIcon.UserCircle,
             ("", "Character Avatars", "avatar portrait webhook image"));

@@ -64,6 +64,35 @@ public sealed class ChatboxMessageStore : IDisposable
         return Convert.ToInt64(command.ExecuteScalar(), CultureInfo.InvariantCulture);
     }, 0L, "highest seq");
 
+    public long LowestSeq() => _database.Read(connection =>
+    {
+        using var command = connection.CreateCommand();
+        command.CommandText = "SELECT IFNULL(MIN(seq), 0) FROM messages;";
+        return Convert.ToInt64(command.ExecuteScalar(), CultureInfo.InvariantCulture);
+    }, 0L, "lowest seq");
+
+    public HashSet<string> Fingerprints(string channelId) => _database.Read(connection =>
+    {
+        using var command = connection.CreateCommand();
+        command.CommandText = "SELECT timestamp, is_self, raw_content FROM messages WHERE channel_id = $channel;";
+        command.Parameters.AddWithValue("$channel", channelId);
+
+        var result = new HashSet<string>(StringComparer.Ordinal);
+        using var reader = command.ExecuteReader();
+        while (reader.Read())
+            result.Add(Fingerprint(reader.GetInt64(0), reader.GetInt32(1) != 0, reader.GetString(2)));
+
+        return result;
+    }, new HashSet<string>(StringComparer.Ordinal), "fingerprints " + channelId);
+
+    public static string Fingerprint(ChatboxMessage message) =>
+        Fingerprint(ToUnixMs(message.Timestamp), message.IsSelf, message.RawContent);
+
+    public static string Fingerprint(long timestampMs, bool isSelf, string rawContent) =>
+        string.Create(CultureInfo.InvariantCulture, $"{timestampMs}|{(isSelf ? 1 : 0)}|{rawContent}");
+
+    public void InsertHistory(List<ChatboxMessage> batch) => Flush(batch);
+
     public List<ChatboxMessage> Load(string channelId, int limit)
     {
         if (limit <= 0) return new List<ChatboxMessage>();

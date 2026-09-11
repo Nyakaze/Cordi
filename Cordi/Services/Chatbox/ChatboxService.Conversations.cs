@@ -15,8 +15,14 @@ public sealed partial class ChatboxService
 
     private readonly Dictionary<string, ChatboxChannelConfig> _conversationConfigs = new(StringComparer.Ordinal);
 
+    private static readonly TimeSpan TellFailureWindow = TimeSpan.FromSeconds(10);
+
     private DateTime _lastConversationSound = DateTime.MinValue;
     private bool _taskbarFlashing;
+
+    private string _recentTellChannelId = string.Empty;
+    private string _recentTellName = string.Empty;
+    private DateTime _recentTellStamp = DateTime.MinValue;
 
     private ConversationSettings ConversationSettings => Config.Conversations;
 
@@ -30,6 +36,8 @@ public sealed partial class ChatboxService
         string.IsNullOrWhiteSpace(value) ? string.Empty : value.Trim().ToLowerInvariant();
 
     public bool ConversationsEnabled => ConversationSettings.Enabled;
+
+    public bool ConversationsInOwnWindow => ConversationSettings.OpenInOwnWindow;
 
     public IReadOnlyList<ConversationConfig> AllConversations => ConversationSettings.Items;
 
@@ -83,6 +91,7 @@ public sealed partial class ChatboxService
         entry.LastActivityTicks = DateTime.UtcNow.Ticks;
 
         var state = EnsureConversationChannel(entry);
+        MaybeImportXivimHistory(entry);
         _plugin.Config.Save();
         _plugin.ConversationWindows?.Sync();
 
@@ -315,6 +324,71 @@ public sealed partial class ChatboxService
             : settings.AutoOpenOutgoing;
 
         return autoOpen ? OpenConversation(name, world, activate: false) : null;
+    }
+
+    private void RememberTellTarget(string channelId, string name)
+    {
+        _recentTellChannelId = channelId;
+        _recentTellName = name;
+        _recentTellStamp = DateTime.UtcNow;
+    }
+
+    private void HandleTellFailure(string text)
+    {
+        var channelId = _recentTellChannelId;
+        var name = _recentTellName;
+        var stamp = _recentTellStamp;
+
+        _recentTellChannelId = string.Empty;
+        _recentTellName = string.Empty;
+        _recentTellStamp = DateTime.MinValue;
+
+        if (channelId.Length == 0) return;
+        if (DateTime.UtcNow - stamp > TellFailureWindow) return;
+        if (!IsTellFailure(text, name)) return;
+
+        PostConversationSystemMessage(channelId, text);
+    }
+
+    private static bool IsTellFailure(string text, string name)
+    {
+        if (text.Length == 0) return false;
+
+        if (text.StartsWith("Unable to send /tell.", StringComparison.Ordinal)) return true;
+
+        if (string.Equals(
+                text,
+                "Your message was not heard. You must wait before using /tell, /say, /yell, or /shout again.",
+                StringComparison.Ordinal))
+            return true;
+
+        const string prefix = "Message to ";
+        const string suffix = " could not be sent.";
+
+        if (name.Length == 0) return false;
+        if (!text.StartsWith(prefix, StringComparison.Ordinal)) return false;
+        if (!text.EndsWith(suffix, StringComparison.Ordinal)) return false;
+
+        return text[prefix.Length..^suffix.Length]
+            .Trim()
+            .StartsWith(name, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private void PostConversationSystemMessage(string channelId, string text)
+    {
+        var target = GetChannel(channelId);
+        if (target == null) return;
+
+        var entry = new ChatboxMessage
+        {
+            ChannelId = target.Id,
+            Origin = ChatboxOrigin.System,
+            AuthorName = ChatboxMessage.SystemSender,
+            RawContent = text,
+            Segments = new[] { ContentSegment.PlainText(text) },
+        };
+
+        Publish(target, entry, notify: false, announceConversation: false);
     }
 
     private void NotifyConversation(ChatboxChannelState channel, ChatboxMessage entry, bool isActive)

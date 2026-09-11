@@ -26,6 +26,7 @@ public partial class ChatboxTab
         DrawConversationAlertCard();
         DrawConversationAppearanceCard();
         DrawConversationHistoryCard();
+        DrawConversationImportCard();
         DrawConversationListCard();
 
         ApplyPendingConversationChanges();

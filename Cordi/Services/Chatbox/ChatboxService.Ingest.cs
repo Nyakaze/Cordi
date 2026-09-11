@@ -30,6 +30,9 @@ public sealed partial class ChatboxService
     {
         if (_disposed || !Config.Enabled) return;
 
+        if (message.ChatType == XivChatType.ErrorMessage)
+            HandleTellFailure(message.Message?.TextValue ?? string.Empty);
+
         BeginSourceCapture();
 
         var gameMaster = ChatTypes.IsGameMaster(message.ChatType);
@@ -39,6 +42,9 @@ public sealed partial class ChatboxService
         var conversation = gameMaster
             ? null
             : ResolveConversationTarget(message.ChatType, name, world);
+
+        if (conversation != null && message.ChatType == XivChatType.TellOutgoing)
+            RememberTellTarget(conversation.Id, name);
 
         var targets = Channels
             .Where(c => !IsConversationId(c.Id))
@@ -351,7 +357,11 @@ public sealed partial class ChatboxService
         Publish(target, entry, notify: false);
     }
 
-    private void Publish(ChatboxChannelState target, ChatboxMessage entry, bool notify = true)
+    private void Publish(
+        ChatboxChannelState target,
+        ChatboxMessage entry,
+        bool notify = true,
+        bool announceConversation = true)
     {
         entry.Seq = Interlocked.Increment(ref _sequence);
         entry.SegmentsReady = true;
@@ -368,7 +378,7 @@ public sealed partial class ChatboxService
 
         MessageAdded?.Invoke(entry);
 
-        if (IsConversationId(target.Id)) NotifyConversation(target, entry, isActive);
+        if (announceConversation && IsConversationId(target.Id)) NotifyConversation(target, entry, isActive);
 
         if (notify && !entry.IsSelf && !target.Config.MuteNotifications)
             Notify(target, entry, isActive);

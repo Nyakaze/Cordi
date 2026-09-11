@@ -20,6 +20,7 @@ public class ConversationConfig
     public bool Open { get; set; } = true;
     public bool Pinned { get; set; }
     public long LastActivityTicks { get; set; }
+    public bool XivimImported { get; set; }
 
     public float WindowX { get; set; }
     public float WindowY { get; set; }
@@ -62,6 +63,9 @@ public class ConversationSettings
 
     public int HistoryWindow { get; set; } = 500;
     public int HistoryPageSize { get; set; } = 500;
+
+    public bool ImportXivimHistory { get; set; }
+    public string XivimLogFolder { get; set; } = string.Empty;
 
     public bool MuteNotifications { get; set; }
     public bool MuteGameSound { get; set; }

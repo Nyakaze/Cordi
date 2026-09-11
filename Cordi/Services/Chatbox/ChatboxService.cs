@@ -40,6 +40,7 @@ public sealed partial class ChatboxService : IDisposable
         Emotes = new ChatboxEmoteLibrary(Database, () => plugin.Config.Chatbox.SeenEmoteLimit);
         _sequence = Store.HighestSeq();
         Translator = new TranslationService(configDirectory, () => plugin.Config.Translation, plugin.LogService);
+        XivimLogs = new XivimLogImporter(plugin);
 
         RebuildChannels();
         RestoreConversations();

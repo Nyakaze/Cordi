@@ -14,6 +14,8 @@ public sealed partial class ChatboxSurface
 
         PopupHeader(full, DefaultLinkColor(GameLinkKind.Player), 0, false);
 
+        DrawConversationEntry(player, world);
+
         if (ImGui.Selectable("Send Tell")) InsertText($"/tell {full} ");
 
         DrawReplyEntry();
@@ -42,6 +44,16 @@ public sealed partial class ChatboxSurface
 
         if (ImGui.Selectable("Insert in Input")) InsertText(player.Name);
         if (ImGui.Selectable("Copy Name")) ImGui.SetClipboardText(full);
+    }
+
+    private void DrawConversationEntry(Player player, string world)
+    {
+        if (!Chatbox.CanOpenConversationWith(player.Name, world)) return;
+
+        var label = Chatbox.ConversationsInOwnWindow ? "Open DM in a Window" : "Open DM in the Chatbox";
+        if (!ImGui.Selectable(label)) return;
+
+        Chatbox.OpenConversationFor(player.Name, world);
     }
 
     private void DrawReplyEntry()

@@ -15,6 +15,7 @@ public sealed class ConversationWindow : ThemedWindow, IDisposable
     private readonly ChatboxSurface _surface;
     private readonly string _windowId;
     private readonly ConversationConfig _entry;
+    private bool _bodyDrawn;
 
     public ConversationWindow(CordiPlugin plugin, ConversationConfig entry) : base(
         entry.Label + "###CordiConversation-" + entry.Id,
@@ -59,7 +60,18 @@ public sealed class ConversationWindow : ThemedWindow, IDisposable
         return true;
     }
 
-    protected override void OnPreDraw() => UpdateTitle();
+    protected override void OnPreDraw()
+    {
+        _bodyDrawn = false;
+        UpdateTitle();
+    }
+
+    public override void PostDraw()
+    {
+        if (!_bodyDrawn) Chatbox.SetChannelViewed(ChannelId, false);
+
+        base.PostDraw();
+    }
 
     protected override Vector4? TitleFlash
     {
@@ -94,6 +106,7 @@ public sealed class ConversationWindow : ThemedWindow, IDisposable
 
     public override void Draw()
     {
+        _bodyDrawn = true;
         CaptureGeometry();
         _surface.Draw();
     }
