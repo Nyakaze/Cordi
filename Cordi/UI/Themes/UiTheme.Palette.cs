@@ -136,6 +136,14 @@ public sealed partial class UiTheme
     public float Scaled(float value) => value * ImGuiHelpers.GlobalScale * GlobalFontScale;
     public float ScaledActionsWidth => ActionsColumnWidth * ImGuiHelpers.GlobalScale;
 
+    public static float StableContentWidth(float minimum)
+    {
+        var style = ImGui.GetStyle();
+        var width = ImGui.GetWindowWidth() - style.WindowPadding.X * 2f - style.ScrollbarSize;
+
+        return MathF.Max(width, minimum);
+    }
+
     public UiTheme(Vector4? accentOverride = null)
     {
         ApplyPreset(accentOverride);

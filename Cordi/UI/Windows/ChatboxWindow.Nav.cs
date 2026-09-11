@@ -59,8 +59,9 @@ public sealed partial class ChatboxWindow
     {
         var scale = ImGuiHelpers.GlobalScale * UiTheme.GlobalFontScale;
         var indicatorSpace = 8f * ImGuiHelpers.GlobalScale;
+        var stable = UiTheme.StableContentWidth(24f);
         var available = MathF.Max(ImGui.GetContentRegionAvail().X, 24f);
-        var size = MathF.Max(20f, MathF.Min(Config.RailIconSize * scale, available - indicatorSpace));
+        var size = MathF.Max(20f, MathF.Min(Config.RailIconSize * scale, stable - indicatorSpace));
         var activeId = Chatbox.ResolveActiveChannelId();
 
         ImGui.Dummy(new Vector2(0, _theme.Gap(0.4f)));
