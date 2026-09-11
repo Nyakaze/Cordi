@@ -122,6 +122,7 @@ public static class SettingsCatalog
             ("", "Mute Notifications", "channel silent"),
             ("", "Treat every Message as Mention", "channel ping"),
             ("", "Hide Advertisements", "spam filter per channel"),
+            ("", "Jump to first unread Message", "scroll unread divider per channel"),
             ("", "Save History", "persist history per channel"),
             ("", "Messages loaded", "history buffer window per channel"),
             ("", "Delete History", "clear channel messages"));

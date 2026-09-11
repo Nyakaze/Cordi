@@ -641,6 +641,12 @@ public partial class ChatboxTab
                 $"chatbox-ads-{channel.Id}", FontAwesomeIcon.Filter,
                 "Hide Advertisements", "Uses the Advertisement Filter from the Chats page. Blocked messages collapse into a placeholder.",
                 innerWidth, () => channel.FilterAdvertisements, v => channel.FilterAdvertisements = v);
+
+            DrawToggleRow(
+                $"chatbox-scroll-unread-{channel.Id}", FontAwesomeIcon.LevelUpAlt,
+                "Jump to first unread Message",
+                "Opening this channel scrolls up to where you stopped reading instead of to the newest message.",
+                innerWidth, () => channel.ScrollToFirstUnread, v => channel.ScrollToFirstUnread = v);
         }, "Behaviour");
 
     private void DrawChannelHistory(ChatboxChannelConfig channel) =>

@@ -755,8 +755,8 @@ public sealed partial class ChatboxSurface
 
     private void ScrollToUnread(ChatboxChannelState? channel, long dividerSeq)
     {
-        if (!Config.ScrollToFirstUnread || dividerSeq == 0) return;
-        if (channel == null || channel.FindBySeq(dividerSeq) == null) return;
+        if (dividerSeq == 0 || channel == null) return;
+        if (!channel.Config.ScrollToFirstUnread || channel.FindBySeq(dividerSeq) == null) return;
 
         _scrollToSeq = dividerSeq;
         _scrollToAlign = 0.2f;
