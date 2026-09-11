@@ -11,9 +11,9 @@ using Dalamud.Interface;
 using Dalamud.Interface.Utility;
 using Dalamud.Interface.Utility.Raii;
 
-namespace Cordi.UI.Windows;
+namespace Cordi.UI.Panels;
 
-public sealed partial class ChatboxWindow
+public sealed partial class ChatboxSurface
 {
     private readonly ConcurrentQueue<long> _translationDirty = new();
     private readonly ConcurrentQueue<string> _outgoingResults = new();

@@ -1,3 +1,5 @@
+using System;
+using System.Numerics;
 using Cordi.Configuration;
 using Cordi.UI.Themes;
 using Dalamud.Bindings.ImGui;
@@ -12,6 +14,7 @@ public abstract class ThemedWindow : Window
 
     private ImRaii.ColorDisposable? _opacityScope;
     private ImRaii.StyleDisposable? _borderScope;
+    private IDisposable? _titleFlashScope;
 
     protected ThemedWindow(string name, ImGuiWindowFlags flags = ImGuiWindowFlags.None)
         : base(name, flags)
@@ -27,6 +30,8 @@ public abstract class ThemedWindow : Window
     {
     }
 
+    protected virtual Vector4? TitleFlash => null;
+
     public override void PreDraw()
     {
         var chrome = Chrome;
@@ -40,6 +45,9 @@ public abstract class ThemedWindow : Window
 
         OnPreDraw();
         _theme.PushWindow();
+
+        if (!chrome.HideTitleBar && TitleFlash is { } flash)
+            _titleFlashScope = _theme.PushTitleFlash(flash);
 
         if (chrome.BackgroundOpacity < 1.0f)
         {
@@ -58,6 +66,8 @@ public abstract class ThemedWindow : Window
         _borderScope = null;
         _opacityScope?.Dispose();
         _opacityScope = null;
+        _titleFlashScope?.Dispose();
+        _titleFlashScope = null;
         _theme.PopWindow();
     }
 }

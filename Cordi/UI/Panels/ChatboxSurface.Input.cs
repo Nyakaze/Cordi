@@ -14,9 +14,9 @@ using Dalamud.Interface;
 using Dalamud.Interface.Utility.Raii;
 using FFXIVClientStructs.FFXIV.Client.UI;
 
-namespace Cordi.UI.Windows;
+namespace Cordi.UI.Panels;
 
-public sealed partial class ChatboxWindow
+public sealed partial class ChatboxSurface
 {
     private const uint InputFocusSoundEffect = 35;
 
@@ -136,6 +136,12 @@ public sealed partial class ChatboxWindow
 
     private void DrawSendTargetPicker(ChatboxChannelState channel, float size)
     {
+        if (ChatboxService.IsConversationId(channel.Id))
+        {
+            DrawConversationTarget(channel, size);
+            return;
+        }
+
         var pinned = Chatbox.IsSendTypePinned(channel.Config);
         var active = Chatbox.ResolveSendType(channel.Config);
 
@@ -180,6 +186,28 @@ public sealed partial class ChatboxWindow
             active == XivChatType.None ? null : Chatbox.ColorFor(channel.Config, active));
     }
 
+    private void DrawConversationTarget(ChatboxChannelState channel, float size)
+    {
+        var recipient = Chatbox.ConversationTargetFor(channel);
+        var label = recipient.Length == 0 ? "No recipient" : recipient;
+
+        _theme.IconPicker(
+            "chatbox-send-tell",
+            new Vector2(size, size),
+            FontAwesomeIcon.Envelope,
+            label,
+            MathF.Max(_theme.Scaled(120f), ImGui.GetContentRegionAvail().X * 0.5f),
+            Array.Empty<DropdownItem>(),
+            string.Empty,
+            _ => { },
+            _theme.Scaled(260f),
+            false,
+            recipient.Length == 0
+                ? "This conversation has no recipient."
+                : $"Sending a tell to {recipient}",
+            Config.Conversations.Color);
+    }
+
     private void DrawReplyStrip()
     {
         var reply = _replyTarget!;
@@ -210,7 +238,9 @@ public sealed partial class ChatboxWindow
 
         var text = _emoteFont.Expand(_input);
 
-        var sendType = Chatbox.ResolveSendType(channel.Config);
+        var sendType = ChatboxService.IsConversationId(channel.Id)
+            ? XivChatType.TellOutgoing
+            : Chatbox.ResolveSendType(channel.Config);
 
         if (NeedsCommandConfirmation(sendType, text, out var command))
         {

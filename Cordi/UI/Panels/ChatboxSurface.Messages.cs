@@ -9,9 +9,9 @@ using Dalamud.Interface;
 using Dalamud.Interface.Utility;
 using Dalamud.Interface.Utility.Raii;
 
-namespace Cordi.UI.Windows;
+namespace Cordi.UI.Panels;
 
-public sealed partial class ChatboxWindow
+public sealed partial class ChatboxSurface
 {
     private const int ScrollSettleFrames = 3;
     private const float CullMargin = 240f;
@@ -55,6 +55,8 @@ public sealed partial class ChatboxWindow
         UpdateStickToBottom();
         var dividerSeq = Config.ShowNewMessageDivider ? channel.DividerSeq : 0;
         var pendingJump = _scrollToSeq;
+
+        if (DrawHistoryLoader(channel)) channel.SnapshotInto(_drawBuffer);
 
         SyncRowMetrics(MathF.Max(ImGui.GetContentRegionAvail().X, 80f), _drawBuffer.Count);
 
@@ -148,6 +150,23 @@ public sealed partial class ChatboxWindow
         {
             ImGui.SetScrollHereY(1f);
         }
+    }
+
+    private bool DrawHistoryLoader(ChatboxChannelState channel)
+    {
+        if (!channel.HasMoreHistory) return false;
+
+        var width = MathF.Max(ImGui.GetContentRegionAvail().X, 80f);
+
+        ImGui.Dummy(new Vector2(0f, _theme.Gap(0.3f)));
+
+        if (!_theme.DividerAction("##cordi-load-older", "Load older messages", width)) return false;
+        if (!Chatbox.LoadOlderHistory(channel)) return false;
+
+        _stickToBottom = false;
+        _scrollToBottomFrames = 0;
+
+        return true;
     }
 
     private void SyncRowMetrics(float width, int count)

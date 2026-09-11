@@ -8,9 +8,9 @@ using Dalamud.Interface;
 using Dalamud.Interface.Utility;
 using Dalamud.Interface.Utility.Raii;
 
-namespace Cordi.UI.Windows;
+namespace Cordi.UI.Panels;
 
-public sealed partial class ChatboxWindow
+public sealed partial class ChatboxSurface
 {
     private void DrawCozy(ChatboxMessage message, bool grouped, float width)
     {
@@ -50,47 +50,11 @@ public sealed partial class ChatboxWindow
         DrawContent(message, width, TextColorFor(message), () =>
         {
             DrawTimestampGutter(message, _theme.MutedText);
-            DrawTellDirectionInline(message);
             DrawAuthorNameInline(message);
         });
         DrawTranslationLine(message, width);
         DrawAttachments(message, width);
         DrawEmbeds(message, width);
-    }
-
-    private static bool IsTell(ChatboxMessage message) =>
-        ChatTypes.IsTell(message.GameChatType);
-
-    private Vector4 TellDirectionColor(ChatboxMessage message) =>
-        message.GameChatType == XivChatType.TellOutgoing ? _theme.MutedText : _theme.Accent;
-
-    private static string TellDirectionGlyph(ChatboxMessage message) =>
-        (message.GameChatType == XivChatType.TellOutgoing
-            ? FontAwesomeIcon.ArrowRight
-            : FontAwesomeIcon.ArrowLeft).ToIconString();
-
-    private static string TellDirectionTooltip(ChatboxMessage message) =>
-        message.GameChatType == XivChatType.TellOutgoing ? "Outgoing tell" : "Incoming tell";
-
-    private bool DrawTellDirectionIcon(ChatboxMessage message)
-    {
-        if (!IsTell(message)) return false;
-
-        using (ImRaii.PushFont(UiBuilder.IconFont))
-            ImGui.TextColored(TellDirectionColor(message), TellDirectionGlyph(message));
-
-        if (ImGui.IsItemHovered()) ImGui.SetTooltip(TellDirectionTooltip(message));
-        return true;
-    }
-
-    private void DrawTellDirectionInline(ChatboxMessage message)
-    {
-        if (!IsTell(message)) return;
-
-        using (ImRaii.PushFont(UiBuilder.IconFont))
-            _flow.Text(TellDirectionGlyph(message), TellDirectionColor(message));
-
-        _flow.Text(" ", _theme.MutedText);
     }
 
     private void DrawBlockedNotice(ChatboxMessage message)
@@ -198,7 +162,6 @@ public sealed partial class ChatboxWindow
         }
         else
         {
-            if (DrawTellDirectionIcon(message)) ImGui.SameLine(0, _theme.Gap(0.35f));
             DrawAuthorName(message);
         }
 

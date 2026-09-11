@@ -7,7 +7,7 @@ namespace Cordi.Services.Chatbox;
 
 public sealed class ChatboxDatabase : IDisposable
 {
-    private const int SchemaVersion = 6;
+    private const int SchemaVersion = 7;
 
     private static bool _nativeReady;
     private static readonly object NativeGate = new();
@@ -153,6 +153,7 @@ public sealed class ChatboxDatabase : IDisposable
 
         EnsureColumn("messages", "filtered_ad", "INTEGER NOT NULL DEFAULT 0");
         EnsureColumn("messages", "source", "BLOB");
+        EnsureColumn("messages", "tell_target", "TEXT");
         EnsureColumn("emotes", "url", "TEXT");
         EnsureColumn("emotes", "own", "INTEGER NOT NULL DEFAULT 0");
 

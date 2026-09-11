@@ -10,9 +10,9 @@ using Dalamud.Interface.Textures.TextureWraps;
 using Dalamud.Interface.Utility;
 using Dalamud.Interface.Utility.Raii;
 
-namespace Cordi.UI.Windows;
+namespace Cordi.UI.Panels;
 
-public sealed partial class ChatboxWindow
+public sealed partial class ChatboxSurface
 {
     private readonly List<string> _embedUrls = new();
     private readonly List<string?> _embedMedia = new();

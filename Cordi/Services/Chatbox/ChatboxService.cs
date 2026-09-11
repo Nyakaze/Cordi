@@ -42,8 +42,10 @@ public sealed partial class ChatboxService : IDisposable
         Translator = new TranslationService(configDirectory, () => plugin.Config.Translation, plugin.LogService);
 
         RebuildChannels();
+        RestoreConversations();
         LoadHiddenEmbeds();
         InitializeSourceHook();
+        InitializeContextMenu();
         ChatboxAutoTranslate.Preload(plugin.LogService);
     }
 
@@ -95,6 +97,8 @@ public sealed partial class ChatboxService : IDisposable
     public string ActiveChannelId { get; private set; } = string.Empty;
 
     public bool WindowFocused { get; set; }
+
+    private readonly HashSet<string> _viewedChannels = new(StringComparer.Ordinal);
 
     public event Action<ChatboxMessage>? MessageAdded;
 
@@ -168,26 +172,50 @@ public sealed partial class ChatboxService : IDisposable
         return divider;
     }
 
-    public long BeginViewingActive()
-    {
-        var active = GetChannel(ResolveActiveChannelId());
-        if (active is null) return 0;
+    public long BeginViewingActive() => BeginViewing(GetChannel(ResolveActiveChannelId()));
 
-        var divider = active.BeginViewing();
-        PersistState(active);
+    public long BeginViewing(ChatboxChannelState? channel)
+    {
+        if (channel is null) return 0;
+
+        var divider = channel.BeginViewing();
+        PersistState(channel);
         return divider;
     }
 
-    public void MarkActiveRead()
+    public void MarkActiveRead() => MarkChannelRead(GetChannel(ResolveActiveChannelId()));
+
+    public void MarkChannelRead(ChatboxChannelState? channel)
     {
-        var id = ResolveActiveChannelId();
-        var active = GetChannel(id);
-        if (active is null) return;
+        if (channel is null) return;
 
-        var before = active.LastReadSeq;
-        active.MarkRead();
+        var before = channel.LastReadSeq;
+        channel.MarkRead();
 
-        if (active.LastReadSeq != before) PersistState(active);
+        if (channel.LastReadSeq != before) PersistState(channel);
+    }
+
+    public void SetChannelViewed(string channelId, bool viewed)
+    {
+        if (string.IsNullOrEmpty(channelId)) return;
+
+        lock (_viewedChannels)
+        {
+            if (viewed) _viewedChannels.Add(channelId);
+            else _viewedChannels.Remove(channelId);
+        }
+    }
+
+    public bool IsChannelViewed(string channelId)
+    {
+        lock (_viewedChannels)
+        {
+            if (_viewedChannels.Contains(channelId)) return true;
+        }
+
+        return WindowFocused
+               && _plugin.ChatboxWindow?.IsOpen == true
+               && string.Equals(ResolveActiveChannelId(), channelId, StringComparison.Ordinal);
     }
 
     public static bool NormalizeTellTypes(ChatboxChannelConfig config)
@@ -238,7 +266,7 @@ public sealed partial class ChatboxService : IDisposable
                 added.Add(created);
             }
 
-            foreach (var stale in _channels.Keys.Where(k => !seen.Contains(k)).ToList())
+            foreach (var stale in _channels.Keys.Where(k => !seen.Contains(k) && !IsConversationId(k)).ToList())
                 _channels.Remove(stale);
         }
         finally
@@ -269,6 +297,7 @@ public sealed partial class ChatboxService : IDisposable
         _disposed = true;
 
         DisposeSourceHook();
+        DisposeContextMenu();
         RestoreGameChat();
         RestoreGameSounds();
         PersistAllState();

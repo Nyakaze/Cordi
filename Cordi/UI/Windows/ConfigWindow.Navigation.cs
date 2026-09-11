@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
@@ -14,6 +14,7 @@ public static class PageIds
     public const string AdvertisementFilter = "chats/Advertisement Filter";
     public const string ChatboxOverview = "chatbox/Overview";
     public const string ChatboxChannels = "chatbox/Channels";
+    public const string ChatboxConversations = "chatbox/Conversations";
     public const string ChatboxAppearance = "chatbox/Appearance";
     public const string ChatboxMentions = "chatbox/Mentions";
     public const string ChatboxContent = "chatbox/Content";
@@ -47,6 +48,7 @@ public sealed partial class ConfigWindow
         PageIds.AdvertisementFilter,
         PageIds.ChatboxOverview,
         PageIds.ChatboxChannels,
+        PageIds.ChatboxConversations,
         PageIds.ChatboxAppearance,
         PageIds.ChatboxMentions,
         PageIds.ChatboxContent,
@@ -91,6 +93,7 @@ public sealed partial class ConfigWindow
         ["Combined Overlay"] = "Peeper and the Emote Log in a single window",
         [PageIds.ChatboxOverview] = "Turn the chatbox on and shape its window",
         [PageIds.ChatboxChannels] = "Bundle game chat types with Discord channels",
+        [PageIds.ChatboxConversations] = "Private tell threads with a history per person",
         [PageIds.ChatboxAppearance] = "Layout, avatars, message style and colours",
         [PageIds.ChatboxMentions] = "What counts as a mention and how you hear about it",
         [PageIds.ChatboxContent] = "Emotes, the emoji picker and link previews",
@@ -137,6 +140,7 @@ public sealed partial class ConfigWindow
         {
             MakeItem(PageIds.ChatboxOverview, "Overview", FontAwesomeIcon.CommentAlt, chatboxTab.DrawOverview),
             MakeItem(PageIds.ChatboxChannels, "Channels", FontAwesomeIcon.Hashtag, chatboxTab.DrawChannels),
+            MakeItem(PageIds.ChatboxConversations, "Conversations", FontAwesomeIcon.Envelope, chatboxTab.DrawConversations),
             MakeItem(PageIds.ChatboxAppearance, "Appearance", FontAwesomeIcon.PaintRoller, chatboxTab.DrawAppearance),
             MakeItem(PageIds.ChatboxMentions, "Mentions", FontAwesomeIcon.At, chatboxTab.DrawMentions),
             MakeItem(PageIds.ChatboxContent, "Content", FontAwesomeIcon.Smile, chatboxTab.DrawContent),
@@ -236,6 +240,7 @@ public sealed partial class ConfigWindow
     {
         PageIds.ChatboxOverview => chatboxTab,
         PageIds.ChatboxChannels => chatboxTab,
+        PageIds.ChatboxConversations => chatboxTab,
         PageIds.ChatboxAppearance => chatboxTab,
         PageIds.ChatboxMentions => chatboxTab,
         PageIds.ChatboxContent => chatboxTab,

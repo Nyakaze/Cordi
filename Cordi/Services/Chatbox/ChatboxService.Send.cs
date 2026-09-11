@@ -10,7 +10,9 @@ public sealed partial class ChatboxService
 {
     public bool CanSend(ChatboxChannelState? channel) =>
         channel != null
-        && (ResolveSendType(channel.Config) != XivChatType.None || IsTellChannel(channel));
+        && (IsConversationId(channel.Id)
+            || ResolveSendType(channel.Config) != XivChatType.None
+            || IsTellChannel(channel));
 
     public XivChatType ResolveSendType(ChatboxChannelConfig config)
     {
@@ -100,6 +102,19 @@ public sealed partial class ChatboxService
 
         var body = reply != null ? FormatGameReply(reply, text) : text;
 
+        if (IsConversationId(channel.Id))
+        {
+            var recipient = ConversationTargetFor(channel);
+            if (string.IsNullOrEmpty(recipient))
+            {
+                PostSystemMessage(channel.Id, "This conversation has no recipient.");
+                return;
+            }
+
+            _ = _plugin._chat.SendTellAsync(recipient, text);
+            return;
+        }
+
         if (reply != null && IsTellChannel(channel) && !IsSendTypePinned(channel.Config))
         {
             var target = ResolveTellTarget(channel, reply);
@@ -128,6 +143,10 @@ public sealed partial class ChatboxService
         if (reply == null) return null;
 
         var source = reply.Seq != 0 ? channel.FindBySeq(reply.Seq) : null;
+
+        if (source != null && source.GameChatType == XivChatType.TellOutgoing)
+            return source.TellTarget.Length > 0 ? source.TellTarget : null;
+
         if (source != null && !string.IsNullOrEmpty(source.AuthorName))
         {
             return string.IsNullOrEmpty(source.AuthorWorld)

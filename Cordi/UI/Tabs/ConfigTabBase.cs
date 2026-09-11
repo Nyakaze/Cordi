@@ -270,6 +270,24 @@ public abstract class ConfigTabBase
             rowWidth: rowWidth);
     }
 
+    protected static void BrowseForSound(Action<string> onPicked)
+    {
+        var thread = new System.Threading.Thread(() =>
+        {
+            using var dialog = new System.Windows.Forms.OpenFileDialog
+            {
+                Filter = "Audio Files|*.wav;*.mp3|All files|*.*",
+                CheckFileExists = true,
+            };
+
+            if (dialog.ShowDialog() == System.Windows.Forms.DialogResult.OK)
+                onPicked(dialog.FileName);
+        });
+
+        thread.SetApartmentState(System.Threading.ApartmentState.STA);
+        thread.Start();
+    }
+
     protected void DrawButtonRow(
         string id,
         FontAwesomeIcon icon,

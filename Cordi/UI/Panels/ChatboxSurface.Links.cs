@@ -15,9 +15,9 @@ using FFXIVClientStructs.FFXIV.Client.UI.Agent;
 using FFXIVClientStructs.FFXIV.Client.UI.Misc;
 using FFXIVClientStructs.FFXIV.Component.GUI;
 
-namespace Cordi.UI.Windows;
+namespace Cordi.UI.Panels;
 
-public sealed partial class ChatboxWindow
+public sealed partial class ChatboxSurface
 {
     private const string LinkPopupId = "##cordi-link-popup";
 
@@ -239,8 +239,6 @@ public sealed partial class ChatboxWindow
         _itemHoverFrames = 0;
         _itemHoverSeen = 0;
     }
-
-    public override void OnClose() => ForceCloseItemTooltip();
 
     private static unsafe void OpenItemTooltip(uint itemId, bool eventItem)
     {

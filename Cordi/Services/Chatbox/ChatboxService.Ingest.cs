@@ -34,19 +34,37 @@ public sealed partial class ChatboxService
 
         var gameMaster = ChatTypes.IsGameMaster(message.ChatType);
 
+        var (name, world) = ResolveGameSender(message);
+
+        var conversation = gameMaster
+            ? null
+            : ResolveConversationTarget(message.ChatType, name, world);
+
         var targets = Channels
+            .Where(c => !IsConversationId(c.Id))
             .Where(c => gameMaster || c.Config.GameChatTypes.Contains(message.ChatType))
             .ToList();
+
+        if (conversation != null)
+        {
+            if (Config.Conversations.TellRouting == ConversationTellRouting.ConversationsOnly)
+                targets.Clear();
+
+            targets.Add(conversation);
+        }
 
         if (targets.Count == 0)
             return;
 
-        var (name, world) = ResolveGameSender(message);
         var (prefix, prefixColor) = ResolveSenderPrefix(message);
         var localName = _plugin.cachedLocalPlayer?.Name.TextValue ?? string.Empty;
         var isSelf = message.ChatType == XivChatType.TellOutgoing
                      || (!string.IsNullOrEmpty(localName) && string.Equals(name, localName, StringComparison.Ordinal));
         var raw = message.Message?.TextValue ?? string.Empty;
+
+        var (authorName, authorWorld) = message.ChatType == XivChatType.TellOutgoing
+            ? LocalAuthor(name, world)
+            : (name, world);
 
         var filtered = !isSelf
                        && targets.Any(FilterAdvertisementsFor)
@@ -66,9 +84,9 @@ public sealed partial class ChatboxService
                 FilteredAsAd = blocked,
                 ChannelId = target.Id,
                 Origin = ChatboxOrigin.Game,
-                AuthorKey = $"{name}@{world}",
-                AuthorName = name,
-                AuthorWorld = world,
+                AuthorKey = $"{authorName}@{authorWorld}",
+                AuthorName = authorName,
+                AuthorWorld = authorWorld,
                 AuthorPrefix = prefix,
                 AuthorPrefixColor = prefixColor,
                 GameChatType = message.ChatType,
@@ -78,6 +96,9 @@ public sealed partial class ChatboxService
                 Segments = segments,
                 MentionsMe = mentionsMe,
                 IsSelf = isSelf,
+                TellTarget = message.ChatType == XivChatType.TellOutgoing
+                    ? (world.Length == 0 ? name : $"{name}@{world}")
+                    : string.Empty,
                 AuthorColor = ColorFor(target.Config, message.ChatType),
                 OnlyEmotes = onlyEmotes,
             };
@@ -86,6 +107,19 @@ public sealed partial class ChatboxService
             Publish(target, entry, notify: !blocked);
             RequestGameAvatar(entry);
         }
+    }
+
+    private (string Name, string World) LocalAuthor(string fallbackName, string fallbackWorld)
+    {
+        var local = _plugin.cachedLocalPlayer;
+        if (local == null) return (fallbackName, fallbackWorld);
+
+        var name = local.Name.TextValue;
+        if (string.IsNullOrEmpty(name)) return (fallbackName, fallbackWorld);
+
+        var world = local.HomeWorld.ValueNullable?.Name.ExtractText() ?? string.Empty;
+
+        return (name, world);
     }
 
     private static byte[]? EncodeSource(SeString? content)
@@ -324,17 +358,17 @@ public sealed partial class ChatboxService
 
         Emotes.Record(entry);
 
-        var isActive = WindowFocused
-                       && _plugin.ChatboxWindow?.IsOpen == true
-                       && ResolveActiveChannelId() == target.Id;
+        var isActive = IsChannelViewed(target.Id);
 
-        target.Append(entry, LimitFor(target.Id), markUnread: !isActive && !entry.IsSelf && !entry.FilteredAsAd);
+        target.Append(entry, MemoryCapFor(target), markUnread: !isActive && !entry.IsSelf && !entry.FilteredAsAd);
 
         Persist(entry, target);
 
         Translator.Consider(entry);
 
         MessageAdded?.Invoke(entry);
+
+        if (IsConversationId(target.Id)) NotifyConversation(target, entry, isActive);
 
         if (notify && !entry.IsSelf && !target.Config.MuteNotifications)
             Notify(target, entry, isActive);
@@ -451,6 +485,8 @@ public sealed partial class ChatboxService
 
         return (IsRolePlate(prefix) ? prefix : string.Empty, color);
     }
+
+    public static (string Name, string World) SenderOf(ChatMessage message) => ResolveGameSender(message);
 
     private static (string Name, string World) ResolveGameSender(ChatMessage message)
     {

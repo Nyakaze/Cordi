@@ -85,6 +85,28 @@ public sealed class ChatboxMessageStore : IDisposable
         }, new List<ChatboxMessage>(), "load " + channelId);
     }
 
+    public List<ChatboxMessage> LoadBefore(string channelId, long beforeSeq, int limit)
+    {
+        if (limit <= 0 || beforeSeq <= 0) return new List<ChatboxMessage>();
+
+        return _database.Read(connection =>
+        {
+            using var command = connection.CreateCommand();
+            command.CommandText = LoadBeforeSql;
+            command.Parameters.AddWithValue("$channel", channelId);
+            command.Parameters.AddWithValue("$before", beforeSeq);
+            command.Parameters.AddWithValue("$limit", limit);
+
+            var result = new List<ChatboxMessage>();
+            using var reader = command.ExecuteReader();
+            while (reader.Read())
+                result.Add(ReadMessage(reader));
+
+            result.Reverse();
+            return result;
+        }, new List<ChatboxMessage>(), "load before " + channelId);
+    }
+
     public int CountFor(string channelId) => _database.Read(connection =>
     {
         using var command = connection.CreateCommand();
@@ -262,6 +284,7 @@ public sealed class ChatboxMessageStore : IDisposable
             parameters.Add("$isSelf", SqliteType.Integer);
             parameters.Add("$filteredAd", SqliteType.Integer);
             parameters.Add("$source", SqliteType.Blob);
+            parameters.Add("$tellTarget", SqliteType.Text);
 
             foreach (var message in batch)
             {
@@ -288,6 +311,9 @@ public sealed class ChatboxMessageStore : IDisposable
                 parameters["$isSelf"].Value = message.IsSelf ? 1 : 0;
                 parameters["$filteredAd"].Value = message.FilteredAsAd ? 1 : 0;
                 parameters["$source"].Value = (object?)message.SourcePayload ?? DBNull.Value;
+                parameters["$tellTarget"].Value = message.TellTarget.Length == 0
+                    ? DBNull.Value
+                    : message.TellTarget;
 
                 command.ExecuteNonQuery();
                 _writtenSinceTrim.AddOrUpdate(message.ChannelId, 1, (_, existing) => existing + 1);
@@ -337,6 +363,7 @@ public sealed class ChatboxMessageStore : IDisposable
             IsSelf = reader.GetInt32(16) != 0,
             FilteredAsAd = reader.GetInt32(17) != 0,
             SourcePayload = reader.IsDBNull(18) ? null : (byte[])reader.GetValue(18),
+            TellTarget = reader.IsDBNull(19) ? string.Empty : reader.GetString(19),
         };
     }
 
@@ -403,9 +430,21 @@ public sealed class ChatboxMessageStore : IDisposable
     private const string LoadSql = """
         SELECT seq, channel_id, origin, timestamp, author_key, author_name, author_world,
                avatar_url, author_color, game_chat_type, discord_message_id, discord_channel_id,
-               raw_content, attachments, reply, mentions_me, is_self, filtered_ad, source
+               raw_content, attachments, reply, mentions_me, is_self, filtered_ad, source,
+               tell_target
         FROM messages
         WHERE channel_id = $channel
+        ORDER BY seq DESC
+        LIMIT $limit;
+        """;
+
+    private const string LoadBeforeSql = """
+        SELECT seq, channel_id, origin, timestamp, author_key, author_name, author_world,
+               avatar_url, author_color, game_chat_type, discord_message_id, discord_channel_id,
+               raw_content, attachments, reply, mentions_me, is_self, filtered_ad, source,
+               tell_target
+        FROM messages
+        WHERE channel_id = $channel AND seq < $before
         ORDER BY seq DESC
         LIMIT $limit;
         """;
@@ -414,11 +453,13 @@ public sealed class ChatboxMessageStore : IDisposable
         INSERT OR REPLACE INTO messages
             (seq, channel_id, origin, timestamp, author_key, author_name, author_world,
              avatar_url, author_color, game_chat_type, discord_message_id, discord_channel_id,
-             raw_content, attachments, reply, mentions_me, is_self, filtered_ad, source)
+             raw_content, attachments, reply, mentions_me, is_self, filtered_ad, source,
+             tell_target)
         VALUES
             ($seq, $channel, $origin, $timestamp, $authorKey, $authorName, $authorWorld,
              $avatarUrl, $authorColor, $chatType, $discordMessage, $discordChannel,
-             $raw, $attachments, $reply, $mentionsMe, $isSelf, $filteredAd, $source);
+             $raw, $attachments, $reply, $mentionsMe, $isSelf, $filteredAd, $source,
+             $tellTarget);
         """;
 
     private const string SaveStateSql = """

@@ -18,11 +18,27 @@ public sealed partial class ChatboxService
 
     public int LimitFor(string channelId)
     {
+        if (IsConversationId(channelId)) return 0;
+
         var channel = GetChannel(channelId);
         if (channel is null) return Config.MaxMessagesPerChannel;
 
         var limit = channel.Config.MaxMessages;
         return limit > 0 ? limit : Config.MaxMessagesPerChannel;
+    }
+
+    public int ViewLimitFor(string channelId)
+    {
+        if (!IsConversationId(channelId)) return LimitFor(channelId);
+
+        return Math.Max(50, Config.Conversations.HistoryWindow);
+    }
+
+    private int MemoryCapFor(ChatboxChannelState channel)
+    {
+        if (!IsConversationId(channel.Id)) return LimitFor(channel.Id);
+
+        return Math.Max(channel.HistoryWindow, ViewLimitFor(channel.Id));
     }
 
     private void Persist(ChatboxMessage entry, ChatboxChannelState target)
@@ -36,11 +52,44 @@ public sealed partial class ChatboxService
     {
         if (!channel.Config.PersistHistory) return;
 
-        var history = Store.Load(channel.Id, LimitFor(channel.Id));
+        var window = ViewLimitFor(channel.Id);
+        var history = Store.Load(channel.Id, window);
+
+        channel.HistoryWindow = window;
+        channel.HasMoreHistory = IsConversationId(channel.Id) && history.Count >= window;
+
         if (history.Count == 0) return;
 
         var (divider, lastRead) = Store.LoadState(channel.Id);
         channel.Restore(history, divider, lastRead);
+    }
+
+    public bool LoadOlderHistory(ChatboxChannelState channel)
+    {
+        if (!channel.HasMoreHistory) return false;
+
+        var page = Math.Max(50, Config.Conversations.HistoryPageSize);
+        var oldest = channel.OldestSeq;
+
+        if (oldest <= 0)
+        {
+            channel.HasMoreHistory = false;
+            return false;
+        }
+
+        var older = Store.LoadBefore(channel.Id, oldest, page);
+
+        if (older.Count == 0)
+        {
+            channel.HasMoreHistory = false;
+            return false;
+        }
+
+        channel.PrependHistory(older);
+        channel.HistoryWindow += older.Count;
+        channel.HasMoreHistory = older.Count >= page;
+
+        return true;
     }
 
     public void EnsureSegments(ChatboxChannelState channel, ChatboxMessage message)
@@ -138,6 +187,10 @@ public sealed partial class ChatboxService
     public void PruneOrphanedHistory()
     {
         var known = new HashSet<string>(Config.Channels.Select(c => c.Id), StringComparer.Ordinal);
+
+        foreach (var entry in Config.Conversations.Items)
+            known.Add(entry.Id);
+
         Store.PruneOrphans(known);
     }
 

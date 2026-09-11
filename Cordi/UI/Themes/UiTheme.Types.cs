@@ -83,6 +83,9 @@ public readonly struct UiNavItem
     public bool ShowUnreadDot { get; init; }
     public string BadgeText { get; init; }
     public Vector4 BadgeColor { get; init; }
+    public bool Closable { get; init; }
+    public float FlashAmount { get; init; }
+    public Vector4 FlashColor { get; init; }
     public Dalamud.Interface.Textures.TextureWraps.IDalamudTextureWrap? Image { get; init; }
 }
 
@@ -90,6 +93,7 @@ public readonly struct UiNavHit
 {
     public bool Clicked { get; init; }
     public bool Hovered { get; init; }
+    public bool Closed { get; init; }
 }
 
 public enum UiConfirmResult

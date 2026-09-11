@@ -398,21 +398,4 @@ public partial class WatchersTab
             });
     }
 
-    private static void BrowseForSound(Action<string> onPicked)
-    {
-        var thread = new System.Threading.Thread(() =>
-        {
-            using var dialog = new System.Windows.Forms.OpenFileDialog
-            {
-                Filter = "Audio Files|*.wav;*.mp3|All files|*.*",
-                CheckFileExists = true,
-            };
-
-            if (dialog.ShowDialog() == System.Windows.Forms.DialogResult.OK)
-                onPicked(dialog.FileName);
-        });
-
-        thread.SetApartmentState(System.Threading.ApartmentState.STA);
-        thread.Start();
-    }
 }

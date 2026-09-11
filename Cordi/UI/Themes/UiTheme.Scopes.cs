@@ -55,6 +55,11 @@ public sealed partial class UiTheme
             .Push(ImGuiStyleVar.GrabRounding, Radius(0.8f));
     }
 
+    public IDisposable PushTitleFlash(Vector4 color) =>
+        ImRaii.PushColor(ImGuiCol.TitleBg, color)
+            .Push(ImGuiCol.TitleBgActive, color)
+            .Push(ImGuiCol.TitleBgCollapsed, color);
+
     public void PopWindow()
     {
         _activeWindowStyleScope?.Dispose();

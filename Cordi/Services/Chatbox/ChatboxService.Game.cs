@@ -65,14 +65,34 @@ public sealed partial class ChatboxService
 
     public bool RequestInputFocus { get; set; }
 
+    public bool GameFocused { get; private set; } = true;
+
+    private bool AnyChatboxSurfaceOpen()
+    {
+        if (_plugin.ChatboxWindow?.IsOpen == true) return true;
+
+        var manager = _plugin.ConversationWindows;
+        if (manager == null) return false;
+
+        foreach (var entry in ConversationSettings.Items)
+        {
+            if (manager.TryGet(entry.Id, out var window) && window.IsOpen) return true;
+        }
+
+        return false;
+    }
+
     public void OnFrameworkUpdate()
     {
         if (_disposed) return;
 
-        if (!_plugin.ChatboxWindow.IsOpen) InputActive = false;
+        if (!AnyChatboxSurfaceOpen()) InputActive = false;
+
+        GameFocused = GameWindowAlert.IsForeground();
 
         UpdateGameChatVisibility();
         UpdateGameSoundMutes();
+        ClearGameWindowAlert();
         UpdateEnterCapture();
         SyncFromGameChatInput();
     }

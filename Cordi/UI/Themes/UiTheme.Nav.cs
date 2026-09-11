@@ -49,6 +49,60 @@ public sealed partial class UiTheme
         draw.AddText(min + (size - textSize) * 0.5f, 0xFFFFFFFF, text);
     }
 
+    public float PulseAmount(int periodMs)
+    {
+        var period = MathF.Max(100f, periodMs);
+        var half = period * 0.5f;
+        var phase = Environment.TickCount64 % (long)period;
+
+        return phase < half ? phase / half : (period - phase) / half;
+    }
+
+    public Vector4 TitleFlash(Vector4 flashColor, int periodMs, bool animate) =>
+        animate ? Lerp(TitleBgActive, flashColor, PulseAmount(periodMs)) : flashColor;
+
+    private static Vector4 NavFlashed(Vector4 background, UiNavItem item) =>
+        item.FlashAmount <= 0f ? background : Lerp(background, item.FlashColor, Math.Clamp(item.FlashAmount, 0f, 1f));
+
+    public float NavCloseSize() => ImGui.GetTextLineHeight() * 0.8f;
+
+    public float NavCloseSpace(UiNavItem item) => item.Closable ? NavCloseSize() + Gap(0.3f) : 0f;
+
+    private bool NavCloseMark(
+        ImDrawListPtr draw,
+        Vector2 center,
+        UiNavItem item,
+        bool rowHovered,
+        bool clicked,
+        out bool closed)
+    {
+        closed = false;
+
+        if (!item.Closable || !rowHovered) return false;
+
+        var half = NavCloseSize() * 0.5f;
+        var min = center - new Vector2(half, half);
+        var max = center + new Vector2(half, half);
+        var over = ImGui.IsMouseHoveringRect(min, max);
+        var inset = half * 0.42f;
+        var thickness = MathF.Max(1f, ImGuiHelpers.GlobalScale);
+
+        if (over)
+            draw.AddRectFilled(min, max, ImGui.GetColorU32(Active), half * 0.6f);
+
+        var color = ImGui.GetColorU32(over ? Text : MutedText);
+
+        draw.AddLine(min + new Vector2(inset, inset), max - new Vector2(inset, inset), color, thickness);
+        draw.AddLine(
+            new Vector2(max.X - inset, min.Y + inset),
+            new Vector2(min.X + inset, max.Y - inset),
+            color,
+            thickness);
+
+        closed = over && clicked;
+        return over;
+    }
+
     public UiNavHit NavRailTile(
         string id,
         float size,
@@ -71,7 +125,7 @@ public sealed partial class UiTheme
                 ? new Vector4(accent.X * 0.55f, accent.Y * 0.55f, accent.Z * 0.55f, 1f)
                 : FrameBg;
 
-        draw.AddRectFilled(min, max, ImGui.GetColorU32(background), rounding);
+        draw.AddRectFilled(min, max, ImGui.GetColorU32(NavFlashed(background, item)), rounding);
 
         if (item.Image != null)
         {
@@ -87,9 +141,20 @@ public sealed partial class UiTheme
         }
 
         NavRailIndicator(draw, min, size, item, hovered);
-        NavBadge(draw, min, max, item.BadgeText, item.BadgeColor, UiNavBadgePlacement.TopRight);
 
-        return new UiNavHit { Clicked = clicked, Hovered = hovered };
+        var closeInset = NavCloseSize() * 0.5f;
+        var overClose = NavCloseMark(
+            draw,
+            new Vector2(max.X - closeInset, min.Y + closeInset),
+            item,
+            hovered,
+            clicked,
+            out var closed);
+
+        if (!overClose)
+            NavBadge(draw, min, max, item.BadgeText, item.BadgeColor, UiNavBadgePlacement.TopRight);
+
+        return new UiNavHit { Clicked = clicked && !overClose, Hovered = hovered, Closed = closed };
     }
 
     public float NavIconSize() => ImGui.GetTextLineHeight();
@@ -130,8 +195,12 @@ public sealed partial class UiTheme
         var min = origin;
         var max = origin + new Vector2(rowWidth, height);
 
-        if (item.Active || hovered)
-            draw.AddRectFilled(min, max, ImGui.GetColorU32(item.Active ? Active : Hover), Radius(0.5f));
+        if (item.Active || hovered || item.FlashAmount > 0f)
+        {
+            var background = item.Active ? Active : hovered ? Hover : new Vector4(Hover.X, Hover.Y, Hover.Z, 0f);
+
+            draw.AddRectFilled(min, max, ImGui.GetColorU32(NavFlashed(background, item)), Radius(0.5f));
+        }
 
         var padding = PadX(0.6f);
         var textY = min.Y + (height - ImGui.GetTextLineHeight()) * 0.5f;
@@ -165,13 +234,23 @@ public sealed partial class UiTheme
 
         var nameColor = item.Active || item.Unread ? Text : MutedText;
         var nameX = min.X + padding + leadWidth;
-        var name = Fit(item.Label, max.X - padding - NavBadgeSpace(item.BadgeText) - nameX);
+        var trailing = MathF.Max(NavBadgeSpace(item.BadgeText), NavCloseSpace(item));
+        var name = Fit(item.Label, max.X - padding - trailing - nameX);
 
         draw.AddText(new Vector2(nameX, textY), ImGui.GetColorU32(nameColor), name);
 
-        NavBadge(draw, min, max, item.BadgeText, item.BadgeColor, UiNavBadgePlacement.MiddleRight, padding);
+        var overClose = NavCloseMark(
+            draw,
+            new Vector2(max.X - padding - NavCloseSize() * 0.5f, min.Y + height * 0.5f),
+            item,
+            hovered,
+            clicked,
+            out var closed);
 
-        return new UiNavHit { Clicked = clicked, Hovered = hovered };
+        if (!overClose && !(item.Closable && hovered))
+            NavBadge(draw, min, max, item.BadgeText, item.BadgeColor, UiNavBadgePlacement.MiddleRight, padding);
+
+        return new UiNavHit { Clicked = clicked && !overClose, Hovered = hovered, Closed = closed };
     }
 
     public UiNavHit NavTab(
@@ -192,7 +271,7 @@ public sealed partial class UiTheme
         var max = origin + new Vector2(width, height);
         var background = item.Active ? TabActive : hovered ? TabHovered : Tab;
 
-        draw.AddRectFilled(min, max, ImGui.GetColorU32(background), Radius(0.6f));
+        draw.AddRectFilled(min, max, ImGui.GetColorU32(NavFlashed(background, item)), Radius(0.6f));
 
         if (item.Active)
         {
@@ -205,7 +284,7 @@ public sealed partial class UiTheme
                 barHeight);
         }
 
-        var badgeSpace = NavBadgeSpace(item.BadgeText);
+        var badgeSpace = MathF.Max(NavBadgeSpace(item.BadgeText), NavCloseSpace(item));
         var iconSpace = NavIconSpace(item);
         var shown = Fit(item.Label, width - badgeSpace - iconSpace - PadX(0.6f));
         var textSize = ImGui.CalcTextSize(shown);
@@ -234,9 +313,18 @@ public sealed partial class UiTheme
                 ImGui.GetColorU32(Text));
         }
 
-        NavBadge(draw, min, max, item.BadgeText, item.BadgeColor, UiNavBadgePlacement.MiddleRight, PadX(0.3f));
+        var overClose = NavCloseMark(
+            draw,
+            new Vector2(max.X - PadX(0.3f) - NavCloseSize() * 0.5f, min.Y + height * 0.5f),
+            item,
+            hovered,
+            clicked,
+            out var closed);
 
-        return new UiNavHit { Clicked = clicked, Hovered = hovered };
+        if (!overClose && !(item.Closable && hovered))
+            NavBadge(draw, min, max, item.BadgeText, item.BadgeColor, UiNavBadgePlacement.MiddleRight, PadX(0.3f));
+
+        return new UiNavHit { Clicked = clicked && !overClose, Hovered = hovered, Closed = closed };
     }
 
     private void NavRailIndicator(ImDrawListPtr draw, Vector2 min, float size, UiNavItem item, bool hovered)

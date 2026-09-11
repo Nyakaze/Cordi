@@ -101,6 +101,7 @@ public sealed class ChatboxMessage
 
     public bool MentionsMe { get; set; }
     public bool IsSelf { get; init; }
+    public string TellTarget { get; init; } = string.Empty;
     public bool IsSystem => Origin == ChatboxOrigin.System;
     public ChatboxReplyRef? Reply { get; init; }
 

@@ -11,20 +11,23 @@ using Dalamud.Interface.Textures.TextureWraps;
 using Dalamud.Interface.Utility;
 using Dalamud.Interface.Utility.Raii;
 
-namespace Cordi.UI.Windows;
+namespace Cordi.UI.Panels;
 
-public sealed partial class ChatboxWindow
+public sealed partial class ChatboxSurface
 {
-    private readonly List<(ChatboxChannelState? Channel, string Label, float Width)> _tabItems = new();
+    private readonly List<(ChatboxChannelState? Channel, string Label, float Width, bool Closable)> _tabItems = new();
     private readonly List<int> _tabRows = new();
 
-    private List<(ChatboxChannelState? Channel, string Label)> NavItems()
+    private List<(ChatboxChannelState? Channel, string Label, bool Closable)> NavItems()
     {
         var states = new Dictionary<string, ChatboxChannelState>(StringComparer.Ordinal);
         foreach (var channel in Chatbox.Channels)
             states[channel.Id] = channel;
 
-        var items = new List<(ChatboxChannelState? Channel, string Label)>();
+        var items = new List<(ChatboxChannelState? Channel, string Label, bool Closable)>();
+
+        AppendConversationItems(items);
+
         string? pending = null;
 
         var ordered = Config.Channels
@@ -37,7 +40,7 @@ public sealed partial class ChatboxWindow
 
             if (config.IsSeparator)
             {
-                if (items.Count > 0) pending = config.Name.Trim();
+                if (items.Count > 0 && items[^1].Channel != null) pending = config.Name.Trim();
                 continue;
             }
 
@@ -45,14 +48,30 @@ public sealed partial class ChatboxWindow
 
             if (pending != null)
             {
-                items.Add((null, pending));
+                items.Add((null, pending, false));
                 pending = null;
             }
 
-            items.Add((state, string.Empty));
+            items.Add((state, string.Empty, false));
         }
 
         return items;
+    }
+
+    private void AppendConversationItems(List<(ChatboxChannelState? Channel, string Label, bool Closable)> items)
+    {
+        if (!Chatbox.ConversationsEnabled) return;
+
+        var conversations = Chatbox.OpenConversations();
+        if (conversations.Count == 0) return;
+
+        var label = Config.Conversations.SectionLabel?.Trim() ?? string.Empty;
+        if (label.Length > 0) items.Add((null, label, false));
+
+        foreach (var conversation in conversations)
+            items.Add((conversation, string.Empty, true));
+
+        items.Add((null, string.Empty, false));
     }
 
     private void DrawServerRail()
@@ -74,7 +93,7 @@ public sealed partial class ChatboxWindow
                 continue;
             }
 
-            DrawRailItem(item.Channel, item.Channel.Id == activeId, size, indicatorSpace, available);
+            DrawRailItem(item.Channel, item.Channel.Id == activeId, size, indicatorSpace, available, item.Closable);
             ImGui.Dummy(new Vector2(0, _theme.Gap(0.5f)));
         }
     }
@@ -88,7 +107,13 @@ public sealed partial class ChatboxWindow
         _theme.DividerMark(width, label);
     }
 
-    private void DrawRailItem(ChatboxChannelState channel, bool isActive, float size, float indicatorSpace, float available)
+    private void DrawRailItem(
+        ChatboxChannelState channel,
+        bool isActive,
+        float size,
+        float indicatorSpace,
+        float available,
+        bool closable)
     {
         var offset = indicatorSpace + MathF.Max(0f, available - indicatorSpace - size) * 0.5f;
         ImGui.SetCursorPosX(ImGui.GetCursorPosX() + offset);
@@ -96,12 +121,13 @@ public sealed partial class ChatboxWindow
         var hit = _theme.NavRailTile(
             $"##rail-{channel.Id}",
             size,
-            NavVisual(channel, isActive, RailLabel(channel), ChannelIcon(channel)),
+            NavVisual(channel, isActive, RailLabel(channel), ChannelIcon(channel), closable),
             AnimatedTextureWrap.MarkVisible);
 
         DrawChannelContext(channel, hit.Hovered);
 
-        if (hit.Clicked) Activate(channel);
+        if (hit.Closed) Chatbox.CloseConversation(channel.Id);
+        else if (hit.Clicked) Activate(channel);
     }
 
     private IDalamudTextureWrap? ChannelIcon(ChatboxChannelState channel)
@@ -118,7 +144,8 @@ public sealed partial class ChatboxWindow
         ChatboxChannelState channel,
         bool isActive,
         string label,
-        IDalamudTextureWrap? image = null) => new()
+        IDalamudTextureWrap? image = null,
+        bool closable = false) => new()
     {
         Label = label,
         Accent = channel.Config.Color,
@@ -127,8 +154,21 @@ public sealed partial class ChatboxWindow
         ShowUnreadDot = Config.ShowUnreadDot,
         BadgeText = MentionBadgeText(channel),
         BadgeColor = Config.UnreadBadgeColor,
+        Closable = closable,
+        FlashAmount = FlashAmount(channel),
+        FlashColor = _theme.Accent,
         Image = image,
     };
+
+    private float FlashAmount(ChatboxChannelState channel)
+    {
+        if (!ChatboxService.IsConversationId(channel.Id)) return 0f;
+
+        var settings = Config.Conversations;
+        if (!settings.Flash || !HasUnread(channel)) return 0f;
+
+        return settings.NoFlashing ? 1f : _theme.PulseAmount(settings.FlashPeriodMs);
+    }
 
     private void DrawChannelList()
     {
@@ -143,24 +183,25 @@ public sealed partial class ChatboxWindow
                 continue;
             }
 
-            DrawChannelRow(item.Channel, item.Channel.Id == activeId);
+            DrawChannelRow(item.Channel, item.Channel.Id == activeId, item.Closable);
         }
     }
 
     private void DrawChannelListSeparator(string label) =>
         _theme.DividerRow(label, MathF.Max(ImGui.GetContentRegionAvail().X, 24f), _theme.PadX(0.6f));
 
-    private void DrawChannelRow(ChatboxChannelState channel, bool isActive)
+    private void DrawChannelRow(ChatboxChannelState channel, bool isActive, bool closable)
     {
         var hit = _theme.NavListRow(
             $"##row-{channel.Id}",
             ImGui.GetContentRegionAvail().X,
-            NavVisual(channel, isActive, channel.Config.Name, ChannelIcon(channel)),
+            NavVisual(channel, isActive, channel.Config.Name, ChannelIcon(channel), closable),
             AnimatedTextureWrap.MarkVisible);
 
         DrawChannelContext(channel, hit.Hovered);
 
-        if (hit.Clicked) Activate(channel);
+        if (hit.Closed) Chatbox.CloseConversation(channel.Id);
+        else if (hit.Clicked) Activate(channel);
     }
 
     private float LayoutTabs(float available)
@@ -192,7 +233,7 @@ public sealed partial class ChatboxWindow
                     ? fixedWidth
                     : ImGui.CalcTextSize(label).X
                       + _theme.PadX(1.4f)
-                      + BadgeSpace(item.Channel)
+                      + MathF.Max(BadgeSpace(item.Channel), item.Closable ? _theme.NavCloseSize() + _theme.Gap(0.3f) : 0f)
                       + _theme.NavIconSpace(ChannelIcon(item.Channel));
             }
 
@@ -208,7 +249,7 @@ public sealed partial class ChatboxWindow
                 rowWidth += spacing + width;
             }
 
-            _tabItems.Add((item.Channel, label, width));
+            _tabItems.Add((item.Channel, label, width, item.Closable));
         }
 
         return _tabRows.Count;
@@ -257,7 +298,7 @@ public sealed partial class ChatboxWindow
                 if (item.Channel == null)
                     DrawNavSeparator(item.Label, item.Width);
                 else
-                    DrawNavTab(item.Channel, item.Channel.Id == activeId, item.Label, item.Width);
+                    DrawNavTab(item.Channel, item.Channel.Id == activeId, item.Label, item.Width, item.Closable);
             }
         }
 
@@ -267,17 +308,18 @@ public sealed partial class ChatboxWindow
     private void DrawNavSeparator(string label, float width) =>
         _theme.DividerCell(label, width, ImGui.GetFrameHeight());
 
-    private void DrawNavTab(ChatboxChannelState channel, bool isActive, string label, float width)
+    private void DrawNavTab(ChatboxChannelState channel, bool isActive, string label, float width, bool closable)
     {
         var hit = _theme.NavTab(
             $"##tab-{channel.Id}",
             width,
-            NavVisual(channel, isActive, label, ChannelIcon(channel)),
+            NavVisual(channel, isActive, label, ChannelIcon(channel), closable),
             onImage: AnimatedTextureWrap.MarkVisible);
 
         DrawChannelContext(channel, hit.Hovered);
 
-        if (hit.Clicked) Activate(channel);
+        if (hit.Closed) Chatbox.CloseConversation(channel.Id);
+        else if (hit.Clicked) Activate(channel);
     }
 
     private float BadgeSpace(ChatboxChannelState channel) =>
@@ -312,6 +354,12 @@ public sealed partial class ChatboxWindow
         }
 
         if (ImGui.MenuItem("Clear messages")) channel.Clear();
+
+        if (!ChatboxService.IsConversationId(channel.Id)) return;
+
+        ImGui.Separator();
+
+        if (ImGui.MenuItem("Close conversation")) Chatbox.CloseConversation(channel.Id);
     }
 
     private bool HasUnread(ChatboxChannelState channel) =>

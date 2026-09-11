@@ -26,6 +26,41 @@ public sealed class ChatboxChannelState
     public long LastReadSeq { get; private set; }
     public DateTime LastActivity { get; private set; } = DateTime.MinValue;
 
+    public int HistoryWindow { get; set; }
+    public bool HasMoreHistory { get; set; }
+
+    public int Count
+    {
+        get
+        {
+            lock (_gate)
+                return _messages.Count;
+        }
+    }
+
+    public long OldestSeq
+    {
+        get
+        {
+            lock (_gate)
+                return _messages.Count == 0 ? 0 : _messages[0].Seq;
+        }
+    }
+
+    public void PrependHistory(IReadOnlyList<ChatboxMessage> older)
+    {
+        lock (_gate)
+        {
+            _messages.InsertRange(0, older);
+
+            foreach (var message in older)
+            {
+                if (!string.IsNullOrWhiteSpace(message.AuthorName))
+                    _authors.Add(message.AuthorName);
+            }
+        }
+    }
+
     public void Append(ChatboxMessage message, int cap, bool markUnread)
     {
         lock (_gate)
@@ -156,6 +191,7 @@ public sealed class ChatboxChannelState
             FirstUnreadSeq = 0;
             DividerSeq = 0;
             LastReadSeq = 0;
+            HasMoreHistory = false;
         }
     }
 }

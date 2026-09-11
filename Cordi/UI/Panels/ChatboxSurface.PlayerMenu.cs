@@ -3,9 +3,9 @@ using Cordi.Services.Chatbox;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Game.Text;
 
-namespace Cordi.UI.Windows;
+namespace Cordi.UI.Panels;
 
-public sealed partial class ChatboxWindow
+public sealed partial class ChatboxSurface
 {
     private void DrawPlayerPopup(Player player)
     {

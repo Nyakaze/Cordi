@@ -85,6 +85,38 @@ public sealed partial class UiTheme
         ImGui.Dummy(new Vector2(width, height));
     }
 
+    public bool DividerAction(string id, string label, float width)
+    {
+        var rowWidth = MathF.Max(width, 40f);
+        var height = ImGui.GetFrameHeight();
+        var origin = ImGui.GetCursorScreenPos();
+        var pressed = ImGui.InvisibleButton(id, new Vector2(rowWidth, height));
+        var hovered = ImGui.IsItemHovered();
+
+        var draw = ImGui.GetWindowDrawList();
+        var textSize = ImGui.CalcTextSize(label);
+        var pillHeight = textSize.Y + Gap(0.5f);
+        var pillWidth = MathF.Min(rowWidth, textSize.X + PadX(1.2f));
+        var pillMin = new Vector2(origin.X + (rowWidth - pillWidth) * 0.5f, origin.Y + (height - pillHeight) * 0.5f);
+        var pillMax = pillMin + new Vector2(pillWidth, pillHeight);
+        var over = hovered && ImGui.IsMouseHoveringRect(pillMin, pillMax);
+
+        if (over) ImGui.SetMouseCursor(ImGuiMouseCursor.Hand);
+
+        var y = origin.Y + height * 0.5f;
+        var rule = ImGui.GetColorU32(FaintText);
+        var thickness = RuleThickness();
+        var gap = Gap(0.4f);
+
+        draw.AddLine(new Vector2(origin.X, y), new Vector2(pillMin.X - gap, y), rule, thickness);
+        draw.AddLine(new Vector2(pillMax.X + gap, y), new Vector2(origin.X + rowWidth, y), rule, thickness);
+
+        draw.AddRectFilled(pillMin, pillMax, ImGui.GetColorU32(over ? Hover : FrameBg), pillHeight * 0.5f);
+        draw.AddText(pillMin + (pillMax - pillMin - textSize) * 0.5f, ImGui.GetColorU32(over ? Text : MutedText), label);
+
+        return pressed && over;
+    }
+
     public void DividerCell(string label, float width, float height)
     {
         var origin = ImGui.GetCursorScreenPos();

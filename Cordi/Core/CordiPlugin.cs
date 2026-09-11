@@ -117,6 +117,7 @@ public class CordiPlugin : IDalamudPlugin
     public ChatboxService Chatbox { get; private set; }
     public EmojiTranslator Emoji { get; private set; } = null!;
     public ChatboxWindow ChatboxWindow { get; private set; }
+    public ConversationWindowManager ConversationWindows { get; private set; }
     public PartyService PartyService { get; private set; }
     public RememberMeService RememberMe { get; private set; }
 
@@ -188,6 +189,8 @@ public class CordiPlugin : IDalamudPlugin
         windowSystem.AddWindow(CombinedWindow);
         windowSystem.AddWindow(ChatboxWindow);
 
+        ConversationWindows = new ConversationWindowManager(this, windowSystem);
+
         PluginInterface.UiBuilder.Draw += DrawUI;
 
         _chat = new ChatMessenger(ChatGui, Framework, ClientState, CommandManager)
@@ -222,6 +225,7 @@ public class CordiPlugin : IDalamudPlugin
         });
 
         Service.Chat.ChatMessageUnhandled += ChatOnChatMessage;
+        Service.Chat.ChatMessage += ChatOnSuppressibleMessage;
         Service.ClientState.Login += OnLoginEvent;
         Service.ClientState.Logout += OnLogoutEvent;
 
@@ -294,10 +298,40 @@ public class CordiPlugin : IDalamudPlugin
     }
 
     [Command("/cordi")]
-    [HelpMessage("Opens the configuration window for Cordi")]
+    [HelpMessage("Opens the configuration window for Cordi. Use \"/cordi dm <Name@World>\" to open a direct message conversation.")]
     public void OpenConfigCommand(string command, string args)
     {
+        var parts = (args ?? string.Empty).Trim().Split(' ', 2, StringSplitOptions.RemoveEmptyEntries);
+
+        if (parts.Length > 0 && string.Equals(parts[0], "dm", StringComparison.OrdinalIgnoreCase))
+        {
+            OpenConversationCommand(parts.Length > 1 ? parts[1].Trim() : string.Empty);
+            return;
+        }
+
         configWindow.Toggle();
+    }
+
+    private void OpenConversationCommand(string target)
+    {
+        if (!Config.Chatbox.Enabled || !Config.Chatbox.Conversations.Enabled)
+        {
+            ChatGui.PrintError("[Cordi] Direct message conversations are disabled.");
+            return;
+        }
+
+        var split = target.Split('@', 2);
+        var name = split[0].Trim();
+        var world = split.Length > 1 ? split[1].Trim() : string.Empty;
+
+        if (name.Length == 0)
+        {
+            ChatGui.PrintError("[Cordi] Usage: /cordi dm <Name@World>");
+            return;
+        }
+
+        if (Chatbox?.OpenConversationFor(name, world) == null)
+            ChatGui.PrintError($"[Cordi] Could not open a conversation with {target}.");
     }
 
     [Command("/cordidebug")]
@@ -436,23 +470,40 @@ public class CordiPlugin : IDalamudPlugin
         cachedLocalPlayer = null;
     }
 
-    private void ChatOnChatMessage(Dalamud.Game.Chat.IChatMessage message)
+    private void ChatOnChatMessage(Dalamud.Game.Chat.IChatMessage message) => HandleChatMessage(BuildChatMessage(message));
+
+    private void ChatOnSuppressibleMessage(Dalamud.Game.Chat.IHandleableChatMessage message)
     {
-        var msg = new ChatMessage
+        if (Chatbox == null || Config?.Chatbox is not { Enabled: true }) return;
+        if (message.LogKind is not (XivChatType.TellIncoming or XivChatType.TellOutgoing)) return;
+
+        var msg = BuildChatMessage(message);
+        var (name, world) = ChatboxService.SenderOf(msg);
+
+        if (!Chatbox.SuppressesGameLog(message.LogKind, name, world)) return;
+
+        HandleChatMessage(msg);
+        message.PreventOriginal();
+    }
+
+    private static ChatMessage BuildChatMessage(Dalamud.Game.Chat.IChatMessage message) => new()
+    {
+        ChatType = message.LogKind,
+        Message = message.Message,
+        Sender = message.Sender,
+        SenderName = message.Sender.TextValue,
+        SenderWorld = ""
+    };
+
+    private void HandleChatMessage(ChatMessage msg)
+    {
+        if (Config.MappingCache.ContainsKey(msg.ChatType))
         {
-            ChatType = message.LogKind,
-            Message = message.Message,
-            Sender = message.Sender,
-            SenderName = message.Sender.TextValue,
-            SenderWorld = ""
-        };
-        if (Config.MappingCache.ContainsKey(message.LogKind))
-        {
-            LogService.Debug("ChatRouter", $"[{message.LogKind}] {msg.SenderName}: {msg.Message.TextValue}");
+            LogService.Debug("ChatRouter", $"[{msg.ChatType}] {msg.SenderName}: {msg.Message.TextValue}");
         }
         if (Config.Chatbox.Enabled) Chatbox?.IngestGameMessage(msg);
 
-        if (message.LogKind == XivChatType.RetainerSale) return;
+        if (msg.ChatType == XivChatType.RetainerSale) return;
 
         _router.RouteAsync(msg, Discord);
 
@@ -473,6 +524,7 @@ public class CordiPlugin : IDalamudPlugin
         this.CordiPeep?.Dispose();
         this.Chatbox?.Dispose();
         this.ChatboxWindow?.Dispose();
+        this.ConversationWindows?.Dispose();
         this.EmoteLog?.Dispose();
         this.ActivityManager?.Dispose();
         this.HonorificBridge?.Dispose();
@@ -492,6 +544,7 @@ public class CordiPlugin : IDalamudPlugin
         Service.PluginInterface.UiBuilder.OpenMainUi -= this.ToggleConfigUI;
 
         Service.Chat.ChatMessageUnhandled -= ChatOnChatMessage;
+        Service.Chat.ChatMessage -= ChatOnSuppressibleMessage;
         Service.ClientState.Login -= OnLoginEvent;
         Service.ClientState.Logout -= OnLogoutEvent;
 

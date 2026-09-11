@@ -208,6 +208,8 @@ public class ChatboxConfig : IWindowChromeConfig
     public string ActiveChannelId { get; set; } = string.Empty;
     public List<ChatboxChannelConfig> Channels { get; set; } = new();
 
+    public ConversationSettings Conversations { get; set; } = new();
+
     public Dictionary<XivChatType, Vector4> ChatTypeColors { get; set; } = DefaultChatTypeColors();
 
     public static Dictionary<XivChatType, Vector4> DefaultChatTypeColors()
