@@ -89,6 +89,7 @@ public sealed partial class ChatboxSurface : IDisposable
             Config.AnimateGifs && (!Config.AnimateOnlyWhenFocused || Chatbox.WindowFocused));
 
         ConsumeFocusRequest();
+        HandleSearchShortcut();
 
         var inputHeight = MeasureInputHeight();
 
@@ -288,6 +289,13 @@ public sealed partial class ChatboxSurface : IDisposable
             return;
         }
 
+        if (_searchOpen)
+        {
+            DrawSearchBody(inputHeight);
+            DrawInputBar(channel);
+            return;
+        }
+
         using (var list = ImRaii.Child(WidgetIds(channel.Id).Body, new Vector2(0, -inputHeight), false))
         {
             if (list)
@@ -358,6 +366,7 @@ public sealed partial class ChatboxSurface : IDisposable
     public void Dispose()
     {
         UnhookTranslation();
+        DisposeSearch();
         _emoteFont.Dispose();
     }
 }

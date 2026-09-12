@@ -10,7 +10,7 @@ using Microsoft.Data.Sqlite;
 
 namespace Cordi.Services.Chatbox;
 
-public sealed class ChatboxMessageStore : IDisposable
+public sealed partial class ChatboxMessageStore : IDisposable
 {
     private const int FlushIntervalMs = 750;
 

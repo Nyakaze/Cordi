@@ -85,5 +85,7 @@ public sealed class ChatboxWindow : ThemedWindow, IDisposable
 
     public void InsertText(string text) => _surface.InsertText(text);
 
+    public bool JumpToMessage(string channelId, long seq) => _surface.JumpToMessage(channelId, seq);
+
     public void Dispose() => _surface.Dispose();
 }

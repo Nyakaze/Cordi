@@ -18,6 +18,7 @@ public static class PageIds
     public const string ChatboxMentions = "chatbox/Mentions";
     public const string ChatboxContent = "chatbox/Content";
     public const string ChatboxTranslation = "chatbox/Translation";
+    public const string ChatboxSearch = "chatbox/Search";
     public const string ChatboxStorage = "chatbox/Storage";
     public const string Peeper = "watchers/Peeper";
     public const string EmoteLog = "watchers/Emote Log";
@@ -51,6 +52,7 @@ public sealed partial class ConfigWindow
         PageIds.ChatboxMentions,
         PageIds.ChatboxContent,
         PageIds.ChatboxTranslation,
+        PageIds.ChatboxSearch,
         PageIds.ChatboxStorage,
         PageIds.Peeper,
         PageIds.EmoteLog,
@@ -94,6 +96,7 @@ public sealed partial class ConfigWindow
         [PageIds.ChatboxMentions] = "What counts as a mention and how you hear about it",
         [PageIds.ChatboxContent] = "Emotes, the emoji picker and link previews",
         [PageIds.ChatboxTranslation] = "Automatic translation of foreign chat messages",
+        [PageIds.ChatboxSearch] = "Search the full message history by keyword, player, channel and date",
         [PageIds.ChatboxStorage] = "History limits, image cache and maintenance",
         ["Overview"] = "What Cordi is reading from Discord and putting on your title",
         ["Playing"] = "Titles built from the game your Discord account is playing",
@@ -144,6 +147,7 @@ public sealed partial class ConfigWindow
             MakeItem(PageIds.ChatboxMentions, "Mentions", FontAwesomeIcon.At, chatboxTab.DrawMentions),
             MakeItem(PageIds.ChatboxContent, "Content", FontAwesomeIcon.Smile, chatboxTab.DrawContent),
             MakeItem(PageIds.ChatboxTranslation, "Translation", FontAwesomeIcon.Language, chatboxTab.DrawTranslation),
+            MakeItem(PageIds.ChatboxSearch, "Search", FontAwesomeIcon.Search, chatboxTab.DrawSearch),
             MakeItem(PageIds.ChatboxStorage, "Storage", FontAwesomeIcon.Database, chatboxTab.DrawStorage),
         };
 
@@ -244,6 +248,7 @@ public sealed partial class ConfigWindow
         PageIds.ChatboxMentions => chatboxTab,
         PageIds.ChatboxContent => chatboxTab,
         PageIds.ChatboxTranslation => chatboxTab,
+        PageIds.ChatboxSearch => chatboxTab,
         PageIds.ChatboxStorage => chatboxTab,
         PageIds.PartyRadar => partyRadarTab,
         PageIds.SlashCommands => slashCommandsTab,

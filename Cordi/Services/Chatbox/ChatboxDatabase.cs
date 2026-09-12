@@ -7,7 +7,7 @@ namespace Cordi.Services.Chatbox;
 
 public sealed class ChatboxDatabase : IDisposable
 {
-    private const int SchemaVersion = 7;
+    private const int SchemaVersion = 8;
 
     private static bool _nativeReady;
     private static readonly object NativeGate = new();
@@ -156,6 +156,11 @@ public sealed class ChatboxDatabase : IDisposable
         EnsureColumn("messages", "tell_target", "TEXT");
         EnsureColumn("emotes", "url", "TEXT");
         EnsureColumn("emotes", "own", "INTEGER NOT NULL DEFAULT 0");
+
+        Execute(_connection, """
+            CREATE INDEX IF NOT EXISTS idx_messages_timestamp ON messages(timestamp);
+            CREATE INDEX IF NOT EXISTS idx_messages_author ON messages(author_key, seq);
+            """);
 
         Execute(_connection, $"INSERT OR REPLACE INTO meta(key, value) VALUES ('schema', '{SchemaVersion}');");
     }

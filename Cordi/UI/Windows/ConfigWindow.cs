@@ -136,5 +136,5 @@ public sealed partial class ConfigWindow : Window, IDisposable
 
     public void Navigate(string pageId) => selectedPageId = pageId;
 
-    public void Dispose() { }
+    public void Dispose() => chatboxTab.Dispose();
 }
