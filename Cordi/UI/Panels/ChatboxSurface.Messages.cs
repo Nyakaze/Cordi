@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Numerics;
 using Cordi.Configuration;
+using Cordi.Domain;
 using Cordi.Services.Chatbox;
 using Cordi.UI.Themes;
 using Dalamud.Bindings.ImGui;
@@ -784,7 +785,7 @@ public sealed partial class ChatboxSurface
             : message.AuthorColor;
 
     private Vector4 NameColorFor(ChatboxMessage message) =>
-        message.AuthorPrefixColor
+        (ChatTypes.IsParty(message.GameChatType) ? message.AuthorPrefixColor : null)
         ?? (Config.ColorNamesByChannel && AuthorColorFor(message) is { } color
             ? color
             : _theme.Accent);

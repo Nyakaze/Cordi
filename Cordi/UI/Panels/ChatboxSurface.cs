@@ -45,6 +45,10 @@ public sealed partial class ChatboxSurface : IDisposable
     private string _pendingCommandTarget = string.Empty;
     private bool _commandGuardOpen;
     private bool _focused;
+    private bool _gameWasFocused = true;
+    private bool _windowWasFocused;
+    private bool _readArmed;
+    private bool _readViewed;
     private bool _requestFocus;
 
     public ChatboxSurface(CordiPlugin plugin, UiTheme theme, string? pinnedChannelId = null)
@@ -79,10 +83,13 @@ public sealed partial class ChatboxSurface : IDisposable
         _theme.ApplyFontScale();
         UpdateItemTooltip();
 
-        var wasFocused = _focused;
-        _focused = ImGui.IsWindowFocused(ImGuiFocusedFlags.RootAndChildWindows) && Chatbox.GameFocused;
+        var windowFocused = ImGui.IsWindowFocused(ImGuiFocusedFlags.RootAndChildWindows);
 
-        SyncFocusState(wasFocused);
+        UpdateReadArming(windowFocused);
+
+        _focused = windowFocused && Chatbox.GameFocused;
+
+        SyncFocusState();
 
         Chatbox.ImageCache.Tick(
             ImGui.GetIO().DeltaTime,
@@ -119,18 +126,46 @@ public sealed partial class ChatboxSurface : IDisposable
         DrawCommandGuard();
     }
 
-    private void SyncFocusState(bool wasFocused)
+    private void UpdateReadArming(bool windowFocused)
+    {
+        var gameFocused = Chatbox.GameFocused;
+        var gameRegained = gameFocused && !_gameWasFocused;
+        var windowGained = windowFocused && !_windowWasFocused;
+
+        _gameWasFocused = gameFocused;
+        _windowWasFocused = windowFocused;
+
+        if (!windowFocused || gameRegained)
+        {
+            _readArmed = false;
+            return;
+        }
+
+        if (!gameFocused) return;
+
+        if (windowGained || ImGui.IsAnyItemActive() || ClickedInside()) _readArmed = true;
+    }
+
+    private static bool ClickedInside() =>
+        ImGui.IsWindowHovered(ImGuiHoveredFlags.RootAndChildWindows)
+        && (ImGui.IsMouseClicked(ImGuiMouseButton.Left) || ImGui.IsMouseClicked(ImGuiMouseButton.Right));
+
+    private void SyncFocusState()
     {
         var channel = Target;
 
         if (Detached)
         {
-            Chatbox.SetChannelViewed(PinnedChannelId!, _focused);
+            var read = _focused && _readArmed;
+            var wasRead = _readViewed;
+            _readViewed = read;
 
-            if (_focused && !wasFocused && channel != null && channel.UnreadCount > 0)
+            Chatbox.SetChannelViewed(PinnedChannelId!, read);
+
+            if (read && !wasRead && channel != null && channel.UnreadCount > 0)
                 ScrollToUnread(channel, Chatbox.BeginViewing(channel));
 
-            if (_focused && channel != null) Chatbox.MarkChannelRead(channel);
+            if (read && channel != null) Chatbox.MarkChannelRead(channel);
 
             return;
         }
@@ -361,6 +396,9 @@ public sealed partial class ChatboxSurface : IDisposable
         if (Detached) Chatbox.SetChannelViewed(PinnedChannelId!, false);
 
         _focused = false;
+        _windowWasFocused = false;
+        _readArmed = false;
+        _readViewed = false;
     }
 
     public void Dispose()

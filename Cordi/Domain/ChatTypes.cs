@@ -191,6 +191,8 @@ public static class ChatTypes
 
     public static bool IsTell(XivChatType type) => type is XivChatType.TellIncoming or XivChatType.TellOutgoing;
 
+    public static bool IsParty(XivChatType type) => type is XivChatType.Party or XivChatType.CrossParty;
+
     public static bool IsSendable(XivChatType type) => Array.IndexOf(Sendable, type) >= 0;
 
     public static bool IsPublic(XivChatType type) =>
