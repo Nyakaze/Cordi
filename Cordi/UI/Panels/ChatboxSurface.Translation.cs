@@ -210,8 +210,22 @@ public sealed partial class ChatboxSurface
 
     private float TranslationIndent() => _theme.Gap(0.75f);
 
+    private bool ManualTranslationReady(ChatboxMessage message) =>
+        Translation.TranslatesOnDemand
+        && !message.IsSystemLine
+        && message.TranslationState != TranslationState.Pending
+        && !message.HasTranslation
+        && message.RawContent.Length > 0;
+
+    private void RequestTranslation(ChatboxMessage message)
+    {
+        Chatbox.Translator.Request(message);
+        ForgetRow(message.Seq);
+    }
+
     private int TranslationMetricsKey() => HashCode.Combine(
         Translation.Enabled,
+        (int)Translation.Mode,
         (int)Translation.Display,
         Translation.ShowSourceLanguage);
 }

@@ -33,10 +33,24 @@ public enum TranslationDisplayMode
     TooltipOnly,
 }
 
+public enum TranslationMode
+{
+    Automatic,
+    Manual,
+    Both,
+}
+
 [Serializable]
 public class TranslationConfig
 {
     public bool Enabled { get; set; }
+    public TranslationMode Mode { get; set; } = TranslationMode.Automatic;
+
+    [JsonIgnore]
+    public bool TranslatesAutomatically => Enabled && Mode != TranslationMode.Manual;
+
+    [JsonIgnore]
+    public bool TranslatesOnDemand => Enabled && Mode != TranslationMode.Automatic;
 
     public TranslationProviderKind Provider { get; set; } = TranslationProviderKind.Google;
     public TranslationDetectionSource DetectionSource { get; set; } = TranslationDetectionSource.Online;

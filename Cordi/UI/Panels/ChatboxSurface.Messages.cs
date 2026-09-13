@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Globalization;
 using System.Numerics;
 using Cordi.Configuration;
 using Cordi.Domain;
@@ -40,7 +41,7 @@ public sealed partial class ChatboxSurface
     private long _metricsDividerSeq;
 
     private bool HoveringRect(Vector2 min, Vector2 max) =>
-        ImGui.IsWindowHovered(ImGuiHoveredFlags.ChildWindows)
+        ImGui.IsWindowHovered(ImGuiHoveredFlags.ChildWindows | ImGuiHoveredFlags.AllowWhenBlockedByActiveItem)
         && ImGui.IsMouseHoveringRect(min, max)
         && !_autocomplete.Covers(ImGui.GetIO().MousePos);
 
@@ -718,23 +719,141 @@ public sealed partial class ChatboxSurface
     private void DrawHoverToolbar(ChatboxMessage message, Vector2 rowMin, Vector2 rowMax)
     {
         var saved = ImGui.GetCursorScreenPos();
-        var size = ImGui.GetFrameHeight();
-        var spacing = _theme.Gap(0.3f);
-        var buttons = Config.EnableReplies ? 2 : 1;
-        var x = rowMax.X - buttons * (size + spacing);
+        var size = HoverToolbarButtonSize(rowMin, rowMax);
+        var spacing = _theme.Gap(0.2f);
+        var pad = _theme.Gap(0.2f);
 
-        ImGui.SetCursorScreenPos(new Vector2(x, rowMin.Y - size * 0.35f));
+        var (name, world) = Counterpart(message);
+        var replyType = ReplyChatType(message);
+        var canReply = replyType != XivChatType.None
+                       && (!ChatTypes.IsTell(replyType) || name.Length > 0);
+        var canOpenDm = Chatbox.CanOpenConversationWith(name, world);
+        var canTranslate = ManualTranslationReady(message);
 
-        if (Config.EnableReplies)
+        var count = 2;
+        if (canReply) count++;
+        if (canOpenDm) count++;
+        if (canTranslate) count++;
+
+        var width = count * size + (count - 1) * spacing + 2f * pad;
+
+        var panelMin = new Vector2(rowMax.X - width, rowMin.Y);
+        var panelMax = new Vector2(rowMax.X, rowMin.Y + size + 2f * pad);
+
+        var draw = ImGui.GetWindowDrawList();
+        draw.AddRectFilled(panelMin, panelMax, ImGui.GetColorU32(_theme.PanelBg), _theme.Radius(0.7f));
+        draw.AddRect(panelMin, panelMax, ImGui.GetColorU32(_theme.Border), _theme.Radius(0.7f));
+
+        var cursor = panelMin + new Vector2(pad, pad);
+
+        if (canReply)
         {
-            if (_theme.IconButton("##chatbox-reply", FontAwesomeIcon.Reply, "Reply")) BeginReply(message);
-            ImGui.SameLine(0, spacing);
+            var tooltip = ChatTypes.IsTell(replyType)
+                ? $"Reply to {name}"
+                : $"Reply in {ChatboxService.LabelFor(replyType)}";
+
+            if (_theme.IconAction("chatbox-reply", cursor, FontAwesomeIcon.Reply, _theme.Accent, tooltip, size, size))
+                ReplyTo(message, replyType);
+
+            cursor.X += size + spacing;
         }
 
-        if (_theme.IconButton("##chatbox-copy", FontAwesomeIcon.Copy, "Copy text"))
+        if (canOpenDm)
+        {
+            var tooltip = Chatbox.ConversationsInOwnWindow
+                ? $"Open the DM with {name} in a window"
+                : $"Open the DM with {name} in the chatbox";
+
+            if (_theme.IconAction(
+                    "chatbox-open-dm", cursor, FontAwesomeIcon.CommentDots, _theme.Accent, tooltip, size, size))
+                Chatbox.OpenConversationFor(name, world);
+
+            cursor.X += size + spacing;
+        }
+
+        if (canTranslate)
+        {
+            if (_theme.IconAction(
+                    "chatbox-translate-message", cursor, FontAwesomeIcon.Language, _theme.Accent,
+                    "Translate this message", size, size))
+                RequestTranslation(message);
+
+            cursor.X += size + spacing;
+        }
+
+        if (_theme.IconAction("chatbox-copy", cursor, FontAwesomeIcon.Copy, _theme.Accent, "Copy message", size, size))
             ImGui.SetClipboardText(message.RawContent);
 
+        cursor.X += size + spacing;
+
+        if (_theme.IconAction(
+                "chatbox-copy-full", cursor, FontAwesomeIcon.FileAlt, _theme.Accent,
+                "Copy with name, time and channel", size, size))
+            ImGui.SetClipboardText(DescribeMessage(message));
+
         ImGui.SetCursorScreenPos(saved);
+    }
+
+    private static (string Name, string World) Counterpart(ChatboxMessage message)
+    {
+        if (message.TellTarget.Length > 0)
+        {
+            var at = message.TellTarget.IndexOf('@');
+
+            return at > 0
+                ? (message.TellTarget[..at], message.TellTarget[(at + 1)..])
+                : (message.TellTarget, string.Empty);
+        }
+
+        return (message.AuthorName, message.AuthorWorld);
+    }
+
+    private static XivChatType ReplyChatType(ChatboxMessage message)
+    {
+        var type = message.GameChatType;
+
+        if (ChatTypes.IsTell(type)) return XivChatType.TellOutgoing;
+
+        if (type == XivChatType.CrossParty) type = XivChatType.Party;
+
+        return ChatboxService.IsSendTargetAvailable(type) ? type : XivChatType.None;
+    }
+
+    private void ReplyTo(ChatboxMessage message, XivChatType type)
+    {
+        if (ChatTypes.IsTell(type))
+        {
+            var (name, world) = Counterpart(message);
+            if (name.Length == 0) return;
+
+            InsertText(world.Length > 0 ? $"/tell {name}@{world} " : $"/tell {name} ");
+            _focusInput = true;
+            return;
+        }
+
+        Config.LastSendChatType = type;
+        _plugin.Config.Save();
+        _focusInput = true;
+    }
+
+    private float HoverToolbarButtonSize(Vector2 rowMin, Vector2 rowMax) =>
+        Math.Clamp(rowMax.Y - rowMin.Y - _theme.Gap(0.4f), _theme.Scaled(15f), _theme.Scaled(22f));
+
+    private string DescribeMessage(ChatboxMessage message)
+    {
+        var author = message.AuthorWorld.Length > 0
+            ? $"{message.AuthorName}@{message.AuthorWorld}"
+            : message.AuthorName;
+
+        var channel = Chatbox.ChannelDisplayName(message.ChannelId);
+
+        return author.Length > 0
+            ? string.Create(
+                CultureInfo.InvariantCulture,
+                $"[{message.Timestamp:yyyy-MM-dd HH:mm:ss}] [{channel}] {author}: {message.RawContent}")
+            : string.Create(
+                CultureInfo.InvariantCulture,
+                $"[{message.Timestamp:yyyy-MM-dd HH:mm:ss}] [{channel}] {message.RawContent}");
     }
 
     private void DrawNewMessageDivider()

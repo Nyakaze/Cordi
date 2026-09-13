@@ -51,27 +51,91 @@ public partial class ChatboxTab
         DrawTranslationCacheCard();
     }
 
+    private static readonly IReadOnlyList<DropdownItem> TranslationModeOptions = new List<DropdownItem>
+    {
+        new() { Key = "off", Label = "Off" },
+        new() { Key = "automatic", Label = "Automatic" },
+        new() { Key = "manual", Label = "Manual" },
+        new() { Key = "both", Label = "Both" },
+    };
+
     private void DrawTranslationMaster(float innerWidth)
     {
-        bool enabled = Tcfg.Enabled;
+        var enabled = Tcfg.Enabled;
 
-        var result = Row.Draw(
+        Row.Draw(
             id: "translation-master",
             icon: FontAwesomeIcon.Language,
             iconColor: enabled ? UiTheme.TileGreen : theme.MutedText,
-            title: enabled ? "Auto Translate is running" : "Auto Translate is off",
-            subtitle: "Foreign chat messages get a translation attached as they arrive.",
-            toggleValue: enabled,
-            onToggle: SetTranslationEnabled,
+            title: TranslationModeTitle(),
+            subtitle: TranslationModeSubtitle(),
+            controlWidth: 220f,
+            drawControl: (pos, width) =>
+            {
+                ImGui.SetCursorScreenPos(pos);
+                theme.OptionPicker(
+                    "translation-master-picker",
+                    TranslationModeKey(),
+                    TranslationModeOptions,
+                    SetTranslationMode,
+                    width);
+            },
             rowWidth: innerWidth);
-
-        if (result.RowClicked && !result.ToggleChanged)
-            SetTranslationEnabled(!enabled);
     }
 
-    private void SetTranslationEnabled(bool value)
+    private string TranslationModeTitle()
     {
-        Tcfg.Enabled = value;
+        if (!Tcfg.Enabled) return "Auto Translate is off";
+
+        return Tcfg.Mode switch
+        {
+            TranslationMode.Manual => "Translating on request",
+            TranslationMode.Both => "Translating automatically and on request",
+            _ => "Auto Translate is running",
+        };
+    }
+
+    private string TranslationModeSubtitle()
+    {
+        if (!Tcfg.Enabled) return "Nothing gets translated.";
+
+        return Tcfg.Mode switch
+        {
+            TranslationMode.Manual => "Messages keep a translate button you press yourself.",
+            TranslationMode.Both => "Messages arrive translated and keep a translate button as well.",
+            _ => "Foreign chat messages get a translation attached as they arrive.",
+        };
+    }
+
+    private string TranslationModeKey()
+    {
+        if (!Tcfg.Enabled) return "off";
+
+        return Tcfg.Mode switch
+        {
+            TranslationMode.Manual => "manual",
+            TranslationMode.Both => "both",
+            _ => "automatic",
+        };
+    }
+
+    private void SetTranslationMode(string key)
+    {
+        if (string.Equals(key, "off", StringComparison.Ordinal))
+        {
+            Tcfg.Enabled = false;
+            Save();
+            return;
+        }
+
+        Tcfg.Enabled = true;
+        Tcfg.Mode = key switch
+        {
+            "manual" => TranslationMode.Manual,
+            "both" => TranslationMode.Both,
+            _ => TranslationMode.Automatic,
+        };
+
         Save();
     }
 

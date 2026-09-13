@@ -105,12 +105,27 @@ public sealed class TranslationService : IDisposable
 
     public void Consider(ChatboxMessage message)
     {
-        if (_disposed || !Config.Enabled) return;
+        if (_disposed || !Config.TranslatesAutomatically) return;
         if (message.TranslationState != TranslationState.None) return;
         if (!PassesGate(message)) return;
 
+        Begin(message, false);
+    }
+
+    public void Request(ChatboxMessage message)
+    {
+        if (_disposed || !Config.Enabled) return;
+        if (message.TranslationState is TranslationState.Pending or TranslationState.Translated) return;
+
+        message.TranslationState = TranslationState.None;
+
+        Begin(message, true);
+    }
+
+    private void Begin(ChatboxMessage message, bool forced)
+    {
         var text = TranslationFilter.CleanText(message);
-        if (!TranslationFilter.IsTranslatable(text, Config.MinimumLength)) return;
+        if (!TranslationFilter.IsTranslatable(text, forced ? 1 : Config.MinimumLength)) return;
 
         var target = TranslationLanguages.Normalize(Config.TargetLanguage);
         if (target.Length == 0) return;
@@ -138,14 +153,14 @@ public sealed class TranslationService : IDisposable
             }
 
             if (_inFlight.Count >= MaxInFlight) return;
-            if (Config.SkipMacroSpam && !message.IsSelf && _macroGuard.IsSpam(message.AuthorKey)) return;
+            if (!forced && Config.SkipMacroSpam && !message.IsSelf && _macroGuard.IsSpam(message.AuthorKey)) return;
 
             _inFlight[key] = [message];
         }
 
         message.TranslationState = TranslationState.Pending;
 
-        _ = Task.Run(() => RunAsync(key, text, target), _cancellation.Token);
+        _ = Task.Run(() => RunAsync(key, text, target, forced), _cancellation.Token);
     }
 
     public async Task<TranslationResult> TranslateTextAsync(string text, string targetIso)
@@ -173,7 +188,7 @@ public sealed class TranslationService : IDisposable
         return true;
     }
 
-    private async Task RunAsync(string key, string text, string target)
+    private async Task RunAsync(string key, string text, string target, bool forced)
     {
         var state = TranslationState.None;
         var translated = string.Empty;
@@ -191,6 +206,7 @@ public sealed class TranslationService : IDisposable
                     : null;
 
                 var source = await ResolveSourceAsync(text).ConfigureAwait(false);
+                if (forced) source = (source.Iso, false);
 
                 if (!source.Skip && await ReserveRequestAsync(_cancellation.Token).ConfigureAwait(false))
                 {
@@ -213,7 +229,7 @@ public sealed class TranslationService : IDisposable
                     {
                         detected = result.DetectedIso ?? source.Iso;
 
-                        if (!ShouldDiscard(detected, result.Text, text))
+                        if (forced || !ShouldDiscard(detected, result.Text, text))
                         {
                             state = TranslationState.Translated;
                             translated = result.Text;
