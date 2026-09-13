@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
 using System.Threading;
+using System.Threading.Tasks;
 using Cordi.Configuration;
 using Cordi.Core;
 using Cordi.Domain;
@@ -35,7 +36,10 @@ public sealed partial class ChatboxService : IDisposable
             Database,
             () => plugin.Config.Chatbox.ImageCacheMaxEntries,
             () => plugin.Config.Chatbox.AnimateGifs,
-            () => plugin.Config.Chatbox.AnimateIdleUnloadSeconds);
+            () => plugin.Config.Chatbox.AnimateIdleUnloadSeconds)
+        {
+            AttachmentRefresher = RefreshAttachmentAsync
+        };
         EmbedCache = new ChatboxEmbedCache(Database, () => plugin.Config.Chatbox.EmbedCacheDays);
         Emotes = new ChatboxEmoteLibrary(Database, () => plugin.Config.Chatbox.SeenEmoteLimit);
         _sequence = Store.HighestSeq();
@@ -48,6 +52,16 @@ public sealed partial class ChatboxService : IDisposable
         InitializeSourceHook();
         InitializeContextMenu();
         ChatboxAutoTranslate.Preload(plugin.LogService);
+    }
+
+    private async Task<string?> RefreshAttachmentAsync(string url, CancellationToken cancellationToken)
+    {
+        var rest = _plugin.DiscordConnection?.Context?.Rest;
+        if (rest == null) return null;
+
+        var refreshed = await rest.RefreshAttachmentUrlsAsync([url], cancellationToken).ConfigureAwait(false);
+
+        return refreshed.Count > 0 ? refreshed[0].Refreshed : null;
     }
 
     private readonly System.Collections.Concurrent.ConcurrentDictionary<(long Seq, string Url), byte> _hiddenEmbeds = new();

@@ -46,7 +46,10 @@ public sealed partial class ChatboxSurface
 
         for (var i = 0; i < _embedUrls.Count; i++)
         {
-            if (_embedMedia[i] == null) continue;
+            var media = _embedMedia[i];
+            if (media == null) continue;
+            if (Chatbox.ImageCache.Get(media) == null) continue;
+
             _hiddenLinks.Add(_embedUrls[i]);
         }
     }

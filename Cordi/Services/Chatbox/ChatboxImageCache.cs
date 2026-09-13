@@ -23,6 +23,10 @@ public sealed class ChatboxImageCache : IDisposable
         @"^(?<base>https?://(?:cdn|media)\.discord(?:app)?\.(?:com|net)/emojis/\d{5,25})\.(?:gif|webp)(?:\?\S*)?$",
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
+    private static readonly Regex AttachmentRegex = new(
+        @"^https?://(?:cdn|media)\.discord(?:app)?\.(?:com|net)/attachments/\d{5,25}/\d{5,25}/",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
     private static readonly HttpClient Http = CreateClient();
     private static readonly TimeSpan FailureBackoff = TimeSpan.FromMinutes(5);
 
@@ -50,6 +54,8 @@ public sealed class ChatboxImageCache : IDisposable
         _animationEnabled = animationEnabled;
         _animationIdleSeconds = animationIdleSeconds;
     }
+
+    public Func<string, CancellationToken, Task<string?>>? AttachmentRefresher { get; set; }
 
     public int PendingDownloads => _fetch.Pending;
     public int FailedDownloads => _fetch.Failed;
@@ -178,6 +184,13 @@ public sealed class ChatboxImageCache : IDisposable
 
             if (bytes is null || bytes.Length == 0)
             {
+                var refreshed = await TryRefreshAttachmentAsync(url).ConfigureAwait(false);
+                if (refreshed != null)
+                    bytes = await TryDownloadAsync(refreshed).ConfigureAwait(false);
+            }
+
+            if (bytes is null || bytes.Length == 0)
+            {
                 _fetch.MarkFailed(url);
                 return;
             }
@@ -207,6 +220,30 @@ public sealed class ChatboxImageCache : IDisposable
 
         if (wrap is AnimatedTextureWrap animated)
             _animated[url] = animated;
+    }
+
+    private async Task<string?> TryRefreshAttachmentAsync(string url)
+    {
+        var refresher = AttachmentRefresher;
+        if (refresher == null || !AttachmentRegex.IsMatch(url)) return null;
+
+        try
+        {
+            var refreshed = await refresher(url, _fetch.Token).ConfigureAwait(false);
+
+            return string.IsNullOrWhiteSpace(refreshed) || string.Equals(refreshed, url, StringComparison.Ordinal)
+                ? null
+                : refreshed;
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            Service.Log.Debug($"[Chatbox] Attachment refresh failed for {url}: {ex.Message}");
+            return null;
+        }
     }
 
     private static string? EmoteFallbackUrl(string url)

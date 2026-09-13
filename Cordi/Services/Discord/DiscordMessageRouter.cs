@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
+using System.Text;
 using System.Threading.Tasks;
 using Cordi.Core;
 using Crovus.Models;
@@ -9,6 +11,7 @@ namespace Cordi.Services.Discord;
 public class DiscordMessageRouter
 {
     private const string LogSource = "Relay";
+    private const int MaxRelayLength = 400;
 
     private readonly CordiPlugin _plugin;
 
@@ -19,13 +22,37 @@ public class DiscordMessageRouter
 
     private CordiLogService Log => _plugin.LogService;
 
-    private string ParseForGame(string? content, bool translateEmoji)
+    private string ParseForGame(DiscordMessage message, bool translateEmoji)
     {
+        var content = message.Content;
         _plugin.Chatbox?.RegisterEmotes(content);
 
-        return translateEmoji
+        var parsed = translateEmoji
             ? _plugin.Emoji.ToGame(content, _plugin.Config.Chatbox.RelayEmotesAsUrls)
             : content ?? string.Empty;
+
+        return AppendAttachments(parsed, message.Attachments);
+    }
+
+    private static string AppendAttachments(string content, IReadOnlyList<DiscordAttachment>? attachments)
+    {
+        if (attachments == null || attachments.Count == 0) return content;
+
+        var builder = new StringBuilder(content.TrimEnd());
+
+        foreach (var attachment in attachments)
+        {
+            var url = attachment.Url;
+            if (string.IsNullOrWhiteSpace(url)) continue;
+
+            var extra = builder.Length > 0 ? url.Length + 1 : url.Length;
+            if (builder.Length + extra > MaxRelayLength) break;
+
+            if (builder.Length > 0) builder.Append(' ');
+            builder.Append(url);
+        }
+
+        return builder.ToString();
     }
 
     public Task<bool> RouteExtraChatMessage(DiscordMessage message, ulong channelId)
@@ -79,7 +106,7 @@ public class DiscordMessageRouter
     private async Task<bool> RelayAsync(DiscordMessage message, bool translateEmoji, Func<string, Task> send,
         Func<string, string> succeeded, Func<string> failed)
     {
-        var content = ParseForGame(message.Content, translateEmoji);
+        var content = ParseForGame(message, translateEmoji);
         if (string.IsNullOrWhiteSpace(content)) return false;
 
         try
