@@ -112,17 +112,20 @@ public sealed class TranslationService : IDisposable
         Begin(message, false);
     }
 
-    public void Request(ChatboxMessage message)
+    public void Request(ChatboxMessage message) => Request(message, null);
+
+    public void Request(ChatboxMessage message, string? sourceIso)
     {
         if (_disposed || !Config.Enabled) return;
-        if (message.TranslationState is TranslationState.Pending or TranslationState.Translated) return;
+        if (message.TranslationState == TranslationState.Pending) return;
+        if (sourceIso == null && message.TranslationState == TranslationState.Translated) return;
 
         message.TranslationState = TranslationState.None;
 
-        Begin(message, true);
+        Begin(message, true, sourceIso);
     }
 
-    private void Begin(ChatboxMessage message, bool forced)
+    private void Begin(ChatboxMessage message, bool forced, string? sourceIso = null)
     {
         var text = TranslationFilter.CleanText(message);
         if (!TranslationFilter.IsTranslatable(text, forced ? 1 : Config.MinimumLength)) return;
@@ -130,14 +133,17 @@ public sealed class TranslationService : IDisposable
         var target = TranslationLanguages.Normalize(Config.TargetLanguage);
         if (target.Length == 0) return;
 
+        var source = sourceIso == null ? null : TranslationLanguages.Normalize(sourceIso);
+        if (source is { Length: 0 }) source = null;
+
         RecordContext(message.AuthorName, text);
 
-        var key = TranslationCache.KeyFor(target, text);
+        var key = TranslationCache.KeyFor(source, target, text);
 
-        if (Config.CacheEnabled && _cache.TryGet(key, out var cached))
+        if (Config.CacheEnabled && _cache.TryGet(key, out var cached, out var cachedSource))
         {
             Stats.CacheHits++;
-            Apply(message, cached, null, CacheProvider);
+            Apply(message, cached, cachedSource ?? source, CacheProvider);
             return;
         }
 
@@ -160,7 +166,7 @@ public sealed class TranslationService : IDisposable
 
         message.TranslationState = TranslationState.Pending;
 
-        _ = Task.Run(() => RunAsync(key, text, target, forced), _cancellation.Token);
+        _ = Task.Run(() => RunAsync(key, text, target, forced, source), _cancellation.Token);
     }
 
     public async Task<TranslationResult> TranslateTextAsync(string text, string targetIso)
@@ -188,7 +194,7 @@ public sealed class TranslationService : IDisposable
         return true;
     }
 
-    private async Task RunAsync(string key, string text, string target, bool forced)
+    private async Task RunAsync(string key, string text, string target, bool forced, string? sourceIso)
     {
         var state = TranslationState.None;
         var translated = string.Empty;
@@ -205,7 +211,10 @@ public sealed class TranslationService : IDisposable
                     ? SnapshotContext()
                     : null;
 
-                var source = await ResolveSourceAsync(text).ConfigureAwait(false);
+                var source = sourceIso != null
+                    ? (Iso: (string?)sourceIso, Skip: false)
+                    : await ResolveSourceAsync(text).ConfigureAwait(false);
+
                 if (forced) source = (source.Iso, false);
 
                 if (!source.Skip && await ReserveRequestAsync(_cancellation.Token).ConfigureAwait(false))
@@ -235,7 +244,7 @@ public sealed class TranslationService : IDisposable
                             translated = result.Text;
                             provider = result.Provider;
 
-                            if (Config.CacheEnabled) _cache.Store(key, result.Text);
+                            if (Config.CacheEnabled) _cache.Store(key, result.Text, detected);
                             Stats.Translated++;
                         }
                     }

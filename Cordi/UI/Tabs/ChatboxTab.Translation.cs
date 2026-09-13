@@ -479,15 +479,21 @@ public partial class ChatboxTab
             DrawToggleRow(
                 "translation-outgoing-button", FontAwesomeIcon.Language,
                 "Translate Button in the Chatbox",
-                "Adds a button left of the emoji picker that translates what you typed.",
+                "Adds a button left of the emoji picker that toggles auto translate. Right click it to pick a language.",
                 innerWidth, () => Tcfg.OutgoingButton, v => Tcfg.OutgoingButton = v);
 
             if (!Tcfg.OutgoingButton)
                 return;
 
+            DrawToggleRow(
+                "translation-outgoing-auto", FontAwesomeIcon.PaperPlane,
+                "Auto Translate my Messages",
+                "Everything you send is translated first. Lines starting with a slash are left alone.",
+                innerWidth, () => Tcfg.AutoTranslateOutgoing, v => Tcfg.AutoTranslateOutgoing = v);
+
             DrawLanguageRow(
-                "translation-outgoing-language", FontAwesomeIcon.PaperPlane,
-                "Translate my Message into", "Your text in the input is replaced with this language.",
+                "translation-outgoing-language", FontAwesomeIcon.Flag,
+                "Translate my Message into", "The language your own messages are sent in.",
                 innerWidth, () => Tcfg.OutgoingLanguage, v => Tcfg.OutgoingLanguage = v);
         }, "Outgoing Messages");
 

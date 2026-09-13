@@ -17,7 +17,13 @@ public readonly struct DropdownItem
 
 public sealed class Dropdown
 {
+    private const int SearchThreshold = 5;
+    private const int SearchLength = 64;
+
     private readonly UiTheme theme;
+    private readonly Dictionary<string, string> queries = new(StringComparer.Ordinal);
+    private readonly HashSet<string> focused = new(StringComparer.Ordinal);
+    private readonly List<DropdownItem> matches = new();
 
     public Dropdown(UiTheme theme)
     {
@@ -52,6 +58,23 @@ public sealed class Dropdown
     {
         var (popupId, min, max) = DrawHeader(id, width, preview, hasValue);
         DrawPopup(popupId, min, max, width, items, isSelected, onToggle);
+    }
+
+    public void DrawMenu(
+        string popupId,
+        Vector2 anchorMin,
+        Vector2 anchorMax,
+        float width,
+        IReadOnlyList<DropdownItem> items,
+        string selectedKey,
+        Action<string> onSelect,
+        bool above = false)
+    {
+        DrawPopup(popupId, anchorMin, anchorMax, width, items, key => key == selectedKey, key =>
+        {
+            onSelect(key);
+            ImGui.CloseCurrentPopup();
+        }, above);
     }
 
     public const float CaptionFontScale = 0.78f;
@@ -198,11 +221,27 @@ public sealed class Dropdown
         Action<string> onSelect,
         bool above = false)
     {
+        if (!ImGui.IsPopupOpen(popupId))
+        {
+            queries.Remove(popupId);
+            focused.Remove(popupId);
+            return;
+        }
+
         float rowHeight = theme.Scaled(30f);
         float spacing = theme.Gap(0.2f);
         float headerHeight = GroupHeaderHeight();
-        float wanted = items.Count * (rowHeight + spacing) + GroupCount(items) * (headerHeight + spacing) + theme.PadY(1.2f);
-        float capped = MathF.Min(wanted, theme.Scaled(320f));
+
+        bool searchable = items.Count > SearchThreshold;
+        string query = searchable && queries.TryGetValue(popupId, out var stored) ? stored : string.Empty;
+
+        float searchHeight = searchable ? theme.Scaled(UiTheme.ControlHeight) + spacing : 0f;
+        var shown = Filter(items, query);
+        int rows = Math.Max(shown.Count, searchable ? 1 : 0);
+
+        float wanted = rows * (rowHeight + spacing) + GroupCount(shown) * (headerHeight + spacing)
+            + theme.PadY(1.2f) + searchHeight;
+        float capped = MathF.Min(wanted, theme.Scaled(320f) + searchHeight);
 
         ImGui.SetNextWindowPos(above
             ? new Vector2(min.X, min.Y - capped - theme.Gap(0.35f))
@@ -219,19 +258,78 @@ public sealed class Dropdown
             if (!popup)
                 return;
 
-            string? group = null;
-
-            for (int i = 0; i < items.Count; i++)
+            if (!searchable)
             {
-                if (!string.IsNullOrEmpty(items[i].Group) && items[i].Group != group)
+                DrawRows(items, isSelected, onSelect, rowHeight, headerHeight);
+                return;
+            }
+
+            if (focused.Add(popupId))
+                ImGui.SetKeyboardFocusHere();
+
+            if (theme.TextInput($"##dropdown-search{popupId}", ImGui.GetCursorScreenPos(),
+                    ImGui.GetContentRegionAvail().X, ref query, SearchLength, "Search..."))
+            {
+                queries[popupId] = query;
+                shown = Filter(items, query);
+            }
+
+            using (ImRaii.PushStyle(ImGuiStyleVar.WindowPadding, Vector2.Zero))
+            using (var list = ImRaii.Child($"##dropdown-list{popupId}", ImGui.GetContentRegionAvail(), false))
+            {
+                if (!list)
+                    return;
+
+                if (shown.Count == 0)
                 {
-                    group = items[i].Group;
-                    DrawGroupHeader(group!, headerHeight);
+                    theme.MutedLabel("No matches.");
+                    return;
                 }
 
-                if (DrawRow(items[i], isSelected(items[i].Key), rowHeight, i))
-                    onSelect(items[i].Key);
+                DrawRows(shown, isSelected, onSelect, rowHeight, headerHeight);
             }
+        }
+    }
+
+    private IReadOnlyList<DropdownItem> Filter(IReadOnlyList<DropdownItem> items, string query)
+    {
+        var trimmed = query.Trim();
+        if (trimmed.Length == 0)
+            return items;
+
+        matches.Clear();
+
+        foreach (var item in items)
+        {
+            if (Contains(item.Label, trimmed) || Contains(item.Key, trimmed) || Contains(item.Group, trimmed))
+                matches.Add(item);
+        }
+
+        return matches;
+    }
+
+    private static bool Contains(string? value, string query) =>
+        !string.IsNullOrEmpty(value) && value.Contains(query, StringComparison.OrdinalIgnoreCase);
+
+    private void DrawRows(
+        IReadOnlyList<DropdownItem> items,
+        Func<string, bool> isSelected,
+        Action<string> onSelect,
+        float rowHeight,
+        float headerHeight)
+    {
+        string? group = null;
+
+        for (int i = 0; i < items.Count; i++)
+        {
+            if (!string.IsNullOrEmpty(items[i].Group) && items[i].Group != group)
+            {
+                group = items[i].Group;
+                DrawGroupHeader(group!, headerHeight);
+            }
+
+            if (DrawRow(items[i], isSelected(items[i].Key), rowHeight, i))
+                onSelect(items[i].Key);
         }
     }
 

@@ -72,8 +72,6 @@ public sealed partial class ChatboxSurface
             return;
         }
 
-        DrainOutgoingTranslation();
-
         var spacing = _theme.Gap(0.4f);
         var buttonWidth = ImGui.GetFrameHeight();
         var translateVisible = OutgoingButtonVisible;
@@ -324,7 +322,8 @@ public sealed partial class ChatboxSurface
 
     private void Dispatch(string channelId, string text, ChatboxReplyRef? reply)
     {
-        Chatbox.Send(channelId, text, reply);
+        if (AutoTranslateReady(text)) QueueOutgoingTranslation(channelId, text, reply);
+        else Chatbox.Send(channelId, text, reply);
 
         _autocomplete.Reset();
         _pendingToken = null;

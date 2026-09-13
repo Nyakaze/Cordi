@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.Numerics;
+using System.Threading;
 using System.Threading.Tasks;
 using Cordi.Configuration;
 using Cordi.Services.Chatbox;
@@ -9,17 +11,29 @@ using Cordi.UI.Components;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Interface;
 using Dalamud.Interface.Utility;
-using Dalamud.Interface.Utility.Raii;
 
 namespace Cordi.UI.Panels;
 
 public sealed partial class ChatboxSurface
 {
+    private const string OutgoingLanguagePopupId = "##chatbox-translate-language";
+    private const string MessageLanguagePopupId = "##chatbox-message-language";
+
+    private static readonly IReadOnlyList<DropdownItem> LanguageOptions = BuildLanguageOptions();
+
     private readonly ConcurrentQueue<long> _translationDirty = new();
-    private readonly ConcurrentQueue<string> _outgoingResults = new();
+    private readonly ConcurrentQueue<OutgoingSend> _outgoingSends = new();
+    private readonly object _outgoingGate = new();
+    private Task _outgoingChain = Task.CompletedTask;
     private bool _translationHooked;
-    private volatile bool _outgoingBusy;
-    private string _outgoingMarker = string.Empty;
+    private int _outgoingPending;
+
+    private ChatboxMessage? _languageMenuMessage;
+    private Vector2 _languageMenuMin;
+    private Vector2 _languageMenuMax;
+    private bool _openLanguageMenu;
+
+    private readonly record struct OutgoingSend(string ChannelId, string Text, ChatboxReplyRef? Reply);
 
     private TranslationConfig Translation => _plugin.Config.Translation;
 
@@ -27,76 +41,128 @@ public sealed partial class ChatboxSurface
 
     private string OutgoingTarget => TranslationLanguages.Normalize(Translation.OutgoingLanguage);
 
+    private bool AutoTranslateOn => Translation.AutoTranslateOutgoing;
+
+    private static IReadOnlyList<DropdownItem> BuildLanguageOptions()
+    {
+        var options = new List<DropdownItem>(TranslationLanguages.All.Count);
+
+        foreach (var language in TranslationLanguages.All)
+            options.Add(new DropdownItem { Key = language.Iso, Label = language.Name });
+
+        return options;
+    }
+
     private void DrawOutgoingButton(float spacing)
     {
         ImGui.SameLine(0, spacing);
 
         var target = OutgoingTarget;
-        var ready = !_outgoingBusy && target.Length > 0 && _input.Trim().Length > 0;
+        var busy = Volatile.Read(ref _outgoingPending) > 0;
+        var icon = busy ? FontAwesomeIcon.Spinner : FontAwesomeIcon.Language;
+        var language = TranslationLanguages.NameOf(target);
 
-        using var disabled = ImRaii.Disabled(!ready);
+        var tooltip = AutoTranslateOn
+            ? $"Auto translate is on - messages are sent in {language}.\nRight click to pick a language."
+            : $"Auto translate is off.\nRight click to pick a language.";
 
-        var clicked = _theme.IconButton(
-            "##chatbox-translate",
-            _outgoingBusy ? FontAwesomeIcon.Spinner : FontAwesomeIcon.Language,
-            $"Translate your message into {TranslationLanguages.NameOf(target)}");
+        var clicked = AutoTranslateOn
+            ? _theme.SuccessIconButton("##chatbox-translate", icon, tooltip)
+            : _theme.SecondaryIconButton("##chatbox-translate", icon, tooltip);
 
-        if (clicked) BeginOutgoingTranslation(target);
-    }
+        var buttonMin = ImGui.GetItemRectMin();
+        var buttonMax = ImGui.GetItemRectMax();
 
-    private void BeginOutgoingTranslation(string target)
-    {
-        var source = _emoteFont.Expand(_input).Trim();
-        if (source.Length == 0) return;
+        if (ImGui.IsItemClicked(ImGuiMouseButton.Right)) ImGui.OpenPopup(OutgoingLanguagePopupId);
 
-        _outgoingBusy = true;
-
-        _ = Task.Run(async () =>
+        if (clicked)
         {
-            try
-            {
-                var result = await Chatbox.Translator.TranslateTextAsync(source, target).ConfigureAwait(false);
-                if (result.Success) _outgoingResults.Enqueue(result.Text);
-            }
-            catch (Exception ex)
-            {
-                _plugin.LogService.Error("UI", "Failed to translate the chatbox input", ex);
-            }
-            finally
-            {
-                _outgoingBusy = false;
-            }
-        });
+            Translation.AutoTranslateOutgoing = !AutoTranslateOn;
+            _plugin.Config.Save();
+        }
+
+        _theme.OptionMenu(
+            OutgoingLanguagePopupId,
+            buttonMin,
+            buttonMax,
+            _theme.Scaled(220f),
+            LanguageOptions,
+            target,
+            SetOutgoingLanguage,
+            above: true);
     }
 
-    private void DrainOutgoingTranslation()
+    private void SetOutgoingLanguage(string iso)
     {
-        if (!_outgoingResults.TryDequeue(out var text) || text.Length == 0) return;
+        Translation.OutgoingLanguage = TranslationLanguages.Normalize(iso);
+        _plugin.Config.Save();
+    }
 
-        _input = text;
-        _outgoingMarker = text;
-        _focusInput = true;
-        _silentFocus = true;
+    private bool AutoTranslateReady(string text)
+    {
+        if (!OutgoingButtonVisible || !AutoTranslateOn) return false;
+        if (OutgoingTarget.Length == 0) return false;
+
+        var trimmed = text.TrimStart();
+
+        return trimmed.Length > 0 && !trimmed.StartsWith('/');
+    }
+
+    private void QueueOutgoingTranslation(string channelId, string text, ChatboxReplyRef? reply)
+    {
+        var target = OutgoingTarget;
+
+        Interlocked.Increment(ref _outgoingPending);
+
+        lock (_outgoingGate)
+        {
+            _outgoingChain = _outgoingChain
+                .ContinueWith(_ => TranslateOutgoingAsync(channelId, text, reply, target), TaskScheduler.Default)
+                .Unwrap();
+        }
+    }
+
+    private async Task TranslateOutgoingAsync(string channelId, string text, ChatboxReplyRef? reply, string target)
+    {
+        var final = text;
+
+        try
+        {
+            var result = await Chatbox.Translator.TranslateTextAsync(text, target).ConfigureAwait(false);
+            if (result.Success && result.Text.Length > 0) final = result.Text;
+        }
+        catch (Exception ex)
+        {
+            _plugin.LogService.Error("UI", "Failed to translate the outgoing message", ex);
+        }
+        finally
+        {
+            Interlocked.Decrement(ref _outgoingPending);
+            _outgoingSends.Enqueue(new OutgoingSend(channelId, final, reply));
+        }
+    }
+
+    private void DrainOutgoingSends()
+    {
+        while (_outgoingSends.TryDequeue(out var pending))
+            Chatbox.Send(pending.ChannelId, pending.Text, pending.Reply);
     }
 
     private void DrawOutgoingMarker(Vector2 inputMin, Vector2 inputMax)
     {
-        if (_outgoingMarker.Length == 0) return;
+        if (!OutgoingButtonVisible) return;
 
-        if (!string.Equals(_input, _outgoingMarker, StringComparison.Ordinal))
-        {
-            _outgoingMarker = string.Empty;
-            return;
-        }
-
-        var label = $"translated · {TranslationLanguages.NameOf(OutgoingTarget)}";
+        var on = AutoTranslateOn;
+        var label = on
+            ? $"Auto Translate: ON · {TranslationLanguages.NameOf(OutgoingTarget)}"
+            : "Auto Translate: OFF";
 
         _theme.ApplyFontScale(Dropdown.CaptionFontScale);
 
         var size = ImGui.CalcTextSize(label);
         ImGui.GetWindowDrawList().AddText(
             new Vector2(inputMax.X - size.X, inputMin.Y - size.Y - _theme.Scaled(3f)),
-            ImGui.GetColorU32(Translation.TranslationColor),
+            ImGui.GetColorU32(on ? Translation.TranslationColor : _theme.FaintText),
             label);
 
         _theme.ApplyFontScale();
@@ -214,12 +280,55 @@ public sealed partial class ChatboxSurface
         Translation.TranslatesOnDemand
         && !message.IsSystemLine
         && message.TranslationState != TranslationState.Pending
-        && !message.HasTranslation
         && message.RawContent.Length > 0;
 
     private void RequestTranslation(ChatboxMessage message)
     {
         Chatbox.Translator.Request(message);
+        ForgetRow(message.Seq);
+    }
+
+    private void OpenMessageLanguageMenu(ChatboxMessage message, Vector2 anchorMin, Vector2 anchorMax)
+    {
+        _languageMenuMessage = message;
+        _languageMenuMin = anchorMin;
+        _languageMenuMax = anchorMax;
+        _openLanguageMenu = true;
+    }
+
+    private void DrawMessageLanguageMenu()
+    {
+        if (_openLanguageMenu)
+        {
+            _openLanguageMenu = false;
+            ImGui.OpenPopup(MessageLanguagePopupId);
+        }
+
+        var message = _languageMenuMessage;
+        if (message == null) return;
+
+        var viewport = ImGui.GetMainViewport();
+        var above = _languageMenuMin.Y > viewport.Pos.Y + viewport.Size.Y * 0.55f;
+
+        _theme.OptionMenu(
+            MessageLanguagePopupId,
+            _languageMenuMin,
+            _languageMenuMax,
+            _theme.Scaled(220f),
+            LanguageOptions,
+            TranslationLanguages.Normalize(message.TranslationSource ?? string.Empty),
+            iso => RetranslateMessage(message, iso),
+            above);
+
+        if (!ImGui.IsPopupOpen(MessageLanguagePopupId)) _languageMenuMessage = null;
+    }
+
+    private void RetranslateMessage(ChatboxMessage message, string iso)
+    {
+        var source = TranslationLanguages.Normalize(iso);
+        if (source.Length == 0) return;
+
+        Chatbox.Translator.Request(message, source);
         ForgetRow(message.Seq);
     }
 

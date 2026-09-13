@@ -54,6 +54,7 @@ public sealed partial class ChatboxSurface
 
         HookTranslation();
         DrainTranslationDirty();
+        DrainOutgoingSends();
 
         channel.SnapshotInto(_drawBuffer);
         if (_drawBuffer.Count == 0)
@@ -182,6 +183,7 @@ public sealed partial class ChatboxSurface
         draw.ChannelsMerge();
 
         DrawLinkPopup();
+        DrawMessageLanguageMenu();
 
         if (pendingJump != 0 && _scrollToSeq == pendingJump)
         {
@@ -773,10 +775,18 @@ public sealed partial class ChatboxSurface
 
         if (canTranslate)
         {
+            var translated = message.HasTranslation;
+            var tooltip = translated
+                ? "Translate again - pick the language this message is written in"
+                : "Translate this message";
+
             if (_theme.IconAction(
                     "chatbox-translate-message", cursor, FontAwesomeIcon.Language, _theme.Accent,
-                    "Translate this message", size, size))
-                RequestTranslation(message);
+                    tooltip, size, size))
+            {
+                if (translated) OpenMessageLanguageMenu(message, cursor, cursor + new Vector2(size, size));
+                else RequestTranslation(message);
+            }
 
             cursor.X += size + spacing;
         }

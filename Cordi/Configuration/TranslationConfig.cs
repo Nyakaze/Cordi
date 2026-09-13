@@ -85,6 +85,7 @@ public class TranslationConfig
 
     public bool OutgoingButton { get; set; }
     public string OutgoingLanguage { get; set; } = "en";
+    public bool AutoTranslateOutgoing { get; set; }
 
     public bool ShowSourceLanguage { get; set; } = true;
     public Vector4 TranslationColor { get; set; } = new(0.51f, 0.76f, 0.96f, 1f);

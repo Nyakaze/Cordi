@@ -488,6 +488,17 @@ public sealed partial class UiTheme
         Dropdown.Draw(id, pickerWidth, preview, true, items, currentKey, onSelect);
     }
 
+    public void OptionMenu(
+        string popupId,
+        Vector2 anchorMin,
+        Vector2 anchorMax,
+        float width,
+        IReadOnlyList<Cordi.UI.Components.DropdownItem> items,
+        string currentKey,
+        Action<string> onSelect,
+        bool above = false) =>
+        Dropdown.DrawMenu(popupId, anchorMin, anchorMax, width, items, currentKey, onSelect, above);
+
     public float PickerCaptionHeight() => Dropdown.CaptionHeight();
 
     public void IconPicker(

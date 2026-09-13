@@ -12,8 +12,8 @@ public sealed class TranslationCache
     private const string FileName = "translation_cache.json";
     private const string LogSource = "Translation";
 
-    private readonly LinkedList<KeyValuePair<string, string>> _order = new();
-    private readonly Dictionary<string, LinkedListNode<KeyValuePair<string, string>>> _index = new(StringComparer.Ordinal);
+    private readonly LinkedList<CacheEntry> _order = new();
+    private readonly Dictionary<string, LinkedListNode<CacheEntry>> _index = new(StringComparer.Ordinal);
     private readonly object _gate = new();
     private readonly string _path;
     private readonly Func<int> _limit;
@@ -36,26 +36,31 @@ public sealed class TranslationCache
         }
     }
 
-    public static string KeyFor(string targetIso, string text) => targetIso + "" + text;
+    private readonly record struct CacheEntry(string Key, string Translated, string? Source);
 
-    public bool TryGet(string key, out string translated)
+    public static string KeyFor(string? sourceIso, string targetIso, string text) =>
+        (sourceIso ?? string.Empty) + "" + targetIso + "" + text;
+
+    public bool TryGet(string key, out string translated, out string? source)
     {
         lock (_gate)
         {
             if (!_index.TryGetValue(key, out var node))
             {
                 translated = string.Empty;
+                source = null;
                 return false;
             }
 
             _order.Remove(node);
             _order.AddLast(node);
-            translated = node.Value.Value;
+            translated = node.Value.Translated;
+            source = node.Value.Source;
             return true;
         }
     }
 
-    public void Store(string key, string translated)
+    public void Store(string key, string translated, string? source)
     {
         var limit = Math.Max(16, _limit());
 
@@ -75,7 +80,7 @@ public sealed class TranslationCache
                 _index.Remove(oldest.Value.Key);
             }
 
-            _index[key] = _order.AddLast(new KeyValuePair<string, string>(key, translated));
+            _index[key] = _order.AddLast(new CacheEntry(key, translated, source));
         }
 
         ScheduleSave();
@@ -111,10 +116,12 @@ public sealed class TranslationCache
 
                 for (var i = start; i < entries.Count; i++)
                 {
-                    var pair = entries[i];
-                    if (pair.Length != 2 || _index.ContainsKey(pair[0])) continue;
+                    var entry = entries[i];
+                    if (entry.Length < 2 || _index.ContainsKey(entry[0])) continue;
 
-                    _index[pair[0]] = _order.AddLast(new KeyValuePair<string, string>(pair[0], pair[1]));
+                    var source = entry.Length > 2 && !string.IsNullOrEmpty(entry[2]) ? entry[2] : null;
+
+                    _index[entry[0]] = _order.AddLast(new CacheEntry(entry[0], entry[1], source));
                 }
             }
         }
@@ -137,8 +144,8 @@ public sealed class TranslationCache
         lock (_gate)
         {
             snapshot = new List<string[]>(_order.Count);
-            foreach (var pair in _order)
-                snapshot.Add([pair.Key, pair.Value]);
+            foreach (var entry in _order)
+                snapshot.Add([entry.Key, entry.Translated, entry.Source ?? string.Empty]);
         }
 
         try
