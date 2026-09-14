@@ -275,9 +275,12 @@ public sealed partial class ChatboxService : IDisposable
     {
         var changed = false;
 
-        if (ChatTypes.IsTell(config.SendGameChatType))
+        if (config.SendGameChatTypes.RemoveAll(ChatTypes.IsTell) > 0)
+            changed = true;
+
+        if (ChatTypes.IsTell(config.ActiveSendGameChatType))
         {
-            config.SendGameChatType = XivChatType.None;
+            config.ActiveSendGameChatType = XivChatType.None;
             changed = true;
         }
 
@@ -352,6 +355,7 @@ public sealed partial class ChatboxService : IDisposable
         _disposed = true;
 
         DisposeSourceHook();
+        DisposeChatLogHook();
         DisposeContextMenu();
         RestoreGameChat();
         RestoreGameSounds();

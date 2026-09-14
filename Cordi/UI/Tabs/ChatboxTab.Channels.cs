@@ -207,7 +207,8 @@ public partial class ChatboxTab
         general.ShowInNav = true;
         general.IsSeparator = false;
         general.Order = 0;
-        general.SendGameChatType = XivChatType.None;
+        general.SendGameChatTypes.Clear();
+        general.ActiveSendGameChatType = XivChatType.None;
         general.MuteNotifications = true;
         general.TreatAllAsMention = false;
         general.MaxMessages = 5000;
@@ -579,45 +580,57 @@ public partial class ChatboxTab
     private void DrawChannelSending(ChatboxChannelConfig channel) =>
         Card.Draw($"chatbox-sending-{channel.Id}", innerWidth =>
         {
-            var items = new List<DropdownItem>
-            {
-                new() { Key = XivChatType.None.ToString(), Label = "None" },
-            };
-
-            items.AddRange(ChatTypes.Sendable
+            var items = ChatTypes.Sendable
                 .Select(type => new DropdownItem
                 {
                     Key = type.ToString(),
                     Label = ChatboxService.LabelFor(type),
                     Group = ChatTypes.SendGroup(type),
-                }));
+                })
+                .ToList();
 
             Row.Draw(
                 id: $"chatbox-sendtype-{channel.Id}",
                 icon: FontAwesomeIcon.Reply,
                 iconColor: theme.Accent,
                 title: "Send as",
-                subtitle: "Pins the game chat type this channel sends in. None follows the picker next to the chatbox input.",
+                subtitle: "Game chat types this channel may send in. Pick none to follow the picker next to the chatbox input, one to pin it, or several to swap between them there.",
                 controlWidth: 240f,
                 drawControl: (pos, width) =>
                 {
                     ImGui.SetCursorScreenPos(pos);
-                    theme.OptionPicker(
+                    theme.MultiPicker(
                         $"chatbox-sendtype-picker-{channel.Id}",
-                        channel.SendGameChatType.ToString(),
+                        SendTypePreview(channel),
+                        channel.SendGameChatTypes.Count > 0,
                         items,
-                        key =>
-                        {
-                            if (!Enum.TryParse<XivChatType>(key, out var parsed))
-                                return;
-
-                            channel.SendGameChatType = parsed;
-                            Save();
-                        },
+                        key => Enum.TryParse<XivChatType>(key, out var parsed)
+                               && channel.SendGameChatTypes.Contains(parsed),
+                        key => ToggleSendType(channel, key),
                         width);
                 },
                 rowWidth: innerWidth);
         }, "Sending");
+
+    private static string SendTypePreview(ChatboxChannelConfig channel) => channel.SendGameChatTypes.Count switch
+    {
+        0 => "None",
+        1 => ChatboxService.LabelFor(channel.SendGameChatTypes[0]),
+        var count => $"{count} chat types",
+    };
+
+    private void ToggleSendType(ChatboxChannelConfig channel, string key)
+    {
+        if (!Enum.TryParse<XivChatType>(key, out var parsed)) return;
+
+        if (!channel.SendGameChatTypes.Remove(parsed))
+            channel.SendGameChatTypes.Add(parsed);
+
+        if (!channel.SendGameChatTypes.Contains(channel.ActiveSendGameChatType))
+            channel.ActiveSendGameChatType = XivChatType.None;
+
+        Save();
+    }
 
     private void DrawChannelBehaviour(ChatboxChannelConfig channel) =>
         Card.Draw($"chatbox-behaviour-{channel.Id}", innerWidth =>

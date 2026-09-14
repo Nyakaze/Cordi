@@ -51,6 +51,7 @@ public class Configuration : IPluginConfiguration
         this.pluginInterface = pluginInterface;
         MigrateConfig();
         MigrateAudioDevice();
+        MigrateChannelSendTypes();
         Translation.Normalize();
         BuildCache();
 
@@ -279,6 +280,24 @@ public class Configuration : IPluginConfiguration
 
         CordiPeep.LegacySoundDevice = Guid.Empty;
         Save();
+    }
+
+    private void MigrateChannelSendTypes()
+    {
+        var changed = false;
+
+        foreach (var channel in Chatbox.Channels)
+        {
+            if (channel.SendGameChatType == XivChatType.None) continue;
+
+            if (channel.SendGameChatTypes.Count == 0)
+                channel.SendGameChatTypes.Add(channel.SendGameChatType);
+
+            channel.SendGameChatType = XivChatType.None;
+            changed = true;
+        }
+
+        if (changed) Save();
     }
 
     public void BuildCache()

@@ -39,7 +39,7 @@ public sealed class DiscordSender
 
         if ((channelId ?? ResolveMappedChannel(chatType)) is not { } targetId)
         {
-            Log.Error(LogSource, $"No Discord channel mapped for [{chatType}]");
+            Log.Info(LogSource, $"No Discord channel mapped for [{chatType}]");
             return;
         }
 

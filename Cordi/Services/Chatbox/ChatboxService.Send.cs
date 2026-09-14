@@ -16,15 +16,37 @@ public sealed partial class ChatboxService
 
     public XivChatType ResolveSendType(ChatboxChannelConfig config)
     {
-        if (config.SendGameChatType != XivChatType.None)
-            return config.SendGameChatType;
+        var allowed = config.SendGameChatTypes;
+
+        if (allowed.Count == 1) return allowed[0];
+
+        if (allowed.Count > 1)
+        {
+            var current = config.ActiveSendGameChatType;
+            if (allowed.Contains(current) && IsSendTargetAvailable(current)) return current;
+
+            foreach (var type in allowed)
+            {
+                if (IsSendTargetAvailable(type)) return type;
+            }
+
+            return allowed[0];
+        }
 
         var fallback = Config.LastSendChatType;
         return IsSendTargetAvailable(fallback) ? fallback : XivChatType.None;
     }
 
     public bool IsSendTypePinned(ChatboxChannelConfig config) =>
-        config.SendGameChatType != XivChatType.None;
+        config.SendGameChatTypes.Count == 1;
+
+    public void SetSendType(ChatboxChannelConfig config, XivChatType type)
+    {
+        if (config.SendGameChatTypes.Count > 1) config.ActiveSendGameChatType = type;
+        else Config.LastSendChatType = type;
+
+        _plugin.Config.Save();
+    }
 
     private static bool IsTellChannel(ChatboxChannelState channel) =>
         channel.Config.GameChatTypes.Any(ChatTypes.IsTell);

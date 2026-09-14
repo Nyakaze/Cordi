@@ -308,7 +308,8 @@ public sealed partial class ChatboxService
         config.ShowInNav = true;
         config.IsSeparator = false;
         config.Order = int.MaxValue;
-        config.SendGameChatType = XivChatType.None;
+        config.SendGameChatTypes.Clear();
+        config.ActiveSendGameChatType = XivChatType.None;
         config.MuteNotifications = settings.MuteNotifications;
         config.MuteGameSound = settings.MuteGameSound;
         config.TreatAllAsMention = settings.TreatAllAsMention;

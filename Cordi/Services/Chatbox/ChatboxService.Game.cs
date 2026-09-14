@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
+using Dalamud.Game.ClientState.Keys;
 using Dalamud.Game.Config;
 using Dalamud.Game.Text;
+using FFXIVClientStructs.FFXIV.Client.System.Input;
 using FFXIVClientStructs.FFXIV.Client.UI;
 using FFXIVClientStructs.FFXIV.Component.GUI;
 
@@ -9,7 +11,6 @@ namespace Cordi.Services.Chatbox;
 
 public sealed partial class ChatboxService
 {
-    private const int VkReturn = 0x0D;
     private const string GameLinkMarker = "\ue0bb";
 
     private static readonly string[] GameChatAddons =
@@ -59,11 +60,28 @@ public sealed partial class ChatboxService
     private bool _gameSoundLoggedIn;
     private long _gameSoundCheckedAt;
     private bool _gameChatHidden;
-    private bool _enterHeld;
+
+    private const long KeybindPollMs = 5000;
+
+    private struct KeybindSlots
+    {
+        public VirtualKey Key1;
+        public byte Modifier1;
+        public VirtualKey Key2;
+        public byte Modifier2;
+    }
+
+    private long _keybindCheckedAt;
+    private KeybindSlots _chatKeybind;
+    private KeybindSlots _commandKeybind;
+    private bool _chatKeyHeld;
+    private bool _commandKeyHeld;
 
     public bool InputActive { get; set; }
 
     public bool RequestInputFocus { get; set; }
+
+    public string? PendingInputText { get; set; }
 
     public bool GameFocused { get; private set; } = true;
 
@@ -93,7 +111,8 @@ public sealed partial class ChatboxService
         UpdateGameChatVisibility();
         UpdateGameSoundMutes();
         ClearGameWindowAlert();
-        UpdateEnterCapture();
+        EnsureChatLogHook();
+        UpdateChatKeybindCapture();
         SyncFromGameChatInput();
     }
 
@@ -273,30 +292,156 @@ public sealed partial class ChatboxService
         }
     }
 
-    private void UpdateEnterCapture()
+    private void UpdateChatKeybindCapture()
     {
         if (!Config.Enabled || !Service.ClientState.IsLoggedIn)
         {
-            _enterHeld = false;
+            _chatKeyHeld = false;
+            _commandKeyHeld = false;
+            _keybindCheckedAt = 0;
             return;
         }
 
-        if (!Service.KeyState[VkReturn])
+        var now = Environment.TickCount64;
+
+        if (_keybindCheckedAt == 0 || now - _keybindCheckedAt >= KeybindPollMs)
         {
-            _enterHeld = false;
+            _keybindCheckedAt = now;
+            RefreshChatKeybinds();
+        }
+
+        if (ChatLogHookActive) return;
+
+        if (IsGameTextInputActive())
+        {
+            _chatKeyHeld = true;
+            _commandKeyHeld = true;
             return;
         }
 
-        if (_enterHeld) return;
-        _enterHeld = true;
+        if (TryConsumeKeybind(_commandKeybind, ref _commandKeyHeld, "/")) return;
 
-        if (!_plugin.ChatboxWindow.IsOpen) return;
-        if (InputActive) return;
-        if (IsGameTextInputActive()) return;
-
-        RequestInputFocus = true;
-        Service.KeyState[VkReturn] = false;
+        TryConsumeKeybind(_chatKeybind, ref _chatKeyHeld, null);
     }
+
+    private bool CommandKeybindDown => TryMatchKeybind(_commandKeybind, out _);
+
+    private bool TryConsumeKeybind(in KeybindSlots bind, ref bool held, string? prefill)
+    {
+        if (!TryMatchKeybind(bind, out var key))
+        {
+            held = false;
+            return false;
+        }
+
+        if (held) return false;
+        held = true;
+
+        if (!_plugin.ChatboxWindow.IsOpen) return false;
+        if (InputActive) return false;
+
+        Service.KeyState[key] = false;
+        RequestInputFocus = true;
+        PendingInputText = prefill;
+        return true;
+    }
+
+    private static bool TryMatchKeybind(in KeybindSlots bind, out VirtualKey key)
+    {
+        if (MatchKeyCombo(bind.Key1, bind.Modifier1))
+        {
+            key = bind.Key1;
+            return true;
+        }
+
+        if (MatchKeyCombo(bind.Key2, bind.Modifier2))
+        {
+            key = bind.Key2;
+            return true;
+        }
+
+        key = VirtualKey.NO_KEY;
+        return false;
+    }
+
+    private static bool MatchKeyCombo(VirtualKey key, byte modifier)
+    {
+        if (key == VirtualKey.NO_KEY) return false;
+        if (!Service.KeyState.IsVirtualKeyValid(key)) return false;
+        if (!Service.KeyState[key]) return false;
+
+        var shift = Service.KeyState[VirtualKey.SHIFT];
+        var control = Service.KeyState[VirtualKey.CONTROL];
+        var alt = Service.KeyState[VirtualKey.MENU];
+
+        return shift == ((modifier & 1) != 0)
+               && control == ((modifier & 2) != 0)
+               && alt == ((modifier & 4) != 0);
+    }
+
+    private void RefreshChatKeybinds()
+    {
+        var chat = ReadKeybind(InputId.CMD_CHAT, VirtualKey.RETURN);
+        var command = ReadKeybind(InputId.CMD_COMMAND, VirtualKey.NO_KEY);
+
+        if (!SlotsEqual(chat, _chatKeybind) || !SlotsEqual(command, _commandKeybind))
+        {
+            _plugin.LogService.Debug(
+                "Chatbox",
+                $"Chat keybinds: focus={DescribeSlots(chat)} command={DescribeSlots(command)}");
+        }
+
+        _chatKeybind = chat;
+        _commandKeybind = command;
+    }
+
+    private static unsafe KeybindSlots ReadKeybind(InputId id, VirtualKey fallback)
+    {
+        var slots = default(KeybindSlots);
+        var input = UIInputData.Instance();
+
+        if (input != null)
+        {
+            var bind = input->GetKeybind(id);
+
+            if (bind != null)
+            {
+                var settings = bind->KeySettings;
+
+                if (settings.Length > 0)
+                {
+                    slots.Key1 = RemapInvalidVirtualKey((VirtualKey)(int)settings[0].Key);
+                    slots.Modifier1 = (byte)settings[0].KeyModifier;
+                }
+
+                if (settings.Length > 1)
+                {
+                    slots.Key2 = RemapInvalidVirtualKey((VirtualKey)(int)settings[1].Key);
+                    slots.Modifier2 = (byte)settings[1].KeyModifier;
+                }
+            }
+        }
+
+        if (slots.Key1 == VirtualKey.NO_KEY && slots.Key2 == VirtualKey.NO_KEY) slots.Key1 = fallback;
+
+        return slots;
+    }
+
+    private static bool SlotsEqual(in KeybindSlots left, in KeybindSlots right) =>
+        left.Key1 == right.Key1
+        && left.Modifier1 == right.Modifier1
+        && left.Key2 == right.Key2
+        && left.Modifier2 == right.Modifier2;
+
+    private static string DescribeSlots(in KeybindSlots slots) =>
+        $"[{slots.Modifier1}+{slots.Key1}, {slots.Modifier2}+{slots.Key2}]";
+
+    private static VirtualKey RemapInvalidVirtualKey(VirtualKey key) => key switch
+    {
+        VirtualKey.F23 => VirtualKey.OEM_2,
+        (VirtualKey)140 => VirtualKey.OEM_7,
+        _ => key,
+    };
 
     private static unsafe bool IsGameTextInputActive()
     {

@@ -73,6 +73,10 @@ public class ChatboxChannelConfig
 
     public XivChatType SendGameChatType { get; set; } = XivChatType.None;
 
+    public List<XivChatType> SendGameChatTypes { get; set; } = new();
+
+    public XivChatType ActiveSendGameChatType { get; set; } = XivChatType.None;
+
     public bool MuteNotifications { get; set; }
     public bool MuteGameSound { get; set; }
     public bool TreatAllAsMention { get; set; }

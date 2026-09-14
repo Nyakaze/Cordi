@@ -194,6 +194,13 @@ public sealed partial class ChatboxSurface : IDisposable
         if (!Chatbox.RequestInputFocus) return;
 
         Chatbox.RequestInputFocus = false;
+
+        if (Chatbox.PendingInputText is { Length: > 0 } pending)
+        {
+            Chatbox.PendingInputText = null;
+            InsertText(pending);
+        }
+
         _focusInput = true;
         ImGui.SetWindowFocus();
     }

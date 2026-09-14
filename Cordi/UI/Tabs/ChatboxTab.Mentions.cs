@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using Cordi.UI.Components;
 using Dalamud.Interface;
@@ -10,6 +11,9 @@ public partial class ChatboxTab
     {
         public string Value { get; set; } = string.Empty;
     }
+
+    private readonly List<KeywordEntry> keywordEntries = new();
+    private readonly List<string> keywordSnapshot = new();
 
     public void DrawMentions()
     {
@@ -123,12 +127,41 @@ public partial class ChatboxTab
         }, "Replies");
     }
 
-    private void DrawKeywordList()
+    private void SyncKeywordEntries()
     {
-        var entries = new List<KeywordEntry>(Cfg.MentionKeywords.Count);
+        if (keywordSnapshot.Count == Cfg.MentionKeywords.Count)
+        {
+            var same = true;
+
+            for (int index = 0; index < keywordSnapshot.Count; index++)
+            {
+                if (string.Equals(keywordSnapshot[index], Cfg.MentionKeywords[index], StringComparison.Ordinal))
+                    continue;
+
+                same = false;
+                break;
+            }
+
+            if (same) return;
+        }
+
+        keywordEntries.Clear();
 
         foreach (string keyword in Cfg.MentionKeywords)
-            entries.Add(new KeywordEntry { Value = keyword });
+            keywordEntries.Add(new KeywordEntry { Value = keyword });
+
+        CaptureKeywordSnapshot();
+    }
+
+    private void CaptureKeywordSnapshot()
+    {
+        keywordSnapshot.Clear();
+        keywordSnapshot.AddRange(Cfg.MentionKeywords);
+    }
+
+    private void DrawKeywordList()
+    {
+        SyncKeywordEntries();
 
         var columns = new[]
         {
@@ -147,19 +180,20 @@ public partial class ChatboxTab
             "chatbox-keywords",
             "Mention Keywords",
             "Any message containing one of these words counts as a mention.",
-            entries,
+            keywordEntries,
             columns,
             () => new KeywordEntry(),
             () =>
             {
                 Cfg.MentionKeywords.Clear();
 
-                foreach (var entry in entries)
+                foreach (var entry in keywordEntries)
                 {
                     if (!string.IsNullOrWhiteSpace(entry.Value))
                         Cfg.MentionKeywords.Add(entry.Value.Trim());
                 }
 
+                CaptureKeywordSnapshot();
                 Save();
             },
             addLabel: "Add Keyword",
