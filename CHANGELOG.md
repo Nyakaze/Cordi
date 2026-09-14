@@ -1,3 +1,13 @@
+## [test-chatbox-v4](https://github.com/Nyakaze/Cordi/compare/2.3.0...test-chatbox-v4) (14-09-2026)
+
+### General
+ - **NEW UI:** Completely reworked the UI of Cordi.
+ - **Added:** ChatBox Feature
+ - **Added:** ChatBox Messanger
+
+### ChatBox
+ - **Info:** As its the first automated release and I already said whats in there, im not gonna put all of it here again
+
 ## [2.3.0](https://github.com/Nyakaze/Cordi/compare/2.2.0...2.3.0) (26-05-2026)
 
 ### Player Track Tab
