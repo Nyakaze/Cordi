@@ -72,6 +72,10 @@ public sealed partial class ChatboxSurface
 
         SyncRowMetrics(MathF.Max(ImGui.GetContentRegionAvail().X, 80f), dividerSeq);
 
+        var rowSpacing = ImRaii.PushStyle(
+            ImGuiStyleVar.ItemSpacing,
+            new Vector2(ImGui.GetStyle().ItemSpacing.X, 0f));
+
         var scrollY = ImGui.GetScrollY();
         var viewTop = scrollY - CullMargin;
         var viewBottom = scrollY + ImGui.GetWindowHeight() + CullMargin;
@@ -181,6 +185,8 @@ public sealed partial class ChatboxSurface
         FlushCulledRows(ref culled, spacing);
 
         draw.ChannelsMerge();
+
+        rowSpacing.Dispose();
 
         DrawLinkPopup();
         DrawMessageLanguageMenu();
@@ -443,7 +449,8 @@ public sealed partial class ChatboxSurface
 
         var systemLine = message.IsSystemLine && Config.CompactSystemMessages;
 
-        if (!grouped && !systemLine) ImGui.Dummy(new Vector2(0, Config.MessageSpacing * ImGuiHelpers.GlobalScale));
+        var gap = Config.MessageSpacing * ImGuiHelpers.GlobalScale;
+        if (!grouped && !systemLine && gap > 0f) ImGui.Dummy(new Vector2(0, gap));
 
         draw.ChannelsSetCurrent(2);
 
@@ -452,27 +459,32 @@ public sealed partial class ChatboxSurface
 
         var concealed = message.FilteredAsAd && !_revealedAds.Contains(message.Seq);
 
-        if (message.Reply != null && Config.ShowReplyPreview && Config.EnableReplies && !concealed)
-            DrawReplyLine(channel, message.Reply, width);
+        using (ImRaii.PushStyle(
+                   ImGuiStyleVar.ItemSpacing,
+                   new Vector2(ImGui.GetStyle().ItemSpacing.X, Config.LineSpacing * ImGuiHelpers.GlobalScale)))
+        {
+            if (message.Reply != null && Config.ShowReplyPreview && Config.EnableReplies && !concealed)
+                DrawReplyLine(channel, message.Reply, width);
 
-        if (concealed)
-        {
-            DrawBlockedNotice(message);
-        }
-        else if (systemLine)
-        {
-            DrawSystemLine(message, width);
-        }
-        else
-        {
-            switch (Config.Layout)
+            if (concealed)
             {
-                case ChatboxLayout.Compact:
-                    DrawCompact(message, width);
-                    break;
-                default:
-                    DrawCozy(message, grouped, width);
-                    break;
+                DrawBlockedNotice(message);
+            }
+            else if (systemLine)
+            {
+                DrawSystemLine(message, width);
+            }
+            else
+            {
+                switch (Config.Layout)
+                {
+                    case ChatboxLayout.Compact:
+                        DrawCompact(message, width);
+                        break;
+                    default:
+                        DrawCozy(message, grouped, width);
+                        break;
+                }
             }
         }
 
