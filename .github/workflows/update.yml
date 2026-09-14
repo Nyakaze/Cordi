@@ -7,6 +7,7 @@ on:
       - "*.*"      
       - "*.*.*"    
       - "*.*.*.*" 
+      - "!test-*"
   workflow_dispatch:
     inputs:
       version:
@@ -137,7 +138,7 @@ jobs:
              'map(if .InternalName == "Cordi" then . + {
                 "AssemblyVersion": $ver, 
                 "DownloadLinkInstall": $link, 
-                "DownloadLinkTesting": $link, 
+                "DownloadLinkTesting": (if .TestingAssemblyVersion then .DownloadLinkTesting else $link end),
                 "DownloadLinkUpdate": $link,
                 "LastUpdate": $time,
                 "Changelog": $changelog

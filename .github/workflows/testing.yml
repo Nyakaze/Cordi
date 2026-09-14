@@ -1,0 +1,223 @@
+name: Build and Publish Testing
+
+on:
+  push:
+    tags:
+      - 'test-*'
+  workflow_dispatch:
+    inputs:
+      changelog_entry:
+        description: 'CHANGELOG.md heading to publish (without brackets)'
+        required: true
+        default: Unreleased
+
+permissions:
+  contents: write
+
+concurrency:
+  group: cordi-testing-release
+  cancel-in-progress: false
+
+jobs:
+  testing:
+    runs-on: ubuntu-latest
+    env:
+      DALAMUD_HOME: ${{ github.workspace }}/dalamud
+      DALAMUD_ARCHIVE_URL: https://goatcorp.github.io/dalamud-distrib/stg/latest.zip
+    steps:
+      - name: Checkout testing source
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && '3.0' || github.ref }}
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Validate source and assign version
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          TAG_NAME: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          git merge-base --is-ancestor HEAD origin/3.0 || {
+            echo 'Testing tags must point to a commit on branch 3.0.' >&2
+            exit 1
+          }
+          if (( GITHUB_RUN_NUMBER >= 65535 )); then
+            echo 'Increase the testing version base before publishing more builds.' >&2
+            exit 1
+          fi
+          VERSION="3.0.0.${GITHUB_RUN_NUMBER}"
+          if [[ "$EVENT_NAME" == 'workflow_dispatch' ]]; then
+            TAG_NAME="test-${VERSION}"
+          fi
+          echo "BUILD_VERSION=$VERSION" >> "$GITHUB_ENV"
+          echo "RELEASE_TAG=$TAG_NAME" >> "$GITHUB_ENV"
+          echo "SOURCE_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+
+      - name: Extract testing changelog
+        env:
+          CHANGELOG_ENTRY: ${{ github.event_name == 'workflow_dispatch' && inputs.changelog_entry || github.ref_name }}
+        run: |
+          set -euo pipefail
+          CHANGELOG_TEXT=$(awk '
+            { sub(/\r$/, "") }
+            /^##[ \t]+/ {
+              heading = $0
+              sub(/^##[ \t]+/, "", heading)
+              if (substr(heading, 1, 1) == "[") {
+                sub(/^\[/, "", heading)
+                sub(/\].*$/, "", heading)
+              } else {
+                sub(/[ \t].*$/, "", heading)
+              }
+              printing = (heading == ENVIRON["CHANGELOG_ENTRY"])
+              if (printing) matches++
+              next
+            }
+            printing {
+              print
+              if ($0 ~ /[^[:space:]]/) has_content = 1
+            }
+            END {
+              if (matches != 1 || !has_content) {
+                print "Expected one non-empty changelog entry for " ENVIRON["CHANGELOG_ENTRY"] > "/dev/stderr"
+                exit 1
+              }
+            }
+          ' CHANGELOG.md)
+          delimiter="CHANGELOG_$(cat /proc/sys/kernel/random/uuid)"
+          {
+            echo "CHANGELOG_TEXT<<$delimiter"
+            printf '%s\n' "$CHANGELOG_TEXT"
+            echo "$delimiter"
+          } >> "$GITHUB_ENV"
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Download Dalamud
+        run: |
+          set -euo pipefail
+          mkdir -p "$DALAMUD_HOME"
+          curl --fail --location --retry 3 "$DALAMUD_ARCHIVE_URL" -o dalamud.zip
+          unzip -q dalamud.zip -d "$DALAMUD_HOME"
+
+      - name: Build testing package
+        run: |
+          set -euo pipefail
+          dotnet restore Cordi/Cordi.csproj -p:EnableWindowsTargeting=true
+          dotnet build Cordi/Cordi.csproj --no-restore -c Release \
+            -p:EnableWindowsTargeting=true -p:DefineConstants=CORDI_DEV \
+            -p:Version="$BUILD_VERSION" \
+            -p:AssemblyVersion="$BUILD_VERSION" \
+            -p:FileVersion="$BUILD_VERSION"
+
+      - name: Verify package
+        run: |
+          set -euo pipefail
+          mapfile -t packages < <(find Cordi/bin/Release -name latest.zip)
+          [[ ${#packages[@]} -eq 1 ]] || { echo 'Expected exactly one latest.zip'; exit 1; }
+          cp "${packages[0]}" Cordi.zip
+          unzip -p Cordi.zip Cordi.json > packaged-manifest.json
+          jq -e --arg version "$BUILD_VERSION" \
+            '.InternalName == "Cordi" and .AssemblyVersion == $version and (.DalamudApiLevel | type == "number")' \
+            packaged-manifest.json
+          echo "TESTING_API_LEVEL=$(jq -r .DalamudApiLevel packaged-manifest.json)" >> "$GITHUB_ENV"
+
+      - name: Publish GitHub prerelease
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Cordi ${{ env.BUILD_VERSION }} (Testing)
+          tag_name: ${{ env.RELEASE_TAG }}
+          target_commitish: ${{ env.SOURCE_SHA }}
+          body: ${{ env.CHANGELOG_TEXT }}
+          files: Cordi.zip
+          fail_on_unmatched_files: true
+          prerelease: true
+          make_latest: false
+
+      - name: Checkout plugin repository
+        uses: actions/checkout@v4
+        with:
+          repository: Nyakaze/DalamudPlugins
+          ref: main
+          path: dalamud-plugins-repo
+          token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+
+      - name: Update testing manifest
+        env:
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          path = Path('dalamud-plugins-repo/uwu.json')
+          manifest = json.loads(path.read_text(encoding='utf-8-sig'))
+          entries = [entry for entry in manifest if entry.get('InternalName') == 'Cordi']
+          if len(entries) != 1:
+              raise SystemExit('Expected exactly one Cordi entry in uwu.json')
+          entry = entries[0]
+          version = os.environ['BUILD_VERSION']
+          def numeric(value):
+              parts = tuple(map(int, value.split('.')))
+              return parts + (0,) * (4 - len(parts))
+          if numeric(version) <= numeric(entry['AssemblyVersion']):
+              raise SystemExit('Testing version must exceed the stable version')
+          previous = entry.get('TestingAssemblyVersion')
+          if previous and numeric(version) < numeric(previous):
+              raise SystemExit('Refusing to replace a newer testing build')
+          entry.update(
+              TestingAssemblyVersion=version,
+              TestingDalamudApiLevel=int(os.environ['TESTING_API_LEVEL']),
+              TestingChangelog=os.environ['CHANGELOG_TEXT'],
+              DownloadLinkTesting=(
+                  f"https://github.com/{os.environ['REPOSITORY']}/releases/download/"
+                  f"{os.environ['RELEASE_TAG']}/Cordi.zip"
+              ),
+          )
+          path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+          PY
+          cd dalamud-plugins-repo
+          git config user.name 'GitHub Action Bot'
+          git config user.email 'action@github.com'
+          if ! git diff --quiet -- uwu.json; then
+            git add uwu.json
+            git commit -m "Update Cordi testing to $BUILD_VERSION"
+            git push origin main
+          fi
+
+      - name: Announce testing release on Discord
+        env:
+          DISCORD_TEST_WEBHOOK: ${{ secrets.DISCORD_TEST_WEBHOOK }}
+          RELEASE_URL: ${{ github.server_url }}/${{ github.repository }}/releases/tag/${{ env.RELEASE_TAG }}
+        run: |
+          set -euo pipefail
+          if [[ -z "$DISCORD_TEST_WEBHOOK" ]]; then
+            echo 'No Discord Webhook configured. Skipping.'
+            exit 0
+          fi
+
+          jq -n \
+            --arg tag "$RELEASE_TAG" \
+            --arg notes "$CHANGELOG_TEXT" \
+            --arg url "$RELEASE_URL" \
+            '{
+              content: "@everyone",
+              embeds: [{
+                title: "Cordi Test version Released \($tag)",
+                description: (if ($notes | length) > 3900 then $notes[:3900] + "\n\n[Read the full changelog](" + $url + ")" else $notes end),
+                url: $url,
+                color: 5814783
+              }]
+            }' > discord_payload.json
+
+          curl --fail-with-body --silent --show-error \
+            -H 'Content-Type: application/json' \
+            -X POST \
+            --data-binary @discord_payload.json \
+            "$DISCORD_TEST_WEBHOOK"
