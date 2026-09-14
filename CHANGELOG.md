@@ -1,4 +1,4 @@
-## [test-chatbox-v4](https://github.com/Nyakaze/Cordi/compare/2.3.0...test-chatbox-v4) (14-09-2026)
+## [test-chatbox-v4.2](https://github.com/Nyakaze/Cordi/compare/2.3.0...test-chatbox-v4.2) (14-09-2026)
 
 ### General
  - **NEW UI:** Completely reworked the UI of Cordi.
