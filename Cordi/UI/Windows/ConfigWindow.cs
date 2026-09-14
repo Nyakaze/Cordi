@@ -74,6 +74,8 @@ public sealed partial class ConfigWindow : Window, IDisposable
     public Vector2 LastPos { get; private set; }
     public Vector2 LastSize { get; private set; }
 
+    public override bool DrawConditions() => !CordiPlugin.CinematicActive;
+
     public override void PreDraw() => theme.PushWindow();
     public override void PostDraw() => theme.PopWindow();
 

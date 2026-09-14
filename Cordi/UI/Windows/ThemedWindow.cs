@@ -26,6 +26,8 @@ public abstract class ThemedWindow : Window
 
     protected abstract IWindowChromeConfig Chrome { get; }
 
+    public override bool DrawConditions() => !Core.CordiPlugin.CinematicActive;
+
     protected virtual void OnPreDraw()
     {
     }

@@ -59,7 +59,7 @@ public sealed class ConversationWindow : ThemedWindow, IDisposable
     {
         if (!Config.Enabled || !Config.Conversations.Enabled) return false;
         if (!Cordi.Service.ClientState.IsLoggedIn && Config.HideWhenNotLoggedIn) return false;
-        return true;
+        return base.DrawConditions();
     }
 
     protected override void OnPreDraw()

@@ -45,7 +45,7 @@ public sealed class ChatboxWindow : ThemedWindow, IDisposable
     {
         if (!Config.Enabled) return false;
         if (Config.HideWhenNotLoggedIn && !Cordi.Service.ClientState.IsLoggedIn) return false;
-        return true;
+        return !Chatbox.CinematicHidesChatbox;
     }
 
     protected override void OnPreDraw()

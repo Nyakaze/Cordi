@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Cordi.Core;
 using Dalamud.Game.ClientState.Keys;
 using Dalamud.Game.Config;
 using Dalamud.Game.Text;
@@ -85,6 +86,33 @@ public sealed partial class ChatboxService
 
     public bool GameFocused { get; private set; } = true;
 
+    private bool? _cinematicOverride;
+
+    public static bool CinematicActive => CordiPlugin.CinematicActive;
+
+    public bool CinematicHidesChatbox
+    {
+        get
+        {
+            if (!CordiPlugin.CinematicActive) return false;
+            if (_cinematicOverride is { } visible) return !visible;
+
+            return CordiPlugin.GposeActive ? Config.HideInGpose : Config.HideInCutscene;
+        }
+    }
+
+    public void RevealDuringCinematic()
+    {
+        if (CordiPlugin.CinematicActive) _cinematicOverride = true;
+    }
+
+    public void HideDuringCinematic() => _cinematicOverride = false;
+
+    private void UpdateCinematicState()
+    {
+        if (!CordiPlugin.CinematicActive) _cinematicOverride = null;
+    }
+
     private bool AnyChatboxSurfaceOpen()
     {
         if (_plugin.ChatboxWindow?.IsOpen == true) return true;
@@ -108,6 +136,7 @@ public sealed partial class ChatboxService
 
         GameFocused = GameWindowAlert.IsForeground();
 
+        UpdateCinematicState();
         UpdateGameChatVisibility();
         UpdateGameSoundMutes();
         ClearGameWindowAlert();
@@ -339,6 +368,8 @@ public sealed partial class ChatboxService
 
         if (!_plugin.ChatboxWindow.IsOpen) return false;
         if (InputActive) return false;
+
+        RevealDuringCinematic();
 
         Service.KeyState[key] = false;
         RequestInputFocus = true;

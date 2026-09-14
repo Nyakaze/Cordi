@@ -43,6 +43,18 @@ public partial class ChatboxTab
                 "Click Through when unfocused", "Clicks pass to the game while the window is not focused.",
                 innerWidth, () => Cfg.ClickThroughWhenUnfocused, v => Cfg.ClickThroughWhenUnfocused = v);
 
+            DrawToggleRow(
+                "chatbox-hide-gpose", FontAwesomeIcon.Camera,
+                "Hide in Gpose",
+                "Hides the chatbox while group pose is active. Your Ready Chat Log or Ready Text Command keybind brings it back, and a button next to the emoji picker hides it again. Hiding the game UI always hides it regardless.",
+                innerWidth, () => Cfg.HideInGpose, v => Cfg.HideInGpose = v);
+
+            DrawToggleRow(
+                "chatbox-hide-cutscene", FontAwesomeIcon.Film,
+                "Hide in Cutscene",
+                "Hides the chatbox during cutscenes. Your Ready Chat Log or Ready Text Command keybind brings it back, and a button next to the emoji picker hides it again. Hiding the game UI always hides it regardless.",
+                innerWidth, () => Cfg.HideInCutscene, v => Cfg.HideInCutscene = v);
+
             DrawSliderRow(
                 "chatbox-opacity", FontAwesomeIcon.Adjust,
                 "Background Opacity", "How solid the window background is drawn.",

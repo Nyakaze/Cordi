@@ -66,6 +66,8 @@ public sealed partial class ChatboxService
         if (values->UInt is not (ChatLogActivatePlain or ChatLogActivateWithText)) return false;
         if (_plugin.ChatboxWindow?.IsOpen != true) return false;
 
+        RevealDuringCinematic();
+
         var prefill = ReadActivationText(values + 2) ?? (CommandKeybindDown ? "/" : null);
 
         _plugin.LogService.Debug("Chatbox", $"Game chat activation {values->UInt:X2} prefill '{prefill}'");

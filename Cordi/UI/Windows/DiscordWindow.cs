@@ -30,6 +30,8 @@ public sealed class DiscordWindow : Window, IDisposable
         RespectCloseHotkey = true;
     }
 
+    public override bool DrawConditions() => !CordiPlugin.CinematicActive;
+
     public override void PreDraw() => theme.PushWindow();
     public override void PostDraw() => theme.PopWindow();
 

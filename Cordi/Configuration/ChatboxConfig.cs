@@ -103,6 +103,8 @@ public class ChatboxConfig : IWindowChromeConfig
     public bool ClickThroughWhenUnfocused { get; set; }
     public float BackgroundOpacity { get; set; } = 1.0f;
     public bool HideWhenNotLoggedIn { get; set; } = true;
+    public bool HideInGpose { get; set; } = true;
+    public bool HideInCutscene { get; set; } = true;
     public bool HideGameChat { get; set; }
 
     public ChatboxLayout Layout { get; set; } = ChatboxLayout.Cozy;

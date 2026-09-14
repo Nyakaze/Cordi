@@ -17,6 +17,7 @@ using Cordi.Services.Features;
 using Dalamud.Interface.Windowing;
 using Dalamud.Plugin.Services;
 
+using Dalamud.Game.ClientState.Conditions;
 using Dalamud.Game.ClientState.Objects.SubKinds;
 using Dalamud.Game.Text;
 using Dalamud.Game.Text.SeStringHandling;
@@ -92,6 +93,15 @@ public class CordiPlugin : IDalamudPlugin
         }
     }
     private bool _prevComboPressed;
+
+    public static bool GposeActive => Service.ClientState.IsGPosing;
+
+    public static bool CutsceneActive =>
+        !GposeActive
+        && (Service.Condition[ConditionFlag.OccupiedInCutSceneEvent]
+            || Service.Condition[ConditionFlag.WatchingCutscene78]);
+
+    public static bool CinematicActive => GposeActive || CutsceneActive;
 
     public IPlayerCharacter cachedLocalPlayer;
 
@@ -190,6 +200,9 @@ public class CordiPlugin : IDalamudPlugin
         windowSystem.AddWindow(ChatboxWindow);
 
         ConversationWindows = new ConversationWindowManager(this, windowSystem);
+
+        PluginInterface.UiBuilder.DisableGposeUiHide = true;
+        PluginInterface.UiBuilder.DisableCutsceneUiHide = true;
 
         PluginInterface.UiBuilder.Draw += DrawUI;
 

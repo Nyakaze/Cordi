@@ -78,9 +78,12 @@ public sealed partial class ChatboxSurface
         var buttonWidth = ImGui.GetFrameHeight();
         var translateVisible = OutgoingButtonVisible;
 
+        var cinematicButton = !Detached && ChatboxService.CinematicActive;
+
         var reserved = 0f;
         if (translateVisible) reserved += spacing + IconButtonWidth(FontAwesomeIcon.Language);
         if (Config.ShowEmojiPicker) reserved += spacing + IconButtonWidth(FontAwesomeIcon.Smile);
+        if (cinematicButton) reserved += spacing + IconButtonWidth(FontAwesomeIcon.EyeSlash);
 
         ImGui.SetCursorPosY(ImGui.GetCursorPosY() + _theme.PickerCaptionHeight());
 
@@ -156,6 +159,18 @@ public sealed partial class ChatboxSurface
 
             _picker.Draw(InsertText);
             pickerOpen = _picker.InputActive;
+        }
+
+        if (cinematicButton)
+        {
+            ImGui.SameLine(0, spacing);
+
+            var hidden = _theme.IconButton(
+                "##chatbox-cinematic-hide",
+                FontAwesomeIcon.EyeSlash,
+                "Hide the chatbox again. Your chat keybind brings it back.");
+
+            if (hidden) Chatbox.HideDuringCinematic();
         }
 
         Chatbox.InputActive = inputActive || pickerOpen;
