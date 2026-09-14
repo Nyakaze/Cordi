@@ -193,7 +193,7 @@ public sealed class ChatboxEmbedCache : IDisposable
             if (!document.RootElement.TryGetProperty("data", out var data)) return null;
             if (!data.TryGetProperty("file", out var file)) return null;
 
-            var media = FirstGifUrl(file);
+            var media = SmallestGifUrl(file);
             if (media == null) return null;
 
             var embed = ChatboxLinkEmbed.ForImage(media);
@@ -207,19 +207,31 @@ public sealed class ChatboxEmbedCache : IDisposable
         }
     }
 
-    private static string? FirstGifUrl(JsonElement file)
+    private static string? SmallestGifUrl(JsonElement file)
     {
-        foreach (var quality in new[] { "hd", "md", "sd" })
+        string? best = null;
+        var bestSize = long.MaxValue;
+
+        foreach (var quality in new[] { "sd", "md", "hd" })
         {
             if (!file.TryGetProperty(quality, out var bucket)) continue;
             if (!bucket.TryGetProperty("gif", out var gif)) continue;
             if (!gif.TryGetProperty("url", out var value)) continue;
 
             var url = value.GetString();
-            if (!string.IsNullOrEmpty(url)) return url;
+            if (string.IsNullOrEmpty(url)) continue;
+
+            var size = gif.TryGetProperty("size", out var bytes) && bytes.TryGetInt64(out var parsed) && parsed > 0
+                ? parsed
+                : long.MaxValue;
+
+            if (best != null && size >= bestSize) continue;
+
+            best = url;
+            bestSize = size;
         }
 
-        return null;
+        return best;
     }
 
     private async Task<string> ReadCappedAsync(HttpResponseMessage response)

@@ -91,9 +91,10 @@ public sealed partial class ChatboxSurface : IDisposable
 
         SyncFocusState();
 
-        Chatbox.ImageCache.Tick(
-            ImGui.GetIO().DeltaTime,
-            Config.AnimateGifs && (!Config.AnimateOnlyWhenFocused || Chatbox.WindowFocused));
+        AnimatedTextureWrap.SetWindowAnimates(
+            Config.AnimateGifs && (!Config.AnimateOnlyWhenFocused || _focused));
+
+        Chatbox.ImageCache.Tick(ImGui.GetIO().DeltaTime, Config.AnimateGifs);
 
         ConsumeFocusRequest();
         HandleSearchShortcut();

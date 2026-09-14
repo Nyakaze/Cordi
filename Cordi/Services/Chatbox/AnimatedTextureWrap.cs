@@ -10,6 +10,9 @@ public sealed class AnimatedTextureWrap : IDalamudTextureWrap
     private const int MaxStepsPerAdvance = 64;
     private const double MaxDeltaMs = 250d;
 
+    [ThreadStatic]
+    private static bool _gateClosed;
+
     private readonly (IDalamudTextureWrap Wrap, int DelayMs)[] _frames;
     private double _elapsedMs;
     private long _lastSeenMs;
@@ -34,6 +37,8 @@ public sealed class AnimatedTextureWrap : IDalamudTextureWrap
     public int Width => CurrentWrap.Width;
     public int Height => CurrentWrap.Height;
 
+    public static void SetWindowAnimates(bool animates) => _gateClosed = !animates;
+
     public static void MarkVisible(IDalamudTextureWrap? texture, Vector2 size)
     {
         if (texture is not AnimatedTextureWrap animated) return;
@@ -52,8 +57,9 @@ public sealed class AnimatedTextureWrap : IDalamudTextureWrap
 
     private void Touch()
     {
-        _requested = true;
         _lastSeenMs = Environment.TickCount64;
+
+        if (!_gateClosed) _requested = true;
     }
 
     public void Advance(double milliseconds)

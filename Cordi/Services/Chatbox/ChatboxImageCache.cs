@@ -9,6 +9,7 @@ using System.Security.Cryptography;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
+using Dalamud.Bindings.ImGui;
 using Dalamud.Interface.Textures.TextureWraps;
 using Microsoft.Data.Sqlite;
 
@@ -17,7 +18,7 @@ namespace Cordi.Services.Chatbox;
 public sealed class ChatboxImageCache : IDisposable
 {
     private const int DisposeDelayFrames = 4;
-    private const int MaxImageBytes = 8 * 1024 * 1024;
+    private const int MaxImageBytes = 16 * 1024 * 1024;
 
     private static readonly Regex EmoteFallbackRegex = new(
         @"^(?<base>https?://(?:cdn|media)\.discord(?:app)?\.(?:com|net)/emojis/\d{5,25})\.(?:gif|webp)(?:\?\S*)?$",
@@ -41,6 +42,7 @@ public sealed class ChatboxImageCache : IDisposable
     private readonly ConcurrentQueue<(IDalamudTextureWrap Wrap, long Frame)> _graveyard = new();
     private readonly ChatboxFetchQueue _fetch = new(4, FailureBackoff, "Image load");
     private long _frame;
+    private int _tickedFrame = -1;
     private bool _disposed;
 
     public ChatboxImageCache(
@@ -103,6 +105,9 @@ public sealed class ChatboxImageCache : IDisposable
     public void Tick(float deltaSeconds, bool animate)
     {
         if (_disposed) return;
+
+        var drawFrame = ImGui.GetFrameCount();
+        if (Interlocked.Exchange(ref _tickedFrame, drawFrame) == drawFrame) return;
 
         var frame = Interlocked.Increment(ref _frame);
 
