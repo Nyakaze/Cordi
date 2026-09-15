@@ -9,7 +9,7 @@ namespace Cordi.Configuration;
 
 public enum TranslationProviderKind
 {
-    Google,
+    Machine,
     DeepL,
     Llm,
 }
@@ -52,9 +52,9 @@ public class TranslationConfig
     [JsonIgnore]
     public bool TranslatesOnDemand => Enabled && Mode != TranslationMode.Automatic;
 
-    public TranslationProviderKind Provider { get; set; } = TranslationProviderKind.Google;
-    public TranslationDetectionSource DetectionSource { get; set; } = TranslationDetectionSource.Online;
-    public TranslationSourceMode SourceMode { get; set; } = TranslationSourceMode.Foreign;
+    public TranslationProviderKind Provider { get; set; } = TranslationProviderKind.DeepL;
+    public TranslationDetectionSource DetectionSource { get; set; } = TranslationDetectionSource.Local;
+    public TranslationSourceMode SourceMode { get; set; } = TranslationSourceMode.Selected;
     public TranslationDisplayMode Display { get; set; } = TranslationDisplayMode.BelowMessage;
 
     public string TargetLanguage { get; set; } = "en";
@@ -81,7 +81,10 @@ public class TranslationConfig
     public bool TranslateInDuty { get; set; } = true;
     public bool SkipMacroSpam { get; set; } = true;
     public bool SkipFilteredMessages { get; set; } = true;
+    public bool SkipChatNoise { get; set; } = true;
+    public bool TranslateDiscordMessages { get; set; } = true;
     public int MinimumLength { get; set; } = 2;
+    public int DetectionConfidence { get; set; } = 40;
 
     public bool OutgoingButton { get; set; }
     public string OutgoingLanguage { get; set; } = "en";

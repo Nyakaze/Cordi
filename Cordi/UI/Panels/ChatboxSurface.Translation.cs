@@ -8,6 +8,7 @@ using Cordi.Configuration;
 using Cordi.Services.Chatbox;
 using Cordi.Services.Translation;
 using Cordi.UI.Components;
+using Cordi.UI.Themes;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Interface;
 using Dalamud.Interface.Utility;
@@ -234,6 +235,18 @@ public sealed partial class ChatboxSurface
             return;
         }
 
+        if (message.TranslationState == TranslationState.Failed && !message.HasTranslation)
+        {
+            _flow.Begin(
+                MathF.Max(width, 60f),
+                ImGui.GetTextLineHeight(),
+                Config.LineSpacing * ImGuiHelpers.GlobalScale);
+            _flow.Indent(TranslationIndent());
+            _flow.Text(TranslationFailureText(), UiTheme.TileRed);
+            _flow.End();
+            return;
+        }
+
         if (!message.HasTranslation) return;
 
         _flow.Begin(
@@ -275,6 +288,15 @@ public sealed partial class ChatboxSurface
     }
 
     private float TranslationIndent() => _theme.Gap(0.75f);
+
+    private string TranslationFailureText()
+    {
+        var cooldown = Chatbox.Translator.CooldownRemaining;
+
+        return cooldown > TimeSpan.Zero
+            ? $"translation failed - {Chatbox.Translator.ActiveProviderName} is rate limited for {cooldown.TotalSeconds:0}s"
+            : "translation failed";
+    }
 
     private bool ManualTranslationReady(ChatboxMessage message) =>
         Translation.TranslatesOnDemand

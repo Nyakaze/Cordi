@@ -28,10 +28,12 @@
 
   <ItemGroup>
     <EmbeddedResource Include="Resources\chatbox-emoji.txt" />
+    <EmbeddedResource Include="Resources\phrases.json" />
   </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="ECommons" Version="3.2.0.2" />
+    <PackageReference Include="GTranslate" Version="2.3.0" />
     <PackageReference Include="Microsoft.Data.Sqlite" Version="9.0.0" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.2" />
     <PackageReference Update="DalamudPackager" Version="15.0.0" />
@@ -39,11 +41,42 @@
     <PackageReference Include="NAudio.Core" Version="2.2.1" />
     <PackageReference Include="NAudio.WinMM" Version="2.2.1" />
     <PackageReference Include="NetStone" Version="1.4.1" />
+    <PackageReference Include="SearchPioneer.Lingua" Version="1.0.5" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\Crovus\Crovus.csproj" />
   </ItemGroup>
+  <UsingTask TaskName="StripLinguaModels" TaskFactory="RoslynCodeTaskFactory" AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.Core.dll">
+    <ParameterGroup>
+      <ModelsDir ParameterType="System.String" Required="true" />
+      <Keep ParameterType="System.String" Required="true" />
+      <RemovedCount ParameterType="System.Int32" Output="true" />
+    </ParameterGroup>
+    <Task>
+      <Using Namespace="System.IO" />
+      <Code Type="Fragment" Language="cs">
+        <![CDATA[
+        RemovedCount = 0;
+        if (Directory.Exists(ModelsDir))
+        {
+            var keepSet = new HashSet<string>(Keep.Split(';'), StringComparer.OrdinalIgnoreCase);
+            foreach (var dir in Directory.GetDirectories(ModelsDir))
+                if (!keepSet.Contains(Path.GetFileName(dir)))
+                { Directory.Delete(dir, recursive: true); RemovedCount++; }
+        }
+        ]]>
+      </Code>
+    </Task>
+  </UsingTask>
+
+  <Target Name="CordiStripLinguaModels" AfterTargets="CopyFiles" BeforeTargets="PackagePlugin">
+    <StripLinguaModels ModelsDir="$(TargetDir)Lingua\LanguageModels" Keep="de;en;es;fr;ja;ko;zh">
+      <Output TaskParameter="RemovedCount" PropertyName="_LinguaRemovedCount" />
+    </StripLinguaModels>
+    <Message Text="Lingua: stripped $(_LinguaRemovedCount) language model directories." Importance="normal" />
+  </Target>
+
   <Target Name="CordiFlattenSqliteNative" AfterTargets="ResolveReferences">
     <ItemGroup>
       <CordiSqliteNative Include="@(ReferenceCopyLocalPaths)" Condition="'%(Filename)' == 'e_sqlite3' AND $([System.String]::Copy('%(ReferenceCopyLocalPaths.DestinationSubDirectory)').Contains('win-x64'))" />

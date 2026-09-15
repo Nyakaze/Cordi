@@ -36,6 +36,7 @@ public class Configuration : IPluginConfiguration
     public bool LogsTabVisible { get; set; }
 
 
+    private const int CurrentVersion = 2;
     private const int SaveRetryAttempts = 5;
     private const int SaveRetryDelayMs = 25;
 
@@ -52,6 +53,7 @@ public class Configuration : IPluginConfiguration
         MigrateConfig();
         MigrateAudioDevice();
         MigrateChannelSendTypes();
+        MigrateVersion();
         Translation.Normalize();
         BuildCache();
 
@@ -279,6 +281,17 @@ public class Configuration : IPluginConfiguration
             Audio.OutputDevice = CordiPeep.LegacySoundDevice;
 
         CordiPeep.LegacySoundDevice = Guid.Empty;
+        Save();
+    }
+
+    private void MigrateVersion()
+    {
+        if (Version >= CurrentVersion) return;
+
+        if (Version < 2)
+            Translation.DetectionSource = TranslationDetectionSource.Local;
+
+        Version = CurrentVersion;
         Save();
     }
 

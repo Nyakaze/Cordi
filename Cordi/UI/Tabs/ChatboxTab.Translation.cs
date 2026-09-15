@@ -147,7 +147,7 @@ public partial class ChatboxTab
                 "Service", "Which translator handles the request.",
                 innerWidth, () => Tcfg.Provider, v => Tcfg.Provider = v,
                 Options(
-                    (TranslationProviderKind.Google, "Google (free)"),
+                    (TranslationProviderKind.Machine, "Bing + Google (free)"),
                     (TranslationProviderKind.DeepL, "DeepL"),
                     (TranslationProviderKind.Llm, "LLM")));
 
@@ -199,12 +199,12 @@ public partial class ChatboxTab
                     break;
             }
 
-            if (Tcfg.Provider != TranslationProviderKind.Google)
+            if (Tcfg.Provider != TranslationProviderKind.Machine)
             {
                 DrawInfoRow(
                     "translation-fallback", FontAwesomeIcon.LifeRing,
-                    "Google is the Fallback",
-                    "If the selected service is unreachable or unconfigured, the free Google endpoint answers instead.",
+                    "Bing + Google is the Fallback",
+                    "Without an API key, or when the selected service is unreachable, the free Bing and Google endpoints answer instead.",
                     innerWidth);
             }
 
@@ -268,11 +268,28 @@ public partial class ChatboxTab
             DrawOptionRow(
                 "translation-detection", FontAwesomeIcon.Search,
                 "Language Detection",
-                "Local guesses from the script and common words. Online asks the translator and is more accurate.",
+                "Local decides on your machine and only asks online when it is unsure. Online asks for every message.",
                 innerWidth, () => Tcfg.DetectionSource, v => Tcfg.DetectionSource = v,
                 Options(
-                    (TranslationDetectionSource.Online, "Online"),
-                    (TranslationDetectionSource.Local, "Local")));
+                    (TranslationDetectionSource.Local, "Local first"),
+                    (TranslationDetectionSource.Online, "Always online")));
+
+            if (Tcfg.DetectionSource == TranslationDetectionSource.Local)
+            {
+                DrawIntSliderRow(
+                    "translation-confidence", FontAwesomeIcon.Bullseye,
+                    "Detection Confidence",
+                    "How sure the local detector has to be before its answer is trusted. Below this the translator is asked instead.",
+                    innerWidth, 10, 90, () => Tcfg.DetectionConfidence, v => Tcfg.DetectionConfidence = v, "%");
+            }
+
+            DrawInfoRow(
+                "translation-detector-state", FontAwesomeIcon.Brain,
+                "Local Detector",
+                Translator.IsDetectorReady
+                    ? $"Ready. {Translator.KnownPhrases} chat phrases are recognised without a request."
+                    : "Still loading the language models.",
+                innerWidth);
 
             theme.SpacerY(0.6f);
 
@@ -323,6 +340,7 @@ public partial class ChatboxTab
                     {
                         set(value);
                         Save();
+                        Translator.RebuildDetector();
                     },
                     width);
             },
@@ -358,6 +376,7 @@ public partial class ChatboxTab
         if (RemoveLanguage(list, iso) == 0) list.Add(iso);
 
         Save();
+        Translator.RebuildDetector();
     }
 
     private void SetLanguages(List<string> list, IReadOnlyList<string> keys, bool enabled)
@@ -369,6 +388,7 @@ public partial class ChatboxTab
         }
 
         Save();
+        Translator.RebuildDetector();
     }
 
     private static int RemoveLanguage(List<string> list, string iso) =>
@@ -442,6 +462,17 @@ public partial class ChatboxTab
                 "translation-filtered", FontAwesomeIcon.Ban,
                 "Skip filtered Advertisements", "Messages the advertisement filter already blocked stay untranslated.",
                 innerWidth, () => Tcfg.SkipFilteredMessages, v => Tcfg.SkipFilteredMessages = v);
+
+            DrawToggleRow(
+                "translation-noise", FontAwesomeIcon.Laugh,
+                "Skip Chat Noise",
+                "Laughter, emotes and greetings like \"hahaha\", \"o7\" or \"gg\" never reach the translator. Clicking translate still works.",
+                innerWidth, () => Tcfg.SkipChatNoise, v => Tcfg.SkipChatNoise = v);
+
+            DrawToggleRow(
+                "translation-discord", FontAwesomeIcon.Comments,
+                "Translate Discord Messages", "Relayed Discord messages go through the same translator.",
+                innerWidth, () => Tcfg.TranslateDiscordMessages, v => Tcfg.TranslateDiscordMessages = v);
 
             DrawIntSliderRow(
                 "translation-min-length", FontAwesomeIcon.TextWidth,

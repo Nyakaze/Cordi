@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Net;
 using System.Net.Http;
 using System.Threading;
@@ -7,6 +8,7 @@ using System.Threading.Tasks;
 using Cordi.Configuration;
 using Cordi.Services.Chatbox;
 using Dalamud.Game.ClientState.Conditions;
+using Dalamud.Game.Text;
 
 namespace Cordi.Services.Translation;
 
@@ -14,12 +16,14 @@ public sealed class TranslationService : IDisposable
 {
     private const string LogSource = "Translation";
     private const string CacheProvider = "Cache";
+    private const string PhraseProvider = "Phrases";
     private const int MaxInFlight = 32;
     private const int ContextLines = 8;
-    private const int KeylessSpacingMs = 1200;
+    private const int MachineSpacingMs = 200;
     private const int MaxQueueWaitMs = 15000;
     private const double CooldownBaseSeconds = 30d;
     private const double CooldownCapSeconds = 480d;
+    private const double CooldownDecaySeconds = 600d;
     private const int MaxCooldownStep = 5;
 
     private readonly CordiLogService _log;
@@ -39,11 +43,13 @@ public sealed class TranslationService : IDisposable
     private readonly object _throttleGate = new();
     private DateTime _nextRequestAt = DateTime.MinValue;
     private DateTime _cooldownUntil = DateTime.MinValue;
+    private DateTime _lastLimitAt = DateTime.MinValue;
     private int _cooldownStep;
 
-    private readonly GoogleTranslationProvider _google;
+    private readonly MachineTranslationProvider _machine;
     private readonly DeepLTranslationProvider _deepl;
     private readonly LlmTranslationProvider _llm;
+    private readonly LinguaDetector _lingua;
 
     private bool _disposed;
 
@@ -58,7 +64,7 @@ public sealed class TranslationService : IDisposable
 
         _slots = new SemaphoreSlim(Math.Clamp(config().MaxParallelRequests, 1, 8));
 
-        _google = new GoogleTranslationProvider(_http);
+        _machine = new MachineTranslationProvider(_http, log);
         _deepl = new DeepLTranslationProvider(_http, () => config().DeepLApiKey, () => config().DeepLPro);
         _llm = new LlmTranslationProvider(
             _http,
@@ -66,6 +72,10 @@ public sealed class TranslationService : IDisposable
             () => config().LlmApiKey,
             () => config().LlmModel,
             () => config().LlmPrompt);
+
+        _lingua = new LinguaDetector(log, _http, ResolveModelsDirectory());
+
+        RebuildDetector();
     }
 
     public event Action<ChatboxMessage>? Translated;
@@ -73,6 +83,10 @@ public sealed class TranslationService : IDisposable
     public TranslationStats Stats { get; } = new();
 
     public int CachedEntries => _cache.Count;
+
+    public int KnownPhrases => TranslationPhrases.Count;
+
+    public bool IsDetectorReady => _lingua.IsReady;
 
     public bool IsProviderReady => ActiveProvider.IsConfigured;
 
@@ -96,12 +110,21 @@ public sealed class TranslationService : IDisposable
 
     private ITranslationProvider ActiveProvider => Config.Provider switch
     {
-        TranslationProviderKind.DeepL => _deepl,
-        TranslationProviderKind.Llm => _llm,
-        _ => _google,
+        TranslationProviderKind.DeepL when _deepl.IsConfigured => _deepl,
+        TranslationProviderKind.Llm when _llm.IsConfigured => _llm,
+        _ => _machine,
     };
 
     public void ClearCache() => _cache.Clear();
+
+    public void RebuildDetector()
+    {
+        var wanted = new List<string>(Config.KnownLanguages);
+        wanted.AddRange(Config.SourceLanguages);
+        wanted.Add(Config.TargetLanguage);
+
+        _ = Task.Run(() => _lingua.RebuildAsync(wanted), _cancellation.Token);
+    }
 
     public void Consider(ChatboxMessage message)
     {
@@ -136,6 +159,11 @@ public sealed class TranslationService : IDisposable
         var source = sourceIso == null ? null : TranslationLanguages.Normalize(sourceIso);
         if (source is { Length: 0 }) source = null;
 
+        var channel = message.GameChatType;
+
+        if (source == null && Config.SkipChatNoise && !ResolvePhrase(message, text, target, channel, forced, out source))
+            return;
+
         RecordContext(message.AuthorName, text);
 
         var key = TranslationCache.KeyFor(source, target, text);
@@ -147,7 +175,7 @@ public sealed class TranslationService : IDisposable
             return;
         }
 
-        if (IsRateLimited) return;
+        if (!forced && IsRateLimited) return;
 
         lock (_inFlightGate)
         {
@@ -166,7 +194,53 @@ public sealed class TranslationService : IDisposable
 
         message.TranslationState = TranslationState.Pending;
 
-        _ = Task.Run(() => RunAsync(key, text, target, forced, source), _cancellation.Token);
+        _ = Task.Run(() => RunAsync(key, text, target, channel, forced, source), _cancellation.Token);
+    }
+
+    private bool ResolvePhrase(
+        ChatboxMessage message,
+        string text,
+        string target,
+        XivChatType channel,
+        bool forced,
+        out string? source)
+    {
+        source = null;
+
+        var phrase = TranslationPhrases.Resolve(text, target);
+
+        switch (phrase.Outcome)
+        {
+            case PhraseOutcome.Swallow:
+                if (forced) return true;
+
+                Stats.Skipped++;
+                return false;
+
+            case PhraseOutcome.Identified:
+                _lingua.RecordChannel(channel, phrase.Iso);
+
+                var skip = ShouldSkipSource(phrase.Iso);
+
+                if (phrase.Translation != null && (forced || !skip))
+                {
+                    Stats.PhraseHits++;
+                    Apply(message, phrase.Translation, phrase.Iso, PhraseProvider);
+                    return false;
+                }
+
+                if (!forced && skip)
+                {
+                    Stats.Skipped++;
+                    return false;
+                }
+
+                source = phrase.Iso;
+                return true;
+
+            default:
+                return true;
+        }
     }
 
     public async Task<TranslationResult> TranslateTextAsync(string text, string targetIso)
@@ -176,7 +250,7 @@ public sealed class TranslationService : IDisposable
 
         var request = new TranslationRequest { Text = text.Trim(), TargetIso = target };
 
-        return await RequestAsync(request, _cancellation.Token).ConfigureAwait(false);
+        return await RequestAsync(request, true, _cancellation.Token).ConfigureAwait(false);
     }
 
     private bool PassesGate(ChatboxMessage message)
@@ -184,6 +258,8 @@ public sealed class TranslationService : IDisposable
         if (message.IsSystemLine) return false;
         if (message.IsSelf && !Config.TranslateOwnMessages) return false;
         if (message.FilteredAsAd && Config.SkipFilteredMessages) return false;
+
+        if (message.Origin == ChatboxOrigin.Discord && !Config.TranslateDiscordMessages) return false;
 
         if (message.Origin == ChatboxOrigin.Game)
         {
@@ -194,7 +270,13 @@ public sealed class TranslationService : IDisposable
         return true;
     }
 
-    private async Task RunAsync(string key, string text, string target, bool forced, string? sourceIso)
+    private async Task RunAsync(
+        string key,
+        string text,
+        string target,
+        XivChatType channel,
+        bool forced,
+        string? sourceIso)
     {
         var state = TranslationState.None;
         var translated = string.Empty;
@@ -213,11 +295,19 @@ public sealed class TranslationService : IDisposable
 
                 var source = sourceIso != null
                     ? (Iso: (string?)sourceIso, Skip: false)
-                    : await ResolveSourceAsync(text).ConfigureAwait(false);
+                    : await ResolveSourceAsync(text, channel).ConfigureAwait(false);
 
                 if (forced) source = (source.Iso, false);
 
-                if (!source.Skip && await ReserveRequestAsync(_cancellation.Token).ConfigureAwait(false))
+                if (source.Skip)
+                {
+                    Stats.Skipped++;
+                }
+                else if (!await ReserveRequestAsync(forced, _cancellation.Token).ConfigureAwait(false))
+                {
+                    if (forced) state = TranslationState.Failed;
+                }
+                else
                 {
                     var request = new TranslationRequest
                     {
@@ -227,7 +317,7 @@ public sealed class TranslationService : IDisposable
                         Context = context,
                     };
 
-                    var result = await RequestAsync(request, _cancellation.Token).ConfigureAwait(false);
+                    var result = await RequestAsync(request, forced, _cancellation.Token).ConfigureAwait(false);
 
                     if (!result.Success)
                     {
@@ -237,6 +327,7 @@ public sealed class TranslationService : IDisposable
                     else
                     {
                         detected = result.DetectedIso ?? source.Iso;
+                        _lingua.RecordChannel(channel, detected);
 
                         if (forced || !ShouldDiscard(detected, result.Text, text))
                         {
@@ -246,6 +337,10 @@ public sealed class TranslationService : IDisposable
 
                             if (Config.CacheEnabled) _cache.Store(key, result.Text, detected);
                             Stats.Translated++;
+                        }
+                        else
+                        {
+                            Stats.Skipped++;
                         }
                     }
                 }
@@ -294,32 +389,54 @@ public sealed class TranslationService : IDisposable
         }
     }
 
-    private async Task<(string? Iso, bool Skip)> ResolveSourceAsync(string text)
+    private async Task<(string? Iso, bool Skip)> ResolveSourceAsync(string text, XivChatType channel)
     {
-        var local = TranslationDetector.DetectLocal(text);
+        var script = TranslationDetector.DetectScript(text);
 
-        if (local != null && ShouldSkipSource(local)) return (local, true);
+        if (script != null)
+        {
+            _lingua.RecordChannel(channel, script);
+            return (script, ShouldSkipSource(script));
+        }
 
-        var deferred = Config.Provider == TranslationProviderKind.Google
-                       && Config.DetectionSource == TranslationDetectionSource.Online;
+        var hasEnglishToken = TranslationPhrases.HasEnglishToken(text);
 
-        if (deferred) return (null, false);
+        if (Config.DetectionSource == TranslationDetectionSource.Online)
+        {
+            var online = await DetectOnlineAsync(text).ConfigureAwait(false);
 
-        var iso = local;
+            if (online == null)
+            {
+                var (_, guess) = await _lingua.ComputeReliabilityAsync(text, channel, hasEnglishToken).ConfigureAwait(false);
+                online = guess;
+            }
 
-        if (iso == null && Config.DetectionSource == TranslationDetectionSource.Online)
-            iso = await DetectOnlineAsync(text).ConfigureAwait(false);
+            _lingua.RecordChannel(channel, online);
+            return (online, ShouldSkipSource(online));
+        }
 
-        return (iso, ShouldSkipSource(iso));
+        var (reliability, iso) = await _lingua.ComputeReliabilityAsync(text, channel, hasEnglishToken).ConfigureAwait(false);
+        var threshold = Math.Clamp(Config.DetectionConfidence, 0, 100) / 100d;
+
+        if (reliability >= threshold)
+        {
+            _lingua.RecordChannel(channel, iso);
+            return (iso, ShouldSkipSource(iso));
+        }
+
+        var detected = await DetectOnlineAsync(text).ConfigureAwait(false) ?? iso;
+
+        _lingua.RecordChannel(channel, detected);
+        return (detected, ShouldSkipSource(detected));
     }
 
     private async Task<string?> DetectOnlineAsync(string text)
     {
-        if (!await ReserveRequestAsync(_cancellation.Token).ConfigureAwait(false)) return null;
+        if (!await ReserveRequestAsync(false, _cancellation.Token).ConfigureAwait(false)) return null;
 
         try
         {
-            return await _google.DetectAsync(text, _cancellation.Token).ConfigureAwait(false);
+            return await _machine.DetectAsync(text, _cancellation.Token).ConfigureAwait(false);
         }
         catch (OperationCanceledException)
         {
@@ -327,7 +444,7 @@ public sealed class TranslationService : IDisposable
         }
         catch (HttpRequestException ex) when (ex.StatusCode == HttpStatusCode.TooManyRequests)
         {
-            EnterCooldown(_google.Name);
+            EnterCooldown(_machine.Name);
             return null;
         }
         catch (Exception ex)
@@ -341,21 +458,23 @@ public sealed class TranslationService : IDisposable
     {
         TranslationProviderKind.DeepL when _deepl.IsConfigured => TimeSpan.Zero,
         TranslationProviderKind.Llm when _llm.IsConfigured => TimeSpan.Zero,
-        _ => TimeSpan.FromMilliseconds(KeylessSpacingMs),
+        _ => TimeSpan.FromMilliseconds(MachineSpacingMs),
     };
 
-    private async Task<bool> ReserveRequestAsync(CancellationToken token)
+    private async Task<bool> ReserveRequestAsync(bool priority, CancellationToken token)
     {
         TimeSpan wait;
 
         lock (_throttleGate)
         {
             var now = DateTime.UtcNow;
-            var earliest = _nextRequestAt > _cooldownUntil ? _nextRequestAt : _cooldownUntil;
+            var earliest = _nextRequestAt;
+
+            if (!priority && _cooldownUntil > earliest) earliest = _cooldownUntil;
             if (earliest < now) earliest = now;
 
             wait = earliest - now;
-            if (wait.TotalMilliseconds > MaxQueueWaitMs) return false;
+            if (!priority && wait.TotalMilliseconds > MaxQueueWaitMs) return false;
 
             _nextRequestAt = earliest + RequestSpacing;
         }
@@ -374,6 +493,10 @@ public sealed class TranslationService : IDisposable
             var now = DateTime.UtcNow;
             if (_cooldownUntil > now) return;
 
+            if (_lastLimitAt != DateTime.MinValue && (now - _lastLimitAt).TotalSeconds > CooldownDecaySeconds)
+                _cooldownStep = 0;
+
+            _lastLimitAt = now;
             _cooldownStep = Math.Min(_cooldownStep + 1, MaxCooldownStep);
 
             var seconds = Math.Min(CooldownBaseSeconds * Math.Pow(2, _cooldownStep - 1), CooldownCapSeconds);
@@ -385,7 +508,7 @@ public sealed class TranslationService : IDisposable
 
         _log.Warning(
             LogSource,
-            $"{provider} rate limited (429) - pausing translation requests for {wait.TotalSeconds:0}s");
+            $"{provider} rate limited (429) - pausing automatic translation for {wait.TotalSeconds:0}s");
     }
 
     private void ResetCooldown()
@@ -393,6 +516,7 @@ public sealed class TranslationService : IDisposable
         lock (_throttleGate)
         {
             _cooldownStep = 0;
+            _cooldownUntil = DateTime.MinValue;
         }
     }
 
@@ -414,7 +538,7 @@ public sealed class TranslationService : IDisposable
         return TranslationFilter.SameMeaning(original, translated);
     }
 
-    private async Task<TranslationResult> RequestAsync(TranslationRequest request, CancellationToken token)
+    private async Task<TranslationResult> RequestAsync(TranslationRequest request, bool priority, CancellationToken token)
     {
         var provider = ActiveProvider;
 
@@ -447,13 +571,13 @@ public sealed class TranslationService : IDisposable
             }
         }
 
-        if (provider == _google) return TranslationResult.Failure();
+        if (ReferenceEquals(provider, _machine)) return TranslationResult.Failure();
 
-        if (!await ReserveRequestAsync(token).ConfigureAwait(false)) return TranslationResult.Failure();
+        if (!await ReserveRequestAsync(priority, token).ConfigureAwait(false)) return TranslationResult.Failure();
 
         try
         {
-            var fallback = await _google.TranslateAsync(request, token).ConfigureAwait(false);
+            var fallback = await _machine.TranslateAsync(request, token).ConfigureAwait(false);
             if (fallback.Success) ResetCooldown();
             return fallback;
         }
@@ -463,7 +587,7 @@ public sealed class TranslationService : IDisposable
         }
         catch (HttpRequestException ex) when (ex.StatusCode == HttpStatusCode.TooManyRequests)
         {
-            EnterCooldown(_google.Name);
+            EnterCooldown(_machine.Name);
             return TranslationResult.Failure();
         }
         catch (Exception ex)
@@ -507,6 +631,9 @@ public sealed class TranslationService : IDisposable
         }
     }
 
+    private static string ResolveModelsDirectory() =>
+        Path.Combine(Service.PluginInterface.AssemblyLocation.DirectoryName!, "Lingua", "LanguageModels");
+
     private static HttpClient CreateClient(int timeoutSeconds)
     {
         var handler = new HttpClientHandler
@@ -533,6 +660,8 @@ public sealed class TranslationService : IDisposable
 
         _cancellation.Cancel();
         _cache.Save();
+        _lingua.Dispose();
+        _machine.Dispose();
         _cancellation.Dispose();
         _slots.Dispose();
         _http.Dispose();
@@ -544,11 +673,15 @@ public sealed class TranslationStats
     public int Translated;
     public int Failed;
     public int CacheHits;
+    public int PhraseHits;
+    public int Skipped;
 
     public void Reset()
     {
         Translated = 0;
         Failed = 0;
         CacheHits = 0;
+        PhraseHits = 0;
+        Skipped = 0;
     }
 }
