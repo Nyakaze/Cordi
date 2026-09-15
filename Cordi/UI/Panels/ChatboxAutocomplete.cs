@@ -35,6 +35,7 @@ public sealed class ChatboxAutocomplete
     private const int VisibleRows = 8;
     private const int CatalogScan = 128;
     private const int MaxFragment = 32;
+    private const int PlayerTargetWords = 2;
 
     private readonly CordiPlugin _plugin;
     private readonly UiTheme _theme;
@@ -447,6 +448,9 @@ public sealed class ChatboxAutocomplete
         command = Decode(buffer[..nameEnd]);
         kind = ChatboxSuggestionKind.Argument;
 
+        if (ChatboxCommandArguments.TakesPlayerTarget(command))
+            return TryPlayerTargetFragment(buffer, caret, nameEnd, out start, out fragment, out replace);
+
         var argStart = caret;
         while (argStart > nameEnd + 1 && buffer[argStart - 1] != (byte)' ') argStart--;
 
@@ -458,6 +462,41 @@ public sealed class ChatboxAutocomplete
         start = argStart;
         replace = argEnd - argStart;
         fragment = Decode(buffer[argStart..caret]);
+
+        return true;
+    }
+
+    private static bool TryPlayerTargetFragment(
+        ReadOnlySpan<byte> buffer,
+        int caret,
+        int nameEnd,
+        out int start,
+        out string fragment,
+        out int replace)
+    {
+        start = Math.Min(nameEnd + 1, buffer.Length);
+        fragment = string.Empty;
+        replace = 0;
+
+        var end = start;
+
+        for (var word = 0; word < PlayerTargetWords && end < buffer.Length; word++)
+        {
+            if (word > 0)
+            {
+                if (buffer[end] != (byte)' ') break;
+                end++;
+            }
+
+            while (end < buffer.Length && buffer[end] != (byte)' ') end++;
+        }
+
+        if (caret < start || caret > end) return false;
+
+        replace = end - start;
+        if (replace > MaxFragment * 2) return false;
+
+        fragment = Decode(buffer[start..caret]);
 
         return true;
     }

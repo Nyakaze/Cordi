@@ -1,6 +1,10 @@
 using System;
+using Cordi.Configuration;
 using Dalamud.Game.ClientState.Objects.SubKinds;
 using Dalamud.Game.Gui.ContextMenu;
+using Dalamud.Hooking;
+using FFXIVClientStructs.FFXIV.Client.System.String;
+using FFXIVClientStructs.FFXIV.Client.UI.Shell;
 using Lumina.Excel.Sheets;
 
 namespace Cordi.Services.Chatbox;
@@ -29,9 +33,97 @@ public sealed partial class ChatboxService
 
     private static ushort? _contextMenuPrefixColor;
 
-    private void InitializeContextMenu() => Service.ContextMenu.OnMenuOpened += OnContextMenuOpened;
+    private Hook<RaptureShellModule.Delegates.SetContextTellTarget>? _tellTargetHook;
 
-    private void DisposeContextMenu() => Service.ContextMenu.OnMenuOpened -= OnContextMenuOpened;
+    private void InitializeContextMenu()
+    {
+        Service.ContextMenu.OnMenuOpened += OnContextMenuOpened;
+        InitializeTellTargetHook();
+    }
+
+    private void DisposeContextMenu()
+    {
+        Service.ContextMenu.OnMenuOpened -= OnContextMenuOpened;
+
+        _tellTargetHook?.Dispose();
+        _tellTargetHook = null;
+    }
+
+    private unsafe void InitializeTellTargetHook()
+    {
+        try
+        {
+            var address = (nint)RaptureShellModule.MemberFunctionPointers.SetContextTellTarget;
+            if (address == nint.Zero) return;
+
+            _tellTargetHook = Service.GameInteropProvider
+                .HookFromAddress<RaptureShellModule.Delegates.SetContextTellTarget>(address, OnSetContextTellTarget);
+
+            _tellTargetHook.Enable();
+        }
+        catch (Exception ex)
+        {
+            _plugin.LogService.Log(
+                "Chatbox",
+                CordiLogLevel.Warning,
+                "Could not hook the game tell target, Send Tell keeps using the game chat",
+                ex);
+        }
+    }
+
+    private unsafe bool OnSetContextTellTarget(
+        RaptureShellModule* module,
+        Utf8String* playerName,
+        Utf8String* worldName,
+        ushort worldId,
+        ulong accountId,
+        ulong contentId,
+        ushort reason,
+        bool setChatType)
+    {
+        try
+        {
+            if (TryHandleTellTarget(playerName, worldName, worldId)) return true;
+        }
+        catch (Exception ex)
+        {
+            _plugin.LogService.Log("Chatbox", CordiLogLevel.Warning, "Send Tell handler failed", ex);
+        }
+
+        return _tellTargetHook!.Original(module, playerName, worldName, worldId, accountId, contentId, reason, setChatType);
+    }
+
+    private unsafe bool TryHandleTellTarget(Utf8String* playerName, Utf8String* worldName, ushort worldId)
+    {
+        if (_disposed || !Config.Enabled || playerName == null) return false;
+
+        var window = _plugin.ChatboxWindow;
+        if (window == null) return false;
+
+        var name = playerName->ToString().Trim();
+        if (name.Length == 0) return false;
+
+        var world = ResolveWorldName(worldId);
+        if (world.Length == 0 && worldName != null) world = worldName->ToString().Trim();
+
+        RevealDuringCinematic();
+
+        if (ConversationSettings.TellRouting != ConversationTellRouting.ChannelsOnly
+            && CanOpenConversationWith(name, world)
+            && OpenConversationFor(name, world) != null)
+            return true;
+
+        window.IsOpen = true;
+        RequestInputFocus = true;
+        PendingInputText = world.Length > 0 ? $"/tell {name}@{world} " : $"/tell {name} ";
+
+        return true;
+    }
+
+    private static string ResolveWorldName(ushort worldId) =>
+        worldId == 0
+            ? string.Empty
+            : Service.DataManager.GetExcelSheet<World>()?.GetRowOrDefault(worldId)?.Name.ExtractText() ?? string.Empty;
 
     private void OnContextMenuOpened(IMenuOpenedArgs args)
     {
