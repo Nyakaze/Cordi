@@ -363,6 +363,9 @@ public sealed partial class ChatboxSurface
         if (AutoTranslateReady(text)) QueueOutgoingTranslation(channelId, text, reply);
         else Chatbox.Send(channelId, text, reply);
 
+        Chatbox.InputHistory.Add(text);
+
+        ResetHistory();
         _autocomplete.Reset();
         _pendingToken = null;
         _submitAfterCompletion = false;
@@ -529,6 +532,8 @@ public sealed partial class ChatboxSurface
         {
             if (_autocomplete.IsOpen)
                 _autocomplete.MoveSelection(data.EventKey == ImGuiKey.UpArrow ? -1 : 1);
+            else
+                RecallHistory(data, data.EventKey == ImGuiKey.UpArrow ? 1 : -1);
 
             return 0;
         }
@@ -558,9 +563,59 @@ public sealed partial class ChatboxSurface
             data.ClearSelection();
         }
 
+        if (_historyOffset != 0)
+        {
+            if (data.BufTextSpan.SequenceEqual(_historyBytes))
+            {
+                if (_autocomplete.IsOpen) _autocomplete.Reset();
+
+                return 0;
+            }
+
+            ResetHistory();
+        }
+
         _autocomplete.Update(data.BufTextSpan, data.CursorPos);
 
         return 0;
+    }
+
+    private void RecallHistory(ImGuiInputTextCallbackDataPtr data, int delta)
+    {
+        var history = Chatbox.InputHistory;
+        if (history.Count == 0) return;
+
+        if (_historyOffset == 0)
+        {
+            if (delta < 0) return;
+
+            _historyDraft = Encoding.UTF8.GetString(data.BufTextSpan);
+        }
+
+        var offset = Math.Clamp(_historyOffset + delta, 0, history.Count);
+        if (offset == _historyOffset) return;
+
+        string text;
+        if (offset == 0) text = _historyDraft;
+        else if (!history.TryGet(offset, out text)) return;
+
+        _historyOffset = offset;
+        _historyBytes = Encoding.UTF8.GetBytes(text);
+
+        data.DeleteChars(0, data.BufTextLen);
+        if (text.Length > 0) data.InsertChars(0, text);
+
+        data.CursorPos = data.BufTextLen;
+        data.ClearSelection();
+
+        _autocomplete.Reset();
+    }
+
+    private void ResetHistory()
+    {
+        _historyOffset = 0;
+        _historyDraft = string.Empty;
+        _historyBytes = Array.Empty<byte>();
     }
 
     private unsafe void ApplyPending(ImGuiInputTextCallbackDataPtr data)

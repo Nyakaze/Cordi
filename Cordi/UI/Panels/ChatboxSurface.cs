@@ -31,6 +31,9 @@ public sealed partial class ChatboxSurface : IDisposable
     private bool _silentFocus;
     private float _measuredInputHeight;
     private bool _clearSelection;
+    private int _historyOffset;
+    private string _historyDraft = string.Empty;
+    private byte[] _historyBytes = Array.Empty<byte>();
     private Vector2 _inputMin;
     private float _inputWidth;
     private ChatboxReplyRef? _replyTarget;

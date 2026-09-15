@@ -107,6 +107,8 @@ public sealed partial class ChatboxService : IDisposable
 
     public TranslationService Translator { get; }
 
+    public ChatboxInputHistory InputHistory { get; } = new();
+
     private ChatboxConfig Config => _plugin.Config.Chatbox;
 
     public string ActiveChannelId { get; private set; } = string.Empty;
