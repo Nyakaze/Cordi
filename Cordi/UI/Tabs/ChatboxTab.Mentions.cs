@@ -69,6 +69,12 @@ public partial class ChatboxTab
                 innerWidth, () => Cfg.ShowMentionBadge, v => Cfg.ShowMentionBadge = v);
 
             DrawToggleRow(
+                "chatbox-global-read", FontAwesomeIcon.CheckDouble,
+                "Global Read",
+                "Reading a tab also clears those same chat types in every other tab. Other chat types in those tabs stay unread.",
+                innerWidth, () => Cfg.GlobalRead, v => Cfg.GlobalRead = v);
+
+            DrawToggleRow(
                 "chatbox-title-count", FontAwesomeIcon.WindowMaximize,
                 "Show Count in Window Title", "Puts the mention count into the window title.",
                 innerWidth, () => Cfg.FlashTitleOnMention, v => Cfg.FlashTitleOnMention = v);

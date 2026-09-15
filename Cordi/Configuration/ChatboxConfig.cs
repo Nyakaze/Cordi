@@ -139,6 +139,7 @@ public class ChatboxConfig : IWindowChromeConfig
 
     public bool ShowUnreadDot { get; set; } = true;
     public bool ShowMentionBadge { get; set; } = true;
+    public bool GlobalRead { get; set; }
     public bool AdvancedChatTypes { get; set; }
 
     public bool RenderCustomEmotes { get; set; } = true;

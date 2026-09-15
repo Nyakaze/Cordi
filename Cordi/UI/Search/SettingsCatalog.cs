@@ -169,6 +169,7 @@ public static class SettingsCatalog
             ("", "Mention Keywords", "ping trigger word"),
             ("", "Show Unread Dot", "unread indicator"),
             ("", "Show Mention Count Badge", "unread badge"),
+            ("", "Global Read", "shared read state across tabs"),
             ("", "Show Count in Window Title", "unread title"),
             ("", "Dalamud Notification on Mention", "toast notification"),
             ("", "Dalamud Notification on any Message", "toast notification"),

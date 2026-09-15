@@ -219,7 +219,11 @@ public sealed partial class ChatboxService : IDisposable
 
         var active = GetChannel(id);
         var divider = active?.BeginViewing() ?? 0;
-        if (active != null) PersistState(active);
+        if (active != null)
+        {
+            PersistState(active);
+            PropagateGlobalRead(active);
+        }
 
         _plugin.Config.Save();
         return divider;
@@ -233,6 +237,7 @@ public sealed partial class ChatboxService : IDisposable
 
         var divider = channel.BeginViewing();
         PersistState(channel);
+        PropagateGlobalRead(channel);
         return divider;
     }
 
@@ -245,7 +250,31 @@ public sealed partial class ChatboxService : IDisposable
         var before = channel.LastReadSeq;
         channel.MarkRead();
 
-        if (channel.LastReadSeq != before) PersistState(channel);
+        if (channel.LastReadSeq == before) return;
+
+        PersistState(channel);
+        PropagateGlobalRead(channel);
+    }
+
+    private void PropagateGlobalRead(ChatboxChannelState source)
+    {
+        if (!Config.GlobalRead || IsConversationId(source.Id)) return;
+
+        var types = source.Config.GameChatTypes;
+        if (types.Count == 0) return;
+
+        var shared = new HashSet<XivChatType>(types);
+        var channels = Channels;
+
+        for (var i = 0; i < channels.Count; i++)
+        {
+            var channel = channels[i];
+            if (ReferenceEquals(channel, source) || IsConversationId(channel.Id)) continue;
+            if (channel.UnreadCount == 0) continue;
+            if (!channel.Config.GameChatTypes.Any(shared.Contains)) continue;
+
+            if (channel.MarkTypesRead(shared)) PersistState(channel);
+        }
     }
 
     public void SetChannelViewed(string channelId, bool viewed)

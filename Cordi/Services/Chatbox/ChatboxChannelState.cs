@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Cordi.Configuration;
+using Dalamud.Game.Text;
 
 namespace Cordi.Services.Chatbox;
 
@@ -10,6 +11,7 @@ public sealed class ChatboxChannelState
     private readonly List<ChatboxMessage> _messages = new();
     private readonly object _gate = new();
     private readonly HashSet<string> _authors = new(StringComparer.OrdinalIgnoreCase);
+    private readonly HashSet<long> _crossRead = new();
 
     private string[]? _authorCache;
 
@@ -110,8 +112,70 @@ public sealed class ChatboxChannelState
             UnreadCount = 0;
             MentionCount = 0;
             FirstUnreadSeq = 0;
+            _crossRead.Clear();
             if (_messages.Count > 0) LastReadSeq = _messages[^1].Seq;
         }
+    }
+
+    public bool MarkTypesRead(HashSet<XivChatType> types)
+    {
+        lock (_gate)
+        {
+            if (UnreadCount == 0) return false;
+
+            var added = false;
+
+            for (var i = FirstUnreadIndex(); i < _messages.Count; i++)
+            {
+                var message = _messages[i];
+                if (message.IsSelf || message.Origin != ChatboxOrigin.Game) continue;
+                if (!types.Contains(message.GameChatType)) continue;
+
+                added |= _crossRead.Add(message.Seq);
+            }
+
+            return added && RecountUnread();
+        }
+    }
+
+    private int FirstUnreadIndex()
+    {
+        var index = _messages.Count;
+        while (index > 0 && _messages[index - 1].Seq > LastReadSeq) index--;
+
+        return index;
+    }
+
+    private bool RecountUnread()
+    {
+        var previousFirst = FirstUnreadSeq;
+
+        UnreadCount = 0;
+        MentionCount = 0;
+        FirstUnreadSeq = 0;
+
+        for (var i = FirstUnreadIndex(); i < _messages.Count; i++)
+        {
+            var message = _messages[i];
+            if (message.IsSelf || _crossRead.Contains(message.Seq)) continue;
+
+            if (UnreadCount == 0) FirstUnreadSeq = message.Seq;
+            UnreadCount++;
+            if (message.MentionsMe) MentionCount++;
+        }
+
+        if (UnreadCount > 0) return false;
+
+        if (DividerSeq == 0) DividerSeq = previousFirst;
+        _crossRead.Clear();
+
+        if (_messages.Count == 0) return false;
+
+        var last = _messages[^1].Seq;
+        if (last == LastReadSeq) return false;
+
+        LastReadSeq = last;
+        return true;
     }
 
     public void ClearDivider()
@@ -138,6 +202,7 @@ public sealed class ChatboxChannelState
             UnreadCount = 0;
             MentionCount = 0;
             FirstUnreadSeq = 0;
+            _crossRead.Clear();
             if (_messages.Count > 0) LastReadSeq = _messages[^1].Seq;
             return DividerSeq;
         }
@@ -150,6 +215,7 @@ public sealed class ChatboxChannelState
             _messages.Clear();
             _authors.Clear();
             _authorCache = null;
+            _crossRead.Clear();
             _messages.AddRange(history);
 
             UnreadCount = 0;
@@ -216,6 +282,7 @@ public sealed class ChatboxChannelState
             _messages.Clear();
             _authors.Clear();
             _authorCache = null;
+            _crossRead.Clear();
             UnreadCount = 0;
             MentionCount = 0;
             FirstUnreadSeq = 0;
