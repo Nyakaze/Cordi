@@ -30,7 +30,6 @@ public sealed partial class ChatboxSurface
     private string _sendTargetTooltip = string.Empty;
     private bool _sendTargetPinned;
     private bool _sendTargetsBuilt;
-    private bool _submitAfterCompletion;
     private string _inputHint = string.Empty;
     private string _inputHintName = string.Empty;
     private string _tellTargetId = string.Empty;
@@ -137,17 +136,15 @@ public sealed partial class ChatboxSurface
         {
             var accepted = _autocomplete.Accept();
 
-            QueueCompletion(accepted);
-
-            _submitAfterCompletion = _pendingToken != null
-                                     && accepted?.Kind == ChatboxSuggestionKind.Command;
-
-            submitted = false;
-        }
-        else if (_submitAfterCompletion && _pendingToken == null)
-        {
-            _submitAfterCompletion = false;
-            submitted = true;
+            if (accepted?.Kind == ChatboxSuggestionKind.Command)
+            {
+                CompleteInput(accepted);
+            }
+            else
+            {
+                QueueCompletion(accepted);
+                submitted = false;
+            }
         }
 
         if (translateVisible) DrawOutgoingButton(spacing);
@@ -368,7 +365,6 @@ public sealed partial class ChatboxSurface
         ResetHistory();
         _autocomplete.Reset();
         _pendingToken = null;
-        _submitAfterCompletion = false;
         _replyTarget = null;
         _input = string.Empty;
 
@@ -459,6 +455,21 @@ public sealed partial class ChatboxSurface
 
         var bottom = ImGui.GetWindowPos().Y + ImGui.GetWindowSize().Y - _theme.Gap(0.3f);
         QueueCompletion(_autocomplete.Draw(_inputMin.X, _inputWidth, bottom));
+    }
+
+    private void CompleteInput(ChatboxSuggestion suggestion)
+    {
+        var bytes = Encoding.UTF8.GetBytes(_input);
+        var start = Math.Clamp(_autocomplete.FragmentStart, 0, bytes.Length);
+        var length = Math.Clamp(_autocomplete.ReplaceLength, 0, bytes.Length - start);
+
+        _input = Encoding.UTF8.GetString(bytes, 0, start)
+                 + SlotFor(suggestion.Token, suggestion.ImageUrl)
+                 + Encoding.UTF8.GetString(bytes, start + length, bytes.Length - start - length);
+
+        _autocomplete.Reset();
+        _pendingToken = null;
+        ResetHistory();
     }
 
     private void QueueCompletion(ChatboxSuggestion? suggestion)
