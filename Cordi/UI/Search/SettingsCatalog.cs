@@ -150,6 +150,7 @@ public static class SettingsCatalog
             ("", "Timestamps", "time clock"),
             ("", "Name Style", "author display"),
             ("", "Colour Names by Channel", "author color"),
+            ("", "Colour Messages by Channel", "message text color chat type party"),
             ("", "Show New Messages Divider", "unread divider"),
             ("", "Show Hover Toolbar", "message actions"),
             ("", "Auto Scroll", "follow newest message"),

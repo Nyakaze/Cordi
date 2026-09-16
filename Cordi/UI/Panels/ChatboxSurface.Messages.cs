@@ -450,6 +450,7 @@ public sealed partial class ChatboxSurface
         var systemLine = message.IsSystemLine && Config.CompactSystemMessages;
 
         var gap = Config.MessageSpacing * ImGuiHelpers.GlobalScale;
+        var lineSpacing = Config.LineSpacing * ImGuiHelpers.GlobalScale;
         if (!grouped && !systemLine && gap > 0f) ImGui.Dummy(new Vector2(0, gap));
 
         draw.ChannelsSetCurrent(2);
@@ -461,7 +462,7 @@ public sealed partial class ChatboxSurface
 
         using (ImRaii.PushStyle(
                    ImGuiStyleVar.ItemSpacing,
-                   new Vector2(ImGui.GetStyle().ItemSpacing.X, Config.LineSpacing * ImGuiHelpers.GlobalScale)))
+                   new Vector2(ImGui.GetStyle().ItemSpacing.X, lineSpacing)))
         {
             if (message.Reply != null && Config.ShowReplyPreview && Config.EnableReplies && !concealed)
                 DrawReplyLine(channel, message.Reply, width);
@@ -488,9 +489,9 @@ public sealed partial class ChatboxSurface
             }
         }
 
-        var end = ImGui.GetCursorScreenPos();
-        var rowMin = new Vector2(origin.X - _theme.PadX(0.3f), origin.Y - 1f);
-        var rowMax = new Vector2(origin.X + width, MathF.Max(end.Y, origin.Y + ImGui.GetTextLineHeight()) + 1f);
+        var end = ImGui.GetCursorScreenPos().Y - lineSpacing;
+        var rowMin = new Vector2(origin.X - _theme.PadX(0.3f), origin.Y);
+        var rowMax = new Vector2(origin.X + width, MathF.Max(end, origin.Y + ImGui.GetTextLineHeight()));
         var hovered = HoveringRect(rowMin, rowMax);
 
         if (Chatbox.ImageCache.HasUnloaded && ImGui.IsRectVisible(rowMin, rowMax)) RequestRowMedia(message);
@@ -914,11 +915,31 @@ public sealed partial class ChatboxSurface
             : line * MathF.Max(0.5f, Config.EmoteScale);
     }
 
-    private float MeasureLineHeight(ChatboxMessage message) =>
-        MathF.Max(ImGui.GetTextLineHeight(), EmoteSizeFor(message));
+    private float MeasureLineHeight(ChatboxMessage message)
+    {
+        var line = ImGui.GetTextLineHeight();
+        return HasEmoteSegments(message) ? MathF.Max(line, EmoteSizeFor(message)) : line;
+    }
 
-    private Vector4 TextColorFor(ChatboxMessage message) =>
-        message.IsSystem ? _theme.MutedText : _theme.Text;
+    private static bool HasEmoteSegments(ChatboxMessage message)
+    {
+        var segments = message.Segments;
+
+        for (var i = 0; i < segments.Count; i++)
+            if (segments[i].Kind == SegmentKind.Emote)
+                return true;
+
+        return false;
+    }
+
+    private Vector4 TextColorFor(ChatboxMessage message)
+    {
+        if (message.IsSystem) return _theme.MutedText;
+
+        return Config.ColorMessagesByChannel && AuthorColorFor(message) is { } color
+            ? color
+            : _theme.Text;
+    }
 
     private Vector4? AuthorColorFor(ChatboxMessage message) =>
         _drawChannel != null && message.GameChatType != XivChatType.None
@@ -972,11 +993,8 @@ public sealed partial class ChatboxSurface
         return $"{(int)delta.TotalDays}d ago";
     }
 
-    private void DrawAvatar(ChatboxMessage message, float size)
+    private void DrawAvatar(ChatboxMessage message, Vector2 origin, float size)
     {
-        var origin = ImGui.GetCursorScreenPos();
-        ImGui.Dummy(new Vector2(size, size));
-
         var texture = Config.ImageCacheEnabled && !string.IsNullOrEmpty(message.AvatarUrl)
             ? Chatbox.ImageCache.Get(message.AvatarUrl)
             : null;

@@ -36,7 +36,7 @@ public class Configuration : IPluginConfiguration
     public bool LogsTabVisible { get; set; }
 
 
-    private const int CurrentVersion = 2;
+    private const int CurrentVersion = 3;
     private const int SaveRetryAttempts = 5;
     private const int SaveRetryDelayMs = 25;
 
@@ -57,7 +57,6 @@ public class Configuration : IPluginConfiguration
         Translation.Normalize();
         BuildCache();
 
-        // Initialize advertisement filter defaults on first load
         AdvertisementFilter.InitializeDefaults();
     }
 
@@ -290,6 +289,9 @@ public class Configuration : IPluginConfiguration
 
         if (Version < 2)
             Translation.DetectionSource = TranslationDetectionSource.Local;
+
+        if (Version < 3)
+            AdvertisementFilter.RestoreDefaults();
 
         Version = CurrentVersion;
         Save();

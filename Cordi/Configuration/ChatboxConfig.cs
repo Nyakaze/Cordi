@@ -132,6 +132,7 @@ public class ChatboxConfig : IWindowChromeConfig
     public ChatboxTimestampStyle Timestamps { get; set; } = ChatboxTimestampStyle.Time;
     public ChatboxNameStyle NameStyle { get; set; } = ChatboxNameStyle.NameAndWorld;
     public bool ColorNamesByChannel { get; set; } = true;
+    public bool ColorMessagesByChannel { get; set; } = false;
     public bool CompactSystemMessages { get; set; } = true;
     public bool ShowNewMessageDivider { get; set; } = true;
     public bool ShowHoverToolbar { get; set; } = true;

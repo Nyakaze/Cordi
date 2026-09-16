@@ -75,6 +75,12 @@ public class AdvertisementFilterConfig
         DefaultsInitialized = true;
     }
 
+    public void RestoreDefaults()
+    {
+        DefaultsInitialized = false;
+        InitializeDefaults();
+    }
+
     private void MigrateLegacyPatterns()
     {
         if (PatternsMigrated) return;
@@ -99,7 +105,21 @@ public class AdvertisementFilterConfig
             if (string.IsNullOrWhiteSpace(value))
                 continue;
 
+            if (Contains(value, kind))
+                continue;
+
             Patterns.Add(new FilterPattern { Value = value, Kind = kind, Weight = weight });
         }
+    }
+
+    private bool Contains(string value, FilterPatternKind kind)
+    {
+        foreach (var pattern in Patterns)
+        {
+            if (pattern.Kind == kind && string.Equals(pattern.Value, value, StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+
+        return false;
     }
 }

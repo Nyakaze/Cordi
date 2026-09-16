@@ -182,6 +182,12 @@ public partial class ChatboxTab
                 innerWidth, () => Cfg.ColorNamesByChannel, v => Cfg.ColorNamesByChannel = v);
 
             DrawToggleRow(
+                "chatbox-color-messages", FontAwesomeIcon.Palette,
+                "Colour Messages by Channel",
+                "The message text takes the colour of its chat type, like the game chat does. Party Icons colours stay on the name.",
+                innerWidth, () => Cfg.ColorMessagesByChannel, v => Cfg.ColorMessagesByChannel = v);
+
+            DrawToggleRow(
                 "chatbox-compact-system", FontAwesomeIcon.Compress,
                 "Compact System Messages", "System lines drop the portrait and the name and stay on one row.",
                 innerWidth, () => Cfg.CompactSystemMessages, v => Cfg.CompactSystemMessages = v);

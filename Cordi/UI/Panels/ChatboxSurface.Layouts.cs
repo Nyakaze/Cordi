@@ -17,15 +17,9 @@ public sealed partial class ChatboxSurface
         var scale = ImGuiHelpers.GlobalScale;
         var avatarSize = Config.ShowAvatars ? MathF.Max(16f, Config.AvatarSize) * scale : 0f;
         var gutter = avatarSize > 0f ? avatarSize + _theme.Gap(0.8f) : 0f;
+        var origin = ImGui.GetCursorScreenPos();
 
-        if (avatarSize > 0f)
-        {
-            ImGui.BeginGroup();
-            if (grouped) ImGui.Dummy(new Vector2(avatarSize, 1f));
-            else DrawAvatar(message, avatarSize);
-            ImGui.EndGroup();
-            ImGui.SameLine(0, _theme.Gap(0.8f));
-        }
+        if (gutter > 0f) ImGui.Indent(gutter);
 
         ImGui.BeginGroup();
         if (!grouped) DrawHeaderLine(message);
@@ -34,6 +28,13 @@ public sealed partial class ChatboxSurface
         DrawAttachments(message, width - gutter);
         DrawEmbeds(message, width - gutter);
         ImGui.EndGroup();
+
+        var blockHeight = ImGui.GetItemRectSize().Y;
+
+        if (gutter > 0f) ImGui.Unindent(gutter);
+        if (grouped || avatarSize <= 0f) return;
+
+        DrawAvatar(message, origin, MathF.Min(avatarSize, MathF.Max(blockHeight, ImGui.GetTextLineHeight())));
     }
 
     private void DrawSystemLine(ChatboxMessage message, float width)
