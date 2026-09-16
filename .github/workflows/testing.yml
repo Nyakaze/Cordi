@@ -129,7 +129,7 @@ jobs:
       - name: Publish GitHub prerelease
         uses: softprops/action-gh-release@v2
         with:
-          name: Cordi ${{ env.BUILD_VERSION }} (Testing)
+          name: ${{ env.BUILD_VERSION }} (Testing)
           tag_name: ${{ env.RELEASE_TAG }}
           target_commitish: ${{ env.SOURCE_SHA }}
           body: ${{ env.CHANGELOG_TEXT }}
