@@ -1,3 +1,27 @@
+## [test-chatbox-v5](https://github.com/Nyakaze/Cordi/compare/test-chatbox-v4.2...test-chatbox-v5) (16-09-2026)
+
+### ChatBox
+ - **Added:** New "Global Read option" -> Chatbox -> Mentions -> Notifications
+ - **Added:** Arrow up and down in the input walk through the messages you already sent, like the vanilla chat does. The last 50 are kept and shared between the chatbox and the conversation windows.
+ - **Added:** New "Colour Messages by Channel" option. The message text takes the colour of its chat type like the game chat does, so a party message is party coloured. Party Icons colours stay on the name. -> Chatbox -> Appearance -> Messages -> Colour Messages by Channel
+ - **Fixed:** "Send Tell" in the game's own right click menu now opens the conversation in Cordi instead of filling in the vanilla chat.
+ - **Fixed:** Player name completion kept suggesting names after the target was already typed out. It now stops once the name is complete, and matching works across the whole name instead of one word at a time.
+ - **Fixed:** Picking a command like /wave from the completion ran it but left the text in the input, so the next Enter ran it a second time. One Enter now completes, runs and clears it.
+ - **Fixed:** Messages took up more room than their text needed. The emote size no longer stretches rows without emotes, the hover box now ends where the message ends, and the avatar never makes a row taller than the message. With Message Spacing and Line Spacing at 0 the lines now sit directly on top of each other. -> Chatbox -> Appearance -> Message Spacing / Line Spacing
+
+### Advertisement Filter
+ - **Fixed:** The pattern list could end up empty and never filled itself again. The default patterns are restored once on update. Patterns you added yourself stay, and nothing is added twice.
+
+### Translation
+ - **Changed:** The free service is now Bing + Google instead of the old Google endpoint that ran into rate limits. DeepL is the new default, and without an API key the free Bing and Google services answer.
+ - **Added:** Chat noise filter. Things like "hahaha", "o7", "gg" or "lol" no longer cost a request. Clicking translate yourself still works. -> Chatbox -> Translation -> Scope -> Skip Chat Noise
+ - **Added:** Local language detection through Lingua, with a confidence threshold and a per channel language memory, so short words are no longer mistaken for random languages. -> Chatbox -> Translation -> Languages -> Detection Confidence
+ - **Changed:** Language detection is set to "Local first" once on update, so existing setups get the fewer requests as well. Switch it back to "Always online" and it stays that way. -> Chatbox -> Translation -> Languages -> Language Detection
+ - **Added:** Option to skip relayed Discord messages. -> Chatbox -> Translation -> Scope -> Translate Discord Messages
+ - **Fixed:** Manual translations are no longer silently dropped while a rate limit is active. They now skip the queue and report a failure if they really fail.
+ - **Fixed:** The rate limit backoff decays again instead of staying high for the rest of the session.
+
+
 ## [test-chatbox-v4.2](https://github.com/Nyakaze/Cordi/compare/2.3.0...test-chatbox-v4.2) (14-09-2026)
 
 ### General
