@@ -18,7 +18,18 @@ public sealed partial class ChatboxService
 
     private unsafe void EnsureChatLogHook()
     {
-        if (_chatLogHookAttempted || _disposed) return;
+        if (_disposed) return;
+
+        if (!Service.ClientState.IsLoggedIn)
+        {
+            if (!_chatLogHookAttempted) return;
+
+            DisposeChatLogHook();
+            _chatLogHookAttempted = false;
+            return;
+        }
+
+        if (_chatLogHookAttempted) return;
 
         var addon = (AddonChatLog*)Service.GameGui.GetAddonByName("ChatLog").Address;
         if (addon == null || addon->VirtualTable == null) return;
@@ -64,9 +75,10 @@ public sealed partial class ChatboxService
         if (_disposed || !Config.Enabled) return false;
         if (valueCount != ChatLogActivateValueCount || values == null) return false;
         if (values->UInt is not (ChatLogActivatePlain or ChatLogActivateWithText)) return false;
-        if (_plugin.ChatboxWindow?.IsOpen != true) return false;
+        if (!ShouldClaimChatActivation(out var window)) return false;
 
         RevealDuringCinematic();
+        window.IsOpen = true;
 
         var prefill = ReadActivationText(values + 2) ?? (CommandKeybindDown ? "/" : null);
 

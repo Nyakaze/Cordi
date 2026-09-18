@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using Cordi.Core;
+using Cordi.UI.Windows;
 using Dalamud.Game.ClientState.Keys;
 using Dalamud.Game.Config;
 using Dalamud.Game.Text;
@@ -77,6 +78,7 @@ public sealed partial class ChatboxService
     private KeybindSlots _commandKeybind;
     private bool _chatKeyHeld;
     private bool _commandKeyHeld;
+    private bool _vanillaInputFocused;
 
     public bool InputActive { get; set; }
 
@@ -327,6 +329,7 @@ public sealed partial class ChatboxService
         {
             _chatKeyHeld = false;
             _commandKeyHeld = false;
+            _vanillaInputFocused = false;
             _keybindCheckedAt = 0;
             return;
         }
@@ -339,12 +342,18 @@ public sealed partial class ChatboxService
             RefreshChatKeybinds();
         }
 
-        if (ChatLogHookActive) return;
-
         if (IsGameTextInputActive())
         {
+            _vanillaInputFocused = true;
             _chatKeyHeld = true;
             _commandKeyHeld = true;
+            return;
+        }
+
+        if (_vanillaInputFocused)
+        {
+            _vanillaInputFocused = false;
+            ClearNonModifierKeys();
             return;
         }
 
@@ -353,7 +362,24 @@ public sealed partial class ChatboxService
         TryConsumeKeybind(_chatKeybind, ref _chatKeyHeld, null);
     }
 
+    private static void ClearNonModifierKeys()
+    {
+        foreach (var key in Service.KeyState.GetValidVirtualKeys())
+        {
+            if (key is VirtualKey.CONTROL or VirtualKey.SHIFT or VirtualKey.MENU) continue;
+
+            Service.KeyState[key] = false;
+        }
+    }
+
     private bool CommandKeybindDown => TryMatchKeybind(_commandKeybind, out _);
+
+    private bool ShouldClaimChatActivation(out ChatboxWindow window)
+    {
+        window = _plugin.ChatboxWindow;
+
+        return window != null && (window.IsOpen || _gameChatHidden);
+    }
 
     private bool TryConsumeKeybind(in KeybindSlots bind, ref bool held, string? prefill)
     {
@@ -366,12 +392,15 @@ public sealed partial class ChatboxService
         if (held) return false;
         held = true;
 
-        if (!_plugin.ChatboxWindow.IsOpen) return false;
-        if (InputActive) return false;
-
-        RevealDuringCinematic();
+        if (!ShouldClaimChatActivation(out var window)) return false;
 
         Service.KeyState[key] = false;
+
+        if (InputActive) return true;
+
+        RevealDuringCinematic();
+        window.IsOpen = true;
+
         RequestInputFocus = true;
         PendingInputText = prefill;
         return true;
