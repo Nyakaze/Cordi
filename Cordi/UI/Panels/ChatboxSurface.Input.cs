@@ -80,11 +80,13 @@ public sealed partial class ChatboxSurface
         var translateVisible = OutgoingButtonVisible;
 
         var cinematicButton = !Detached && ChatboxService.CinematicActive;
+        var dmButton = Chatbox.ConversationsEnabled && Config.Conversations.ShowQuickPicker;
 
         var reserved = 0f;
+        if (dmButton) reserved += spacing + IconButtonWidth(FontAwesomeIcon.Envelope);
         if (translateVisible) reserved += spacing + IconButtonWidth(FontAwesomeIcon.Language);
-        if (Config.ShowEmojiPicker) reserved += spacing + IconButtonWidth(FontAwesomeIcon.Smile);
         if (cinematicButton) reserved += spacing + IconButtonWidth(FontAwesomeIcon.EyeSlash);
+        if (Config.ShowEmojiPicker) reserved += spacing + IconButtonWidth(FontAwesomeIcon.Smile);
 
         ImGui.SetCursorPosY(ImGui.GetCursorPosY() + _theme.PickerCaptionHeight());
 
@@ -149,16 +151,22 @@ public sealed partial class ChatboxSurface
             }
         }
 
-        if (translateVisible) DrawOutgoingButton(spacing);
-
-        if (Config.ShowEmojiPicker)
+        if (dmButton)
         {
             ImGui.SameLine(0, spacing);
-            if (_theme.IconButton("##chatbox-emoji", FontAwesomeIcon.Smile, "Emoji")) _picker.Open();
 
-            _picker.Draw(InsertText);
-            pickerOpen = _picker.InputActive;
+            var opened = _theme.IconButton(
+                "##chatbox-dm",
+                FontAwesomeIcon.Envelope,
+                "Direct messages");
+
+            if (opened) _dmPicker.Open();
+
+            _dmPicker.Draw();
+            pickerOpen |= _dmPicker.InputActive;
         }
+
+        if (translateVisible) DrawOutgoingButton(spacing);
 
         if (cinematicButton)
         {
@@ -170,6 +178,15 @@ public sealed partial class ChatboxSurface
                 "Hide the chatbox again. Your chat keybind brings it back.");
 
             if (hidden) Chatbox.HideDuringCinematic();
+        }
+
+        if (Config.ShowEmojiPicker)
+        {
+            ImGui.SameLine(0, spacing);
+            if (_theme.IconButton("##chatbox-emoji", FontAwesomeIcon.Smile, "Emoji")) _picker.Open();
+
+            _picker.Draw(InsertText);
+            pickerOpen |= _picker.InputActive;
         }
 
         Chatbox.InputActive = inputActive || pickerOpen;

@@ -18,6 +18,7 @@ public sealed partial class ChatboxSurface : IDisposable
     private readonly UiTheme _theme;
     private readonly ChatboxInlineFlow _flow;
     private readonly ChatboxEmojiPicker _picker;
+    private readonly ChatboxConversationPicker _dmPicker;
     private readonly ChatboxAutocomplete _autocomplete;
 
     private readonly ChatboxEmoteFont _emoteFont = new();
@@ -60,6 +61,7 @@ public sealed partial class ChatboxSurface : IDisposable
         _theme = theme;
         _flow = new ChatboxInlineFlow(theme);
         _picker = new ChatboxEmojiPicker(plugin, theme);
+        _dmPicker = new ChatboxConversationPicker(plugin, theme);
         _autocomplete = new ChatboxAutocomplete(plugin, theme);
         _inputCallback = InputCallback;
 
@@ -83,6 +85,7 @@ public sealed partial class ChatboxSurface : IDisposable
     {
         _navDirty = true;
         _picker.SetChatboxBounds(ImGui.GetWindowPos(), ImGui.GetWindowSize());
+        _dmPicker.SetChatboxBounds(ImGui.GetWindowPos(), ImGui.GetWindowSize());
         _theme.ApplyFontScale();
         UpdateItemTooltip();
 

@@ -308,6 +308,16 @@ public partial class ChatboxTab
             innerWidth =>
             {
                 DrawToggleRow(
+                    "conversation-quick-picker",
+                    FontAwesomeIcon.Envelope,
+                    "Quick picker button next to the emoji button",
+                    "Opens a list of your recent conversations, with a search box for everyone else.",
+                    innerWidth,
+                    () => Ccfg.ShowQuickPicker,
+                    value => Ccfg.ShowQuickPicker = value,
+                    UiTheme.TilePurple);
+
+                DrawToggleRow(
                     "conversation-own-window",
                     FontAwesomeIcon.WindowMaximize,
                     "Every conversation gets its own window",

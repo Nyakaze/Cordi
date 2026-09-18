@@ -76,6 +76,7 @@ public static class SettingsCatalog
             ("Alerts", "Mute the game's own tell sound", "silence tell"),
             ("Alerts", "Flash the game in the Windows taskbar", "taskbar flash alert"),
             ("Alerts", "Bring the game to the foreground", "focus game window"),
+            ("Appearance", "Quick picker button next to the emoji button", "dm direct message picker recent search input bar"),
             ("Appearance", "Every conversation gets its own window", "pop out separate window"),
             ("Appearance", "Section label", "channel list heading"),
             ("Appearance", "Conversation colour", "tab rail tile colour"),

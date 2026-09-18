@@ -57,6 +57,8 @@ public class ConversationSettings
     public bool SuppressGameLog { get; set; }
     public ConversationWindowChrome Window { get; set; } = new();
 
+    public bool ShowQuickPicker { get; set; }
+
     public string SectionLabel { get; set; } = "Direct Messages";
     public bool ShowWorldInLabel { get; set; } = true;
     public Vector4 Color { get; set; } = new(0.36f, 0.72f, 0.98f, 1f);
