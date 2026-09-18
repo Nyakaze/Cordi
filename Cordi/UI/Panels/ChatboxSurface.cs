@@ -210,6 +210,9 @@ public sealed partial class ChatboxSurface : IDisposable
 
     public void RequestFocus() => _requestFocus = true;
 
+    private const ImGuiWindowFlags PaneFlags =
+        ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse;
+
     private void DrawWithTabs(float inputHeight)
     {
         if (Config.TabSide == ChatboxTabSide.Top)
@@ -221,7 +224,7 @@ public sealed partial class ChatboxSurface : IDisposable
 
         var navHeight = MeasureHorizontalNavHeight();
 
-        using (var body = ImRaii.Child("##chatbox-body", new Vector2(0, -navHeight), false))
+        using (var body = ImRaii.Child("##chatbox-body", new Vector2(0, -navHeight), false, PaneFlags))
         {
             if (body) DrawBody(inputHeight);
         }
@@ -320,7 +323,7 @@ public sealed partial class ChatboxSurface : IDisposable
 
     private void DrawBodyColumn(float bodyWidth, float inputHeight)
     {
-        using var child = ImRaii.Child("##chatbox-body", new Vector2(bodyWidth, 0), false);
+        using var child = ImRaii.Child("##chatbox-body", new Vector2(bodyWidth, 0), false, PaneFlags);
         if (!child) return;
 
         DrawBody(inputHeight);

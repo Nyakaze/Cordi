@@ -59,7 +59,9 @@ public sealed partial class ChatboxSurface
     {
         var startY = ImGui.GetCursorPosY();
         DrawInputBarContent(channel);
-        _measuredInputHeight = MathF.Max(0f, ImGui.GetCursorPosY() - startY);
+
+        _measuredInputHeight =
+            MathF.Max(0f, ImGui.GetCursorPosY() - startY) + ImGui.GetStyle().ItemSpacing.Y;
     }
 
     private void DrawInputBarContent(ChatboxChannelState channel)
