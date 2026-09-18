@@ -476,6 +476,20 @@ public partial class ChatboxTab
                 $"chatbox-override-color-{channel.Id}", FontAwesomeIcon.Palette,
                 "Override Chat Colours", "Messages take this channel's colour instead of the global colour of their chat type.",
                 innerWidth, () => channel.OverrideChatColor, v => channel.OverrideChatColor = v);
+
+            DrawToggleRow(
+                $"chatbox-custom-tile-{channel.Id}", FontAwesomeIcon.Palette,
+                "Custom Rail Tile Background",
+                "Off uses the theme colour. The tile still turns the channel colour while you are on it.",
+                innerWidth, () => channel.CustomTileColor, v => channel.CustomTileColor = v);
+
+            if (channel.CustomTileColor)
+            {
+                DrawColorRow(
+                    $"chatbox-tile-color-{channel.Id}",
+                    "Rail Tile Background", "Background of this channel's server rail button.",
+                    innerWidth, () => channel.TileColor, v => channel.TileColor = v);
+            }
         }, "Identity");
 
     private void DrawChannelSources(ChatboxChannelConfig channel) =>

@@ -193,6 +193,7 @@ public sealed partial class ChatboxSurface
     {
         Label = label,
         Accent = channel.Config.Color,
+        Background = channel.Config.CustomTileColor ? channel.Config.TileColor : null,
         Active = isActive,
         Unread = HasUnread(channel),
         ShowUnreadDot = Config.ShowUnreadDot,

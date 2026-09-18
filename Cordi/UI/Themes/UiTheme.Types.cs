@@ -78,6 +78,7 @@ public readonly struct UiNavItem
 {
     public required string Label { get; init; }
     public Vector4 Accent { get; init; }
+    public Vector4? Background { get; init; }
     public bool Active { get; init; }
     public bool Unread { get; init; }
     public bool ShowUnreadDot { get; init; }

@@ -64,6 +64,8 @@ public class ChatboxChannelConfig
     public string IconUrl { get; set; } = string.Empty;
     public Vector4 Color { get; set; } = new(0.45f, 0.55f, 0.95f, 1f);
     public bool OverrideChatColor { get; set; }
+    public bool CustomTileColor { get; set; }
+    public Vector4 TileColor { get; set; } = new(0.17f, 0.18f, 0.22f, 1f);
     public bool Enabled { get; set; } = true;
     public bool ShowInNav { get; set; } = true;
     public bool IsSeparator { get; set; }

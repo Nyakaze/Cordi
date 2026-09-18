@@ -123,7 +123,7 @@ public sealed partial class UiTheme
             ? accent
             : hovered
                 ? new Vector4(accent.X * 0.55f, accent.Y * 0.55f, accent.Z * 0.55f, 1f)
-                : FrameBg;
+                : item.Background ?? FrameBg;
 
         draw.AddRectFilled(min, max, ImGui.GetColorU32(NavFlashed(background, item)), rounding);
 
