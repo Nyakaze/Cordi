@@ -75,6 +75,7 @@ public class CordiPlugin : IDalamudPlugin
     public NotificationManager NotificationManager { get; private set; }
     public CordiLogService LogService { get; private set; }
     public ICacheRegistry CacheRegistry { get; private set; } = null!;
+    public PlayerRegistry Players { get; private set; } = null!;
     public LocalPlayerProvider LocalPlayer { get; private set; } = null!;
     public DiscordConnection DiscordConnection { get; private set; } = null!;
     public DiscordEventPump DiscordDispatcher { get; private set; } = null!;
@@ -142,11 +143,13 @@ public class CordiPlugin : IDalamudPlugin
 
         LogService = new CordiLogService();
         CacheRegistry = new CacheRegistry();
+        Players = new PlayerRegistry(CacheRegistry);
+        Player.Registry = Players;
         LocalPlayer = new LocalPlayerProvider();
 
         PluginInterface.UiBuilder.OpenConfigUi += ToggleConfigUI;
         PluginInterface.UiBuilder.OpenMainUi += ToggleConfigUI;
-        Lodestone = new LodestoneService(this);
+        Lodestone = new LodestoneService(this, PluginInterface.ConfigDirectory.FullName);
         Tomestone = new TomestoneService(this);
         Webhook = new DiscordWebhookService(this);
         AdvertisementFilterService = new AdvertisementFilterService(this, Webhook);

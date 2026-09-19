@@ -70,8 +70,8 @@ public class DebugPacketHandler : IChatHandler
                 }
                 if (string.IsNullOrEmpty(avatarUrl))
                 {
-                    var idCache = CordiPlugin.Plugin.Config.Lodestone.CharacterIdCache;
-                    var cachedKey = idCache.Keys.FirstOrDefault(k => k.StartsWith($"{name}@"));
+                    var lodestone = CordiPlugin.Plugin.Lodestone;
+                    var cachedKey = lodestone.Ids.Keys.FirstOrDefault(k => k.StartsWith($"{name}@"));
 
                     if (cachedKey != null)
                     {
@@ -79,7 +79,7 @@ public class DebugPacketHandler : IChatHandler
                         if (parts.Length > 1)
                         {
                             world = parts[1];
-                            avatarUrl = await CordiPlugin.Plugin.Lodestone.GetAvatarUrlAsync(name, world);
+                            avatarUrl = await lodestone.GetAvatarUrlAsync(Player.FromNameWorld(name, world));
                         }
                     }
                 }

@@ -343,9 +343,11 @@ public class PartyService : IDisposable
             member.ItemLevel = gearInfo.ItemLevel;
             member.LastUpdated = DateTime.Now;
 
+            var memberPlayer = Player.FromNameWorld(member.Name, member.World);
+
             if (plugin.Config.Party.ShowSavageProgress)
             {
-                var lodestoneId = await plugin.Lodestone.GetLodestoneIdAsync(member.Name, member.World);
+                var lodestoneId = plugin.Lodestone.PeekLodestoneId(memberPlayer);
                 if (!string.IsNullOrEmpty(lodestoneId))
                 {
                     member.LodestoneId = lodestoneId;
@@ -364,9 +366,7 @@ public class PartyService : IDisposable
             {
                 // Ensure LodestoneId is cached for RememberMe as well
                 if (string.IsNullOrEmpty(member.LodestoneId))
-                {
-                    member.LodestoneId = await plugin.Lodestone.GetLodestoneIdAsync(member.Name, member.World);
-                }
+                    member.LodestoneId = plugin.Lodestone.PeekLodestoneId(memberPlayer);
                 if (!string.IsNullOrEmpty(member.LodestoneId))
                 {
                     plugin.RememberMe.AddOrUpdatePlayer(member.Name, member.World, member.LodestoneId);

@@ -572,7 +572,8 @@ public sealed partial class ChatboxService
         {
             try
             {
-                var url = await _plugin.Lodestone.GetAvatarUrlAsync(entry.AuthorName, entry.AuthorWorld);
+                var url = await _plugin.Lodestone.GetAvatarUrlAsync(
+                    Player.FromNameWorld(entry.AuthorName, entry.AuthorWorld));
                 if (!string.IsNullOrEmpty(url)) entry.AvatarUrl = url;
             }
             catch (Exception ex)

@@ -8,6 +8,7 @@ using Cordi.Core.Caching;
 using Dalamud.Plugin.Services;
 using Lumina.Excel.Sheets;
 using Cordi.Core;
+using Cordi.Domain;
 
 namespace Cordi.Services.Features;
 
@@ -29,34 +30,27 @@ public class TomestoneService : IDisposable
     private readonly CordiPlugin _plugin;
     private readonly HttpClient _httpClient;
     private readonly Cache<string, GearInfo> _gearLevelCache;
-    private readonly Cache<string, string> _lodestoneIdCache;
     private readonly Cache<string, RaidActivity> _raidActivityCache;
 
-    // Mapping from FFXIV class/job abbreviations to Tomestone API format
     private static readonly Dictionary<string, string> ClassJobMapping = new(StringComparer.OrdinalIgnoreCase)
     {
-        // Tanks
         ["PLD"] = "Paladin",
         ["WAR"] = "Warrior",
         ["DRK"] = "DarkKnight",
         ["GNB"] = "Gunbreaker",
-        // Healers
         ["WHM"] = "WhiteMage",
         ["SCH"] = "Scholar",
         ["AST"] = "Astrologian",
         ["SGE"] = "Sage",
-        // Melee DPS
         ["MNK"] = "Monk",
         ["DRG"] = "Dragoon",
         ["NIN"] = "Ninja",
         ["SAM"] = "Samurai",
         ["RPR"] = "Reaper",
         ["VPR"] = "Viper",
-        // Physical Ranged DPS
         ["BRD"] = "Bard",
         ["MCH"] = "Machinist",
         ["DNC"] = "Dancer",
-        // Magical Ranged DPS
         ["BLM"] = "BlackMage",
         ["SMN"] = "Summoner",
         ["RDM"] = "RedMage",
@@ -69,8 +63,6 @@ public class TomestoneService : IDisposable
         _plugin = plugin;
         _gearLevelCache = new Cache<string, GearInfo>("tomestone.gearLevels", plugin.CacheRegistry,
             maxSize: 200, ttl: TimeSpan.FromHours(1));
-        _lodestoneIdCache = new Cache<string, string>("tomestone.lodestoneIds", plugin.CacheRegistry,
-            maxSize: 500, ttl: TimeSpan.FromDays(1));
         _raidActivityCache = new Cache<string, RaidActivity>("tomestone.raidActivity", plugin.CacheRegistry,
             maxSize: 200, ttl: TimeSpan.FromHours(2));
         _httpClient = new HttpClient
@@ -101,7 +93,6 @@ public class TomestoneService : IDisposable
 
         try
         {
-            // Try tomestone.gg JSON API first
             var gearInfo = await GetItemLevelFromTomestoneAsync(name, world, classJob);
             if (gearInfo.ItemLevel > 0)
             {
@@ -110,9 +101,9 @@ public class TomestoneService : IDisposable
                 return gearInfo;
             }
 
-            // Fall back to Lodestone if tomestone.gg doesn't have data
             Logger.Debug($"Tomestone.gg unavailable for {name}@{world}, trying Lodestone");
-            var lodestoneLevel = await _plugin.Lodestone.GetAverageItemLevelAsync(name, world);
+            var lodestoneLevel = await _plugin.Lodestone.GetAverageItemLevelAsync(
+                Player.FromNameWorld(name, world));
             if (lodestoneLevel > 0)
             {
                 var lodestoneGearInfo = new GearInfo(lodestoneLevel);
@@ -131,22 +122,12 @@ public class TomestoneService : IDisposable
 
     private async Task<GearInfo> GetItemLevelFromTomestoneAsync(string name, string world, string? classJob)
     {
-        var key = $"{name}@{world}";
+        var lodestoneId = _plugin.Lodestone.PeekLodestoneId(Player.FromNameWorld(name, world));
 
-        // Try to get cached Lodestone ID first
-        if (!_lodestoneIdCache.TryGet(key, out var lodestoneId))
+        if (string.IsNullOrEmpty(lodestoneId))
         {
-            // Get Lodestone ID from LodestoneService
-            lodestoneId = await _plugin.Lodestone.GetLodestoneIdAsync(name, world);
-
-            if (string.IsNullOrEmpty(lodestoneId))
-            {
-                Logger.Debug($"Cannot fetch from tomestone.gg - no Lodestone ID for {name}@{world}");
-                return new GearInfo(0);
-            }
-
-            // Cache the ID
-            _lodestoneIdCache.Set(key, lodestoneId);
+            Logger.Debug($"Cannot fetch from tomestone.gg - no Lodestone ID for {name}@{world}");
+            return new GearInfo(0);
         }
 
         // Create character slug (lowercase name with spaces->hyphens, no apostrophes)
@@ -410,7 +391,6 @@ public class TomestoneService : IDisposable
     public void ClearCache()
     {
         _gearLevelCache.Clear();
-        _lodestoneIdCache.Clear();
         _raidActivityCache.Clear();
         Logger.Info("Cleared Tomestone cache.");
     }

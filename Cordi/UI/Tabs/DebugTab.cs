@@ -807,7 +807,7 @@ public class DebugTab : ConfigTabBase
             title: "Lodestone Character ID Cache",
             drawContent: (avail) =>
             {
-                var cache = plugin.Config.Lodestone.CharacterIdCache;
+                var cache = plugin.Lodestone.Ids.Snapshot();
                 ImGui.TextColored(UiTheme.ColorSuccessText, $"Cached Character IDs: {cache.Count}");
 
                 ImGui.SameLine();

@@ -31,8 +31,12 @@ public class Player : IEquatable<Player>
         LodestoneId = lodestoneId;
     }
 
+    internal static PlayerRegistry? Registry { get; set; }
+
+    private static Player Intern(Player candidate) => Registry?.Intern(candidate) ?? candidate;
+
     public static Player FromNameWorld(string name, string world, ulong? gameObjectId = null)
-        => new(name, world, gameObjectId);
+        => Intern(new Player(name, world, gameObjectId));
 
     public static Player FromGameObject(IPlayerCharacter pc)
     {
@@ -45,14 +49,14 @@ public class Player : IEquatable<Player>
         player.PopulateCompanyTag(pc);
         player.EntityId = pc.EntityId;
         player.WorldId = (ushort)pc.HomeWorld.RowId;
-        return player;
+        return Intern(player);
     }
 
     public static Player FromPartyMember(string name, string world, ulong? contentId)
     {
         var player = new Player(name, world);
         if (contentId.HasValue && contentId.Value != 0) player.ContentId = contentId;
-        return player;
+        return Intern(player);
     }
 
     public static Player FromChatSource(
@@ -61,7 +65,26 @@ public class Player : IEquatable<Player>
         var player = new Player(name.Trim(), world);
         player.ApplyGameIds(contentId, accountId, worldId);
         player.EnrichFromWorld();
-        return player;
+        return Intern(player);
+    }
+
+    internal void MergeFrom(Player other)
+    {
+        if (ReferenceEquals(this, other)) return;
+
+        if (other.GameObjectId is { } gameObjectId && gameObjectId != 0) GameObjectId = gameObjectId;
+        if (other.ContentId is { } contentId && contentId != 0) ContentId = contentId;
+        if (other.AccountId is { } accountId && accountId != 0) AccountId = accountId;
+        if (other.WorldId is { } worldId && worldId != 0) WorldId = worldId;
+        if (other.EntityId is { } entityId && entityId != 0) EntityId = entityId;
+
+        if (other.RaceId is { } raceId) RaceId = raceId;
+        if (other.TribeId is { } tribeId) TribeId = tribeId;
+        if (other.Gender is { } gender) Gender = gender;
+
+        if (!string.IsNullOrEmpty(other.FreeCompanyTag)) FreeCompanyTag = other.FreeCompanyTag;
+        if (!string.IsNullOrEmpty(other.LodestoneId)) LodestoneId = other.LodestoneId;
+        if (!string.IsNullOrEmpty(other.AvatarUrl)) AvatarUrl = other.AvatarUrl;
     }
 
     public void ApplyGameIds(ulong contentId, ulong accountId, ushort worldId)

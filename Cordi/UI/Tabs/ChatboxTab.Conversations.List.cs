@@ -4,6 +4,7 @@ using System.Linq;
 using System.Numerics;
 using System.Threading.Tasks;
 using Cordi.Configuration;
+using Cordi.Domain;
 using Cordi.Services.Discord.Projections;
 using Cordi.UI.Themes;
 using Dalamud.Bindings.ImGui;
@@ -453,7 +454,7 @@ public partial class ChatboxTab
         {
             try
             {
-                await plugin.Lodestone.GetAvatarUrlAsync(name, world);
+                await plugin.Lodestone.GetAvatarUrlAsync(Player.FromNameWorld(name, world));
             }
             catch (Exception ex)
             {

@@ -386,7 +386,9 @@ public class CordiPeepService : IDisposable
                 finalTargetName = GetLocalPlayerTargetName();
             });
 
-            var lodestoneId = await plugin.Lodestone.ResolveLodestoneIdAsync(state.Name, state.World);
+            var lodestoneId = await plugin.Lodestone.ResolveLodestoneIdAsync(
+                Player.FromNameWorld(state.Name, state.World, state.GameObjectId));
+
             var embed = BuildPeeperEmbed(state, finalTargetName, lodestoneId);
 
             await plugin.Discord.EditWebhookMessage(channelId, state.DiscordMessageId, embed);
@@ -412,7 +414,10 @@ public class CordiPeepService : IDisposable
             if (state.DiscordMessageId != 0 && (blacklistEntry == null || !blacklistEntry.DisableDiscord))
             {
                 _messageIdCache.Set(state.DiscordMessageId, state);
-                var skipLodestoneId = await plugin.Lodestone.ResolveLodestoneIdAsync(state.Name, state.World);
+
+                var skipLodestoneId = await plugin.Lodestone.ResolveLodestoneIdAsync(
+                    Player.FromNameWorld(state.Name, state.World, state.GameObjectId));
+
                 var skipEmbed = BuildPeeperEmbed(state, myTargetName, skipLodestoneId);
                 await plugin.Discord.EditWebhookMessage(channelId, state.DiscordMessageId, skipEmbed);
             }
@@ -472,7 +477,9 @@ public class CordiPeepService : IDisposable
         var channelIdStr = plugin.Config.CordiPeep.DiscordChannelId;
         if (ulong.TryParse(channelIdStr, out var channelId))
         {
-            var lodestoneId = await plugin.Lodestone.ResolveLodestoneIdAsync(state.Name, state.World);
+            var lodestoneId = await plugin.Lodestone.ResolveLodestoneIdAsync(
+                Player.FromNameWorld(state.Name, state.World, state.GameObjectId));
+
             var embed = BuildPeeperEmbed(state, myTargetName, lodestoneId);
 
             await plugin.Discord.EditWebhookMessage(channelId, state.DiscordMessageId, embed);
