@@ -11,6 +11,7 @@ using Cordi.Packets.Factory;
 using Cordi.Packets.Handler;
 using Cordi.Packets.Handler.Chat;
 using Cordi.Services;
+using Cordi.Services.Activity;
 using Cordi.Services.Discord;
 using Cordi.Services.Features;
 
@@ -58,6 +59,7 @@ public class CordiPlugin : IDalamudPlugin
     public DiscordEmbedFactory EmbedFactory { get; private set; }
     public AdvertisementFilterService AdvertisementFilterService { get; private set; }
     public ActivityManager ActivityManager { get; private set; }
+    public EmoteTitleService EmoteTitles { get; private set; }
     public HonorificBridge HonorificBridge { get; private set; }
     public DiscordSlashCommandService SlashCommandService { get; private set; }
     public ScreenshotService Screenshot { get; private set; }
@@ -162,6 +164,7 @@ public class CordiPlugin : IDalamudPlugin
         PartyService = new PartyService(this, NotificationManager);
         RememberMe = new RememberMeService(this);
         ActivityManager = new ActivityManager(this, HonorificBridge);
+        EmoteTitles = new EmoteTitleService(this, PluginInterface.ConfigDirectory.FullName);
 
         DiscordConnection = new DiscordConnection(this);
         DiscordDispatcher = new DiscordEventPump(this, DiscordConnection);
@@ -446,6 +449,7 @@ public class CordiPlugin : IDalamudPlugin
         cachedLocalPlayer = Service.ObjectTable.LocalPlayer;
         VisibilityBridge.OnFrameworkUpdate();
         Chatbox?.OnFrameworkUpdate();
+        EmoteTitles?.OnFrameworkUpdate();
 
         // Ctrl+Shift+L toggles hidden Logs tab (edge-triggered, only when config window is open)
         bool ctrl = Service.KeyState[0x11];   // VK_CONTROL
@@ -481,6 +485,7 @@ public class CordiPlugin : IDalamudPlugin
     {
         LogService.Info("Plugin", "Player logged out");
         cachedLocalPlayer = null;
+        EmoteTitles?.OnLogout();
     }
 
     private void ChatOnChatMessage(Dalamud.Game.Chat.IChatMessage message) => HandleChatMessage(BuildChatMessage(message));
@@ -538,6 +543,7 @@ public class CordiPlugin : IDalamudPlugin
         this.Chatbox?.Dispose();
         this.ChatboxWindow?.Dispose();
         this.ConversationWindows?.Dispose();
+        this.EmoteTitles?.Dispose();
         this.EmoteLog?.Dispose();
         this.ActivityManager?.Dispose();
         this.HonorificBridge?.Dispose();

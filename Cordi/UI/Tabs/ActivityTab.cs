@@ -74,6 +74,7 @@ public partial class ActivityTab : ConfigTabBase
         ("Listening", DrawListeningPage),
         ("Watching", DrawWatchingPage),
         ("Custom", DrawCustomPage),
+        ("Emotes", DrawEmotesPage),
     };
 
     private DiscordActivityConfig Config => plugin.Config.ActivityConfig;

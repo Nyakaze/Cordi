@@ -28,6 +28,8 @@ public class DiscordActivityConfig
     public List<ActivityPreset> CustomPresets { get; set; } = new();
     public int ActiveCustomPreset { get; set; } = 0;
 
+    public EmoteTitleSettings EmoteTitles { get; set; } = new();
+
     public ActivityTypes EnabledTypes() => TypeConfigs
         .Where(entry => entry.Value is { Enabled: true })
         .Aggregate(ActivityTypes.None, (types, entry) => types | entry.Key.ToFlag());

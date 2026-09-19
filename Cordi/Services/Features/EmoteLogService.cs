@@ -44,6 +44,8 @@ public class EmoteLogService : IDisposable
     private delegate void OnEmoteFuncDelegate(ulong unk, ulong instigatorAddr, ushort emoteId, ulong targetId, ulong unk2);
     private readonly Hook<OnEmoteFuncDelegate> _hookEmote;
 
+    public event Action<ulong, ushort, ulong>? EmoteObserved;
+
 
     public class DiscordEmoteState
     {
@@ -90,6 +92,15 @@ public class EmoteLogService : IDisposable
 
     private void OnEmoteDetour(ulong unk, ulong instigatorAddr, ushort emoteId, ulong targetId, ulong unk2)
     {
+        try
+        {
+            EmoteObserved?.Invoke(instigatorAddr, emoteId, targetId);
+        }
+        catch (Exception ex)
+        {
+            Log.Error(LogSource, $"Emote observer error: {ex.Message}", ex);
+        }
+
         try
         {
             HandleEmote(instigatorAddr, emoteId, targetId);

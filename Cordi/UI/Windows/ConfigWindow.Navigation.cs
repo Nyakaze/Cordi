@@ -28,6 +28,7 @@ public static class PageIds
     public const string ActivityListening = "activity/Listening";
     public const string ActivityWatching = "activity/Watching";
     public const string ActivityCustom = "activity/Custom";
+    public const string ActivityEmotes = "activity/Emotes";
     public const string PartyRadar = "party";
     public const string SlashCommands = "slash";
     public const string Settings = "settings";
@@ -62,6 +63,7 @@ public sealed partial class ConfigWindow
         PageIds.ActivityListening,
         PageIds.ActivityWatching,
         PageIds.ActivityCustom,
+        PageIds.ActivityEmotes,
         PageIds.PartyRadar,
         PageIds.SlashCommands,
     };
@@ -79,6 +81,7 @@ public sealed partial class ConfigWindow
         ["Listening"] = FontAwesomeIcon.Music,
         ["Watching"] = FontAwesomeIcon.Video,
         ["Custom"] = FontAwesomeIcon.CommentDots,
+        ["Emotes"] = FontAwesomeIcon.HandHoldingHeart,
     };
 
     private static readonly Dictionary<string, string> PageSubtitles = new()
@@ -103,6 +106,7 @@ public sealed partial class ConfigWindow
         ["Listening"] = "Titles built from the track your Discord account is listening to",
         ["Watching"] = "Titles built from what your Discord account is watching",
         ["Custom"] = "A standalone title that does not need a Discord account",
+        ["Emotes"] = "Short lived titles driven by emotes you get or give",
         [PageIds.PartyRadar] = "Your party, their gear and the notes you left them",
         [PageIds.SlashCommands] = "Discord slash commands exposed by Cordi",
         [PageIds.Settings] = "Appearance, fonts and plugin behaviour",

@@ -376,6 +376,16 @@ public static class SettingsCatalog
             ("", "Title Format", "template placeholder format string"),
             ("", "Cycling", "rotate formats interval"),
             ("", "Appearance", "title colour glow gradient"));
+
+        Page(index, PageIds.ActivityEmotes, "Emotes", FontAwesomeIcon.HandHoldingHeart,
+            ("", "Emote titles", "patme pat dote hug emote title toggle"),
+            ("", "Seconds on screen", "emote title duration temporary"),
+            ("", "Track my emotes on myself", "test emote title self target"),
+            ("", "Rules", "emote rule create pat counter"),
+            ("", "Title Format", "emote template placeholder total session combo"),
+            ("", "Appearance", "emote title colour glow gradient"),
+            ("", "Import", "import patme patmehonorific counts rules"),
+            ("", "Counts", "emote counter totals pat dote hug"));
     }
 
     private static void RegisterParty(SettingsSearchIndex index)

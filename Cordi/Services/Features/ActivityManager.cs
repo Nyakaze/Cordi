@@ -5,6 +5,7 @@ using Cordi.Core;
 using Cordi.Services.Activity;
 using Crovus.Events;
 using Crovus.Models;
+using Dalamud.Game.ClientState.Objects.SubKinds;
 using Dalamud.Plugin.Services;
 
 namespace Cordi.Services
@@ -82,6 +83,28 @@ namespace Cordi.Services
             _hasPendingPresenceUpdate = true;
 
             return Task.CompletedTask;
+        }
+
+        public bool PriorityTitleExpired => _broadcaster.PriorityExpired;
+
+        public void PushPriorityTitle(IPlayerCharacter player, string title, EmoteTitleRule rule, TimeSpan hold)
+        {
+            _broadcaster.BroadcastPriority(player, title, rule.PrefixTitle, rule.Color, rule.Glow,
+                rule.GradientColourSet, rule.GradientAnimationStyle, hold);
+
+            Log.Debug(LogSource, $"Emote title \"{title}\" takes over for {hold.TotalSeconds:0.#}s.");
+        }
+
+        public void ReleasePriorityTitle()
+        {
+            _broadcaster.ReleasePriority(_plugin.cachedLocalPlayer);
+
+            if (_disposed) return;
+
+            _lastLoggedTitle = string.Empty;
+            _lastRefreshTick = DateTime.Now;
+
+            ProcessPresence(quiet: true);
         }
 
         public void ForgetPresence()
