@@ -60,7 +60,7 @@ public class EmoteBackAction : IDisposable
             {
                 if (target is IPlayerCharacter pc)
                 {
-                    _visibility.Unhide(pc, hold + TimeSpan.FromSeconds(2));
+                    _visibility.UnhideForEmoteBack(pc, hold + TimeSpan.FromSeconds(2));
                     unheldId = pc.GameObjectId;
                 }
                 Service.TargetManager.Target = target;

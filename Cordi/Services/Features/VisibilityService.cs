@@ -51,21 +51,26 @@ public sealed class VisibilityService : IDisposable
         Service.ClientState.TerritoryChanged += OnTerritoryChanged;
     }
 
-    public bool FeatureEnabled => !_disposed && _config.CordiPeep.UnhideFromVisibility;
+    public bool FeatureEnabled => !_disposed && (_config.CordiPeep.UnhideFromVisibility || _config.EmoteLog.UnhideFromVisibility);
 
     public bool IsPluginAvailable => ResolveAvailability();
-
-    public bool IsAvailable => FeatureEnabled && ResolveAvailability();
 
     public int ActiveLeases => _leases.Count;
 
     public void Unhide(IPlayerCharacter? player) =>
-        Unhide(player, TimeSpan.FromSeconds(Math.Clamp(_config.CordiPeep.UnhideHoldSeconds, MinHoldSeconds, MaxHoldSeconds)));
+        Unhide(
+            player,
+            TimeSpan.FromSeconds(Math.Clamp(_config.CordiPeep.UnhideHoldSeconds, MinHoldSeconds, MaxHoldSeconds)),
+            _config.CordiPeep.UnhideFromVisibility);
 
-    public void Unhide(IPlayerCharacter? player, TimeSpan hold)
+    public void UnhideForEmoteBack(IPlayerCharacter? player, TimeSpan hold) =>
+        Unhide(player, hold, _config.EmoteLog.UnhideFromVisibility);
+
+    private void Unhide(IPlayerCharacter? player, TimeSpan hold, bool enabled)
     {
         if (player == null) return;
-        if (!IsAvailable) return;
+        if (_disposed || !enabled) return;
+        if (!ResolveAvailability()) return;
 
         var name = player.Name.TextValue;
         if (string.IsNullOrWhiteSpace(name)) return;

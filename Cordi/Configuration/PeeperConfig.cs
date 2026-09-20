@@ -64,7 +64,7 @@ public class CordiPeepConfig : IWindowChromeConfig
     public bool SkipRepeatedNotifications { get; set; } = false;
     public int RepeatedNotificationsCooldown { get; set; } = 60;
 
-    public bool UnhideFromVisibility { get; set; } = false;
+    public bool UnhideFromVisibility { get; set; } = true;
     public int UnhideHoldSeconds { get; set; } = 2;
 
     public List<CordiPeepBlacklistEntry> Blacklist { get; set; } = new();

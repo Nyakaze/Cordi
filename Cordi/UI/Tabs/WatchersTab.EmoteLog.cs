@@ -82,6 +82,20 @@ public partial class WatchersTab
                     1f,
                     () => config.EmoteBackHoldSeconds,
                     value => config.EmoteBackHoldSeconds = (int)value);
+
+                theme.SpacerY(0.4f);
+
+                DrawToggleRow(
+                    "emote-unhide",
+                    FontAwesomeIcon.UserSecret,
+                    plugin.Visibility.IsPluginAvailable ? theme.Accent : theme.MutedText,
+                    "Unhide the target while emoting back",
+                    plugin.Visibility.IsPluginAvailable
+                        ? "Shows a player the Visibility plugin is hiding, so you can see your emote land"
+                        : "The Visibility plugin is not installed, so this does nothing",
+                    innerWidth,
+                    () => config.UnhideFromVisibility,
+                    value => config.UnhideFromVisibility = value);
             },
             label: "Behavior");
     }
