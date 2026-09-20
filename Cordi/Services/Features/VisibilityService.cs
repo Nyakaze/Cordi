@@ -5,6 +5,7 @@ using System.Reflection;
 using Cordi.Core;
 using Dalamud.Game.ClientState.Objects.SubKinds;
 using Dalamud.Plugin.Ipc;
+using FFXIVClientStructs.FFXIV.Client.Game.Object;
 
 namespace Cordi.Services.Features;
 
@@ -15,9 +16,12 @@ public sealed class VisibilityService : IDisposable
     private const string LeaseReason = "Cordi";
     private const int MinimumApiVersion = 1;
 
+    private const VisibilityFlags HiddenFlags = VisibilityFlags.Model | VisibilityFlags.Nameplate;
+    private const int MinHoldSeconds = 1;
+    private const int MaxHoldSeconds = 30;
+
     private static readonly TimeSpan AvailabilityInterval = TimeSpan.FromSeconds(10);
-    private static readonly TimeSpan ExpiryInterval = TimeSpan.FromSeconds(1);
-    private static readonly TimeSpan MinimumHold = TimeSpan.FromSeconds(5);
+    private static readonly TimeSpan MinimumHold = TimeSpan.FromSeconds(MinHoldSeconds);
 
     private readonly record struct Lease(string Name, uint WorldId, uint EntityId, DateTime Expires);
 
@@ -35,7 +39,6 @@ public sealed class VisibilityService : IDisposable
     private bool _interopFailed;
 
     private DateTime _nextAvailabilityCheck = DateTime.MinValue;
-    private DateTime _nextExpiry = DateTime.MinValue;
     private bool _available;
     private bool _disposed;
 
@@ -56,7 +59,8 @@ public sealed class VisibilityService : IDisposable
 
     public int ActiveLeases => _leases.Count;
 
-    public void Unhide(IPlayerCharacter? player) => Unhide(player, MinimumHold);
+    public void Unhide(IPlayerCharacter? player) =>
+        Unhide(player, TimeSpan.FromSeconds(Math.Clamp(_config.CordiPeep.UnhideHoldSeconds, MinHoldSeconds, MaxHoldSeconds)));
 
     public void Unhide(IPlayerCharacter? player, TimeSpan hold)
     {
@@ -85,6 +89,7 @@ public sealed class VisibilityService : IDisposable
         }
 
         if (!EnsureInterop() && _unhidden.ContainsKey(id)) return;
+        if (!IsHidden(player)) return;
 
         if (!Try(() =>
             {
@@ -134,9 +139,9 @@ public sealed class VisibilityService : IDisposable
             return;
         }
 
+        if (_leases.IsEmpty) return;
+
         var now = DateTime.UtcNow;
-        if (now < _nextExpiry) return;
-        _nextExpiry = now + ExpiryInterval;
 
         if (!ResolveAvailability())
         {
@@ -250,6 +255,16 @@ public sealed class VisibilityService : IDisposable
         }
 
         return false;
+    }
+
+    private unsafe bool IsHidden(IPlayerCharacter player)
+    {
+        if (!player.IsValid()) return false;
+
+        var address = player.Address;
+        if (address == IntPtr.Zero) return false;
+
+        return ((GameObject*)address)->RenderFlags.HasFlag(HiddenFlags);
     }
 
     private bool EnsureInterop()

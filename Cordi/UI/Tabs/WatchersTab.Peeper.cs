@@ -130,14 +130,29 @@ public partial class WatchersTab
                     innerWidth,
                     () => config.UnhideFromVisibility,
                     value => config.UnhideFromVisibility = value);
+
+                theme.SpacerY(0.4f);
+
+                DrawSliderRow(
+                    "peep-unhide-hold",
+                    FontAwesomeIcon.Stopwatch,
+                    theme.Accent,
+                    "Stay visible for",
+                    "Seconds a peeper stays unhidden after they stop targeting you",
+                    innerWidth,
+                    1f,
+                    30f,
+                    1f,
+                    () => config.UnhideHoldSeconds,
+                    value => config.UnhideHoldSeconds = (int)value);
             },
             label: "Visibility plugin",
             drawTrailing: anchor => theme.HelpPill(
                 "peep-visibility-help",
                 anchor,
                 "Cordi asks the Visibility plugin to show a player while it needs them on screen,\n" +
-                "then takes that entry back out of your whitelist and hides them again\n" +
-                "a few seconds later.\n" +
+                "then takes that entry back out of your whitelist and hides them again.\n" +
+                "Only players who are hidden at that moment are touched at all.\n" +
                 "Players you voided by hand are left alone.\n" +
                 "With the Visibility plugin missing or switched off, Cordi skips all of this."));
     }
