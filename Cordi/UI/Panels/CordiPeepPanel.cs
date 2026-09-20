@@ -46,15 +46,15 @@ public class CordiPeepPanel
         _hoveredTargetId = null;
         _hoveredTargetName = null;
 
-        var cordiPeep = _peeper;
+        var snapshot = _peeper.Snapshot;
 
-        if (cordiPeep.ActivePeepers.IsEmpty && cordiPeep.History.Count == 0)
+        if (snapshot.IsEmpty)
         {
             _theme.ShadowedText("No detected peeps.", textShadow, true);
         }
         else
         {
-            foreach (var peeper in cordiPeep.ActivePeepers.Values)
+            foreach (var peeper in snapshot.Active)
             {
                 string label = $"{peeper.Name}";
                 string time = peeper.LastSeen.ToString("HH:mm");
@@ -62,15 +62,12 @@ public class CordiPeepPanel
                 DrawEntry(peeper, label, time, true, textShadow);
             }
 
-            lock (cordiPeep.History)
+            foreach (var peeper in snapshot.History)
             {
-                foreach (var peeper in cordiPeep.History)
-                {
-                    string label = $"{peeper.Name}";
-                    string time = peeper.EndTime.HasValue ? peeper.EndTime.Value.ToString("HH:mm") : "Unknown";
+                string label = $"{peeper.Name}";
+                string time = peeper.EndTime.HasValue ? peeper.EndTime.Value.ToString("HH:mm") : "Unknown";
 
-                    DrawEntry(peeper, label, time, false, textShadow);
-                }
+                DrawEntry(peeper, label, time, false, textShadow);
             }
         }
 
@@ -116,7 +113,7 @@ public class CordiPeepPanel
         }
     }
 
-    private void DrawEntry(CordiPeepService.PeeperState peeper, string label, string rightText, bool isActive, bool textShadow)
+    private void DrawEntry(PeeperState peeper, string label, string rightText, bool isActive, bool textShadow)
     {
         var avail = ImGui.GetContentRegionAvail().X;
         var style = ImGui.GetStyle();
@@ -360,9 +357,10 @@ public class CordiPeepPanel
         }
     }
 
-    private Dalamud.Game.ClientState.Objects.Types.IGameObject? FindPeeper(CordiPeepService.PeeperState peeper)
+    private Dalamud.Game.ClientState.Objects.Types.IGameObject? FindPeeper(PeeperState peeper)
     {
-        var obj = Service.ObjectTable.SearchById(peeper.GameObjectId);
+        var obj = peeper.Live;
+        obj ??= Service.ObjectTable.SearchById(peeper.GameObjectId);
         obj ??= Service.ObjectTable.FindPlayerByName(peeper.Name, peeper.World);
         return obj;
     }

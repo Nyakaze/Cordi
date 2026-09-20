@@ -91,6 +91,7 @@ internal static class ServiceRegistration
         services.AddSingleton(sp => new Lazy<ChatboxService>(sp.GetRequiredService<ChatboxService>));
         services.AddSingleton(sp => new Lazy<ChatboxWindow>(sp.GetRequiredService<ChatboxWindow>));
         services.AddSingleton(sp => new Lazy<ConversationWindowManager>(sp.GetRequiredService<ConversationWindowManager>));
+        services.AddSingleton(sp => new Lazy<CordiPeepWindow>(sp.GetRequiredService<CordiPeepWindow>));
 
         services.AddSingleton<ConfigWindow>();
         services.AddSingleton<DiscordWindow>();
