@@ -1,94 +1,53 @@
-using Cordi;
 using Cordi.Domain;
-using Cordi.Services.Discord;
+using Cordi.Services.Activity;
 using Dalamud.Game.ClientState.Objects.SubKinds;
-using Dalamud.Game.ClientState.Objects.Types;
 using Dalamud.Hooking;
-using Dalamud.Plugin.Services;
-using Lumina.Excel.Sheets;
 using System;
-using System.Collections.Concurrent;
 using System.Collections.Generic;
-using System.Globalization;
 using System.Linq;
 using System.Threading.Tasks;
-using Cordi.Core;
-using Cordi.Configuration;
 using Cordi.Services.Features;
+using Cordi.UI.Windows;
 
 namespace Cordi.Services;
 
-public class EmoteLogEntry
-{
-    public DateTime Timestamp { get; set; }
-    public string User { get; set; } = string.Empty;
-    public string World { get; set; } = string.Empty;
-    public string Emote { get; set; } = string.Empty;
-    public string Command { get; set; } = string.Empty;
-    public int Count { get; set; } = 1;
-    public ulong DiscordMessageId { get; set; }
-    public ulong GameObjectId { get; set; }
-}
-
 public class EmoteLogService : IDisposable
 {
-    private readonly CordiPlugin _plugin;
-    private readonly IPluginLog _logger;
+    private const string LogSource = "EmoteLog";
+
+    private readonly Configuration.Configuration _config;
+    private readonly CordiLogService _log;
     private readonly EmoteBackAction _emoteBackAction;
     private readonly EmoteDiscordNotifier _discordNotifier;
-    public EmoteDiscordNotifier DiscordNotifier => _discordNotifier;
+    private readonly Lazy<EmoteLogWindow> _window;
 
-    private readonly List<EmoteLogEntry> _logs = new();
-    public IReadOnlyList<EmoteLogEntry> Logs => _logs;
+    private readonly List<EmoteEvent> _logs = new();
 
     private delegate void OnEmoteFuncDelegate(ulong unk, ulong instigatorAddr, ushort emoteId, ulong targetId, ulong unk2);
     private readonly Hook<OnEmoteFuncDelegate> _hookEmote;
 
     public event Action<ulong, ushort, ulong>? EmoteObserved;
 
-
-    public class DiscordEmoteState
+    public EmoteLogService(
+        Configuration.Configuration config,
+        CordiLogService log,
+        EmoteBackAction emoteBackAction,
+        EmoteDiscordNotifier discordNotifier,
+        Lazy<EmoteLogWindow> window)
     {
-        public ulong MessageId;
-        public string User;
-        public string World;
-        public string EmoteName;
-        public string Command;
-        public int Count;
-        public DateTime LastUpdate;
-        public DateTime FirstSeen;
-        public ulong GameObjectId;
-        public bool EmotedBack;
-    }
-
-    private readonly Cordi.Core.Caching.Cache<ulong, DiscordEmoteState> _messageIdCache;
-    public Cordi.Core.Caching.Cache<ulong, DiscordEmoteState> MessageIdCache => _messageIdCache;
-
-    private readonly ConcurrentDictionary<string, DiscordEmoteState> _activeDiscordEmotes = new();
-    public ConcurrentDictionary<string, DiscordEmoteState> ActiveDiscordEmotes => _activeDiscordEmotes;
-    private readonly TimeSpan _spamThreshold = TimeSpan.FromSeconds(60);
-
-    private CordiLogService Log => _plugin.LogService;
-    private const string LogSource = "EmoteLog";
-
-    public EmoteLogService(CordiPlugin plugin)
-    {
-        _plugin = plugin;
-        _logger = Service.Log;
-        _emoteBackAction = new EmoteBackAction(plugin);
-        _messageIdCache = new Cordi.Core.Caching.Cache<ulong, DiscordEmoteState>(
-            "emote.messages", plugin.CacheRegistry,
-            maxSize: 100, ttl: TimeSpan.FromHours(2));
-        _discordNotifier = new EmoteDiscordNotifier(plugin, _messageIdCache, _activeDiscordEmotes, _spamThreshold, _emoteBackAction);
-
+        _config = config;
+        _log = log;
+        _emoteBackAction = emoteBackAction;
+        _discordNotifier = discordNotifier;
+        _window = window;
 
         _hookEmote = Service.GameInteropProvider.HookFromSignature<OnEmoteFuncDelegate>("E8 ?? ?? ?? ?? 48 8D 8B ?? ?? ?? ?? 4C 89 74 24", OnEmoteDetour);
         _hookEmote.Enable();
     }
 
-    public void Initialize()
-    {
-    }
+    public EmoteDiscordNotifier DiscordNotifier => _discordNotifier;
+
+    public IReadOnlyList<EmoteEvent> Logs => _logs;
 
     private void OnEmoteDetour(ulong unk, ulong instigatorAddr, ushort emoteId, ulong targetId, ulong unk2)
     {
@@ -98,7 +57,7 @@ public class EmoteLogService : IDisposable
         }
         catch (Exception ex)
         {
-            Log.Error(LogSource, $"Emote observer error: {ex.Message}", ex);
+            _log.Error(LogSource, "Emote observer error", ex);
         }
 
         try
@@ -107,8 +66,7 @@ public class EmoteLogService : IDisposable
         }
         catch (Exception ex)
         {
-            _logger.Error(ex, "Error in Emote Detour");
-            Log.Error(LogSource, $"Hook error: {ex.Message}");
+            _log.Error(LogSource, "Emote hook error", ex);
         }
 
         _hookEmote.Original(unk, instigatorAddr, emoteId, targetId, unk2);
@@ -116,133 +74,92 @@ public class EmoteLogService : IDisposable
 
     private void HandleEmote(ulong instigatorAddr, ushort emoteId, ulong targetId)
     {
-        if (!_plugin.Config.EmoteLog.Enabled) return;
+        if (!_config.EmoteLog.Enabled) return;
+        if (!_window.Value.IsOpen && !_config.EmoteLog.DetectWhenClosed) return;
 
-        if (_plugin.EmoteLogWindow == null) return;
-
-        if (!_plugin.EmoteLogWindow.IsOpen && !_plugin.Config.EmoteLog.DetectWhenClosed) return;
-
-        var localPlayer = Service.ObjectTable[0];
+        var localPlayer = Service.ObjectTable.LocalPlayer;
         if (localPlayer == null) return;
 
         if (targetId != localPlayer.GameObjectId) return;
 
-        if (Service.ObjectTable.FirstOrDefault(x => (ulong)x.Address == instigatorAddr) is not IPlayerCharacter player)
-            return;
+        if (Service.ObjectTable.CreateObjectReference((nint)instigatorAddr) is not IPlayerCharacter player) return;
 
-        if (player.GameObjectId == localPlayer.GameObjectId && !_plugin.Config.EmoteLog.IncludeSelf) return;
+        if (player.GameObjectId == localPlayer.GameObjectId && !_config.EmoteLog.IncludeSelf) return;
 
         LogEmote(player, emoteId);
     }
 
     private void LogEmote(IPlayerCharacter player, ushort emoteId)
     {
-        string emoteName = $"Emote #{emoteId}";
-        string emoteCommand = "";
-
-        try
-        {
-            var emoteSheet = Service.DataManager.GetExcelSheet<Emote>();
-            if (emoteSheet.TryGetRow(emoteId, out var emoteRow))
-            {
-                var name = emoteRow.Name.ToString();
-                if (!string.IsNullOrWhiteSpace(name))
-                {
-                    emoteName = CultureInfo.CurrentCulture.TextInfo.ToTitleCase(name);
-                }
-
-                if (emoteRow.TextCommand.IsValid)
-                {
-                    var rawCmd = emoteRow.TextCommand.Value.Command.ToString();
-                    if (!string.IsNullOrEmpty(rawCmd))
-                    {
-                        emoteCommand = rawCmd.StartsWith("/") ? rawCmd : "/" + rawCmd;
-
-                        if (string.IsNullOrWhiteSpace(name))
-                        {
-                            emoteCommand = emoteCommand.TrimStart('/');
-                            emoteName = CultureInfo.CurrentCulture.TextInfo.ToTitleCase(emoteCommand);
-                            emoteCommand = "/" + emoteCommand;
-                        }
-                    }
-                }
-            }
-        }
-        catch (Exception ex)
-        {
-            _logger.Debug(ex, $"Failed to resolve emote name/command for ID {emoteId}");
-        }
+        var emoteName = EmoteCatalog.NameFor(emoteId);
+        var emoteCommand = EmoteCatalog.CommandFor(emoteId);
 
         lock (_logs)
         {
             var playerName = player.Name.ToString();
             var playerWorld = player.HomeWorld.Value.Name.ToString();
 
-            if (_plugin.Config.EmoteLog.CollapseDuplicates)
+            if (_config.EmoteLog.CollapseDuplicates)
             {
-                var existing = _logs.LastOrDefault(x => x.User == playerName && x.World == playerWorld && x.Emote == emoteName);
-                if (existing != null)
+                var index = FindLast(playerName, playerWorld, emoteName);
+
+                if (index >= 0)
                 {
+                    var existing = _logs[index];
                     existing.Count++;
-                    existing.Timestamp = DateTime.Now;
+                    existing.LastUpdate = DateTime.Now;
                     existing.Command = emoteCommand;
 
-                    _logs.Remove(existing);
-                    _logs.Add(existing);
+                    if (index != _logs.Count - 1)
+                    {
+                        _logs.RemoveAt(index);
+                        _logs.Add(existing);
+                    }
 
-                    _logger.Info($"[EmoteLog] Collapsed: {existing.User} used {existing.Emote} [{existing.Count}]");
-                    Log.Debug(LogSource, $"Collapsed: {existing.User} used {existing.Emote} x{existing.Count}");
+                    _log.Debug(LogSource, $"Collapsed: {existing.User} used {existing.EmoteName} x{existing.Count}");
 
-                    _ = ProcessDiscordEmote(Player.FromNameWorld(existing.User, existing.World, existing.GameObjectId), emoteName, emoteCommand, existing.Count);
+                    _ = _discordNotifier.ProcessDiscordEmote(existing.Player, emoteName, emoteCommand);
                     return;
                 }
             }
 
-            var entry = new EmoteLogEntry
-            {
-                Timestamp = DateTime.Now,
-                User = playerName,
-                World = playerWorld,
-                Emote = emoteName,
-                Command = emoteCommand,
-                Count = 1,
-                DiscordMessageId = 0,
-                GameObjectId = player.GameObjectId
-            };
+            var interned = Player.FromGameObject(player);
+            var entry = new EmoteEvent(interned, emoteName, emoteCommand);
 
             _logs.Add(entry);
-            if (_logs.Count > 200) _logs.RemoveAt(0);
 
-            _logger.Info($"[EmoteLog] Logged: {entry.User} used {entry.Emote} (Cmd: {entry.Command})");
-            Log.Info(LogSource, $"{entry.User}@{entry.World} used {entry.Emote} ({entry.Command})");
-            _plugin.Config.Stats.IncrementEmotesTracked();
-            _plugin.Config.Stats.RecordEmote(playerName, playerWorld);
+            var max = Math.Max(1, _config.EmoteLog.MaxEntries);
+            if (_logs.Count > max) _logs.RemoveRange(0, _logs.Count - max);
 
-            var blacklistEntry = _plugin.Config.EmoteLog.Blacklist.FirstOrDefault(x => x.Name == playerName && x.World == playerWorld);
+            _log.Info(LogSource, $"{entry.User}@{entry.World} used {entry.EmoteName} ({entry.Command})");
+            _config.Stats.IncrementEmotesTracked();
+            _config.Stats.RecordEmote(playerName, playerWorld);
+
+            var blacklistEntry = _config.EmoteLog.Blacklist.FirstOrDefault(x => x.Name == playerName && x.World == playerWorld);
             if (blacklistEntry?.DisableDiscord == true) return;
 
-            _ = ProcessDiscordEmote(Player.FromGameObject(player), emoteName, emoteCommand, 1);
+            _ = _discordNotifier.ProcessDiscordEmote(interned, emoteName, emoteCommand);
         }
+    }
+
+    private int FindLast(string user, string world, string emoteName)
+    {
+        for (var i = _logs.Count - 1; i >= 0; i--)
+        {
+            var entry = _logs[i];
+            if (entry.User == user && entry.World == world && entry.EmoteName == emoteName) return i;
+        }
+
+        return -1;
     }
 
     public void SimulateEmote(string name, string world, string emoteName, string command)
     {
-        ulong fakeId = (ulong)name.GetHashCode();
-        _ = ProcessDiscordEmote(Player.FromNameWorld(name, world, fakeId), emoteName, command, 1);
+        _ = _discordNotifier.ProcessDiscordEmote(Player.FromNameWorld(name, world), emoteName, command);
     }
 
-    private async Task ProcessDiscordEmote(Player player, string emoteName, string command, int uiCount)
-    {
-        await _discordNotifier.ProcessDiscordEmote(player, emoteName, command, uiCount);
-    }
-
-    public async Task PerformEmoteBack(string targetName, string targetWorld, string command, ulong targetId = 0, bool keepTarget = false, bool keepRotation = false)
-    {
-        await _emoteBackAction.PerformAsync(targetName, targetWorld, command, targetId, keepTarget, keepRotation);
-    }
-
-
-
+    public Task PerformEmoteBack(string targetName, string targetWorld, string command, ulong targetId = 0, bool keepTarget = false, bool keepRotation = false)
+        => _emoteBackAction.PerformAsync(targetName, targetWorld, command, targetId, keepTarget, keepRotation);
 
     public void Dispose()
     {

@@ -52,6 +52,21 @@ public partial class WatchersTab
                     Flag("emote-include-self", "Include yourself", () => config.IncludeSelf, v => config.IncludeSelf = v),
                     Flag("emote-collapse", "Collapse duplicates", () => config.CollapseDuplicates, v => config.CollapseDuplicates = v),
                 }, innerWidth);
+
+                theme.SpacerY(0.4f);
+
+                DrawSliderRow(
+                    "emote-max-entries",
+                    FontAwesomeIcon.ListOl,
+                    theme.Accent,
+                    "Entries kept",
+                    "How many logged emotes the overlay remembers",
+                    innerWidth,
+                    50f,
+                    1000f,
+                    50f,
+                    () => config.MaxEntries,
+                    value => config.MaxEntries = (int)value);
             },
             label: "Behavior");
     }

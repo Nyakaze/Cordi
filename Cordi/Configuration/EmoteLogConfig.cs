@@ -13,6 +13,7 @@ public class EmoteLogConfig : IWindowChromeConfig
     public bool Enabled { get; set; } = true;
     public bool IncludeSelf { get; set; } = true;
     public bool CollapseDuplicates { get; set; } = false;
+    public int MaxEntries { get; set; } = 200;
     public bool ShowReplyButton { get; set; } = true;
     public bool DiscordEnabled { get; set; } = true;
     public bool DetectWhenClosed { get; set; } = true;

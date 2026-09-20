@@ -1166,7 +1166,7 @@ public class DebugTab : ConfigTabBase
                     using (var tabItem2 = ImRaii.TabItem("Active Discord Emotes"))
                     if (tabItem2)
                     {
-                        var active = plugin.EmoteLog.ActiveDiscordEmotes;
+                        var active = plugin.EmoteLog.DiscordNotifier.Active;
                         ImGui.TextUnformatted("Active Tracking Count: "); ImGui.SameLine(0, 0); ImGui.TextUnformatted(active.Count.ToString());
 
                         using (var table1 = ImRaii.Table("##dbgActiveEmotes", 5, ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.SizingStretchProp))
@@ -1179,19 +1179,20 @@ public class DebugTab : ConfigTabBase
                             ImGui.TableSetupColumn("Msg ID");
                             ImGui.TableHeadersRow();
 
-                            foreach (var kvp in active)
+                            foreach (var activeKey in active.Keys.ToList())
                             {
+                                if (!active.TryGet(activeKey, out var entry)) continue;
                                 ImGui.TableNextRow();
                                 ImGui.TableNextColumn();
-                                ImGui.Text(kvp.Key);
+                                ImGui.Text(activeKey);
                                 ImGui.TableNextColumn();
-                                ImGui.TextUnformatted(kvp.Value.User); ImGui.SameLine(0, 0); ImGui.TextUnformatted("@"); ImGui.SameLine(0, 0); ImGui.TextUnformatted(kvp.Value.World);
+                                ImGui.TextUnformatted(entry.User); ImGui.SameLine(0, 0); ImGui.TextUnformatted("@"); ImGui.SameLine(0, 0); ImGui.TextUnformatted(entry.World);
                                 ImGui.TableNextColumn();
-                                ImGui.Text(kvp.Value.EmoteName);
+                                ImGui.Text(entry.EmoteName);
                                 ImGui.TableNextColumn();
-                                ImGui.Text(kvp.Value.Count.ToString());
+                                ImGui.Text(entry.Count.ToString());
                                 ImGui.TableNextColumn();
-                                ImGui.Text(kvp.Value.MessageId.ToString());
+                                ImGui.Text(entry.MessageId.ToString());
                             }
                         }
                     }
@@ -1199,7 +1200,7 @@ public class DebugTab : ConfigTabBase
                     using (var tabItem3 = ImRaii.TabItem("Message ID Cache"))
                     if (tabItem3)
                     {
-                        var cache = plugin.EmoteLog.MessageIdCache;
+                        var cache = plugin.EmoteLog.DiscordNotifier.MessageIdCache;
                         ImGui.TextUnformatted("Cache Size: "); ImGui.SameLine(0, 0); ImGui.TextUnformatted(cache.Count.ToString());
 
                         using (var table2 = ImRaii.Table("##dbgMsgCache", 4, ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.SizingStretchProp))

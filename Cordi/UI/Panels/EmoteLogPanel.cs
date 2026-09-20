@@ -36,9 +36,9 @@ public class EmoteLogPanel
             for (int i = logs.Count - 1; i >= 0; i--)
             {
                 var entry = logs[i];
-                var time = entry.Timestamp.ToString("HH:mm");
+                var time = entry.LastUpdate.ToString("HH:mm");
 
-                var text = $"[{time}] {entry.User} used {entry.Emote}";
+                var text = $"[{time}] {entry.User} used {entry.EmoteName}";
                 if (entry.Count > 1)
                 {
                     text += $" [{entry.Count}]";
@@ -62,7 +62,7 @@ public class EmoteLogPanel
                             var cmd = entry.Command;
                             if (string.IsNullOrEmpty(cmd))
                             {
-                                cmd = entry.Emote;
+                                cmd = entry.EmoteName;
                                 if (!cmd.StartsWith("/")) cmd = "/" + cmd;
                             }
 
@@ -79,7 +79,7 @@ public class EmoteLogPanel
 
                     if (ImGui.IsItemHovered())
                     {
-                        ImGui.SetTooltip($"Emote Back ({(!string.IsNullOrEmpty(entry.Command) ? entry.Command : entry.Emote)})\n[Shift] Keep target\n[Alt] Keep rotation");
+                        ImGui.SetTooltip($"Emote Back ({(!string.IsNullOrEmpty(entry.Command) ? entry.Command : entry.EmoteName)})\n[Shift] Keep target\n[Alt] Keep rotation");
                     }
                 }
 

@@ -77,6 +77,8 @@ internal static class ServiceRegistration
         services.AddSingleton<RememberMeService>();
         services.AddSingleton<ActivityManager>();
         services.AddSingleton(sp => ActivatorUtilities.CreateInstance<EmoteTitleService>(sp, configDirectory));
+        services.AddSingleton<EmoteBackAction>();
+        services.AddSingleton<EmoteDiscordNotifier>();
         services.AddSingleton<EmoteLogService>();
         services.AddSingleton<CordiPeepService>();
         services.AddSingleton<PartyDiscordNotifier>();
@@ -92,6 +94,7 @@ internal static class ServiceRegistration
         services.AddSingleton(sp => new Lazy<ChatboxWindow>(sp.GetRequiredService<ChatboxWindow>));
         services.AddSingleton(sp => new Lazy<ConversationWindowManager>(sp.GetRequiredService<ConversationWindowManager>));
         services.AddSingleton(sp => new Lazy<CordiPeepWindow>(sp.GetRequiredService<CordiPeepWindow>));
+        services.AddSingleton(sp => new Lazy<EmoteLogWindow>(sp.GetRequiredService<EmoteLogWindow>));
 
         services.AddSingleton<ConfigWindow>();
         services.AddSingleton<DiscordWindow>();

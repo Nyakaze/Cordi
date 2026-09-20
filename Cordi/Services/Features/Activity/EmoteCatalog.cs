@@ -10,6 +10,7 @@ public readonly record struct EmoteCatalogEntry(ushort Id, string Name, string C
 public static class EmoteCatalog
 {
     private static readonly Dictionary<ushort, string> Names = new();
+    private static readonly Dictionary<ushort, string> Commands = new();
 
     private static List<EmoteCatalogEntry>? _all;
 
@@ -19,31 +20,54 @@ public static class EmoteCatalog
     {
         if (Names.TryGetValue(id, out var cached)) return cached;
 
-        var resolved = Resolve(id);
-        Names[id] = resolved;
+        Resolve(id);
 
-        return resolved;
+        return Names[id];
     }
 
-    private static string Resolve(ushort id)
+    public static string CommandFor(ushort id)
     {
+        if (Commands.TryGetValue(id, out var cached)) return cached;
+
+        Resolve(id);
+
+        return Commands[id];
+    }
+
+    private static void Resolve(ushort id)
+    {
+        var name = string.Empty;
+        var command = string.Empty;
+
         try
         {
             var sheet = Service.DataManager.GetExcelSheet<Emote>();
 
             if (sheet.TryGetRow(id, out var row))
             {
-                var name = row.Name.ToString();
+                name = row.Name.ToString();
 
-                if (!string.IsNullOrWhiteSpace(name))
-                    return CultureInfo.CurrentCulture.TextInfo.ToTitleCase(name);
+                if (row.TextCommand.IsValid)
+                {
+                    var raw = row.TextCommand.Value.Command.ToString();
+
+                    if (!string.IsNullOrEmpty(raw))
+                        command = raw.StartsWith('/') ? raw : "/" + raw;
+                }
             }
         }
         catch (Exception)
         {
         }
 
-        return $"Emote #{id}";
+        if (string.IsNullOrWhiteSpace(name) && command.Length > 1)
+            name = command.TrimStart('/');
+
+        Names[id] = string.IsNullOrWhiteSpace(name)
+            ? $"Emote #{id}"
+            : CultureInfo.CurrentCulture.TextInfo.ToTitleCase(name);
+
+        Commands[id] = command;
     }
 
     private static List<EmoteCatalogEntry> Build()
@@ -75,6 +99,7 @@ public static class EmoteCatalog
                 var display = CultureInfo.CurrentCulture.TextInfo.ToTitleCase(name);
 
                 Names[id] = display;
+                Commands[id] = command;
                 entries.Add(new EmoteCatalogEntry(id, display, command));
             }
         }

@@ -1,22 +1,18 @@
-using System;
 using System.Threading.Tasks;
-using Cordi.Core;
+using Cordi.Packets.Handler.Chat;
 using Dalamud.Game.ClientState.Objects.SubKinds;
 using Dalamud.Game.ClientState.Objects.Types;
-using Dalamud.Plugin.Services;
 using Cordi.Extensions;
 
 namespace Cordi.Services.Features;
 
 public class EmoteBackAction
 {
-    private readonly CordiPlugin _plugin;
-    private readonly IPluginLog _log;
+    private readonly ChatMessenger _chat;
 
-    public EmoteBackAction(CordiPlugin plugin)
+    public EmoteBackAction(ChatMessenger chat)
     {
-        _plugin = plugin;
-        _log = Service.Log;
+        _chat = chat;
     }
 
     public async Task PerformAsync(string targetName, string targetWorld, string command, ulong targetId = 0, bool keepTarget = false, bool keepRotation = false)
@@ -24,7 +20,7 @@ public class EmoteBackAction
         float savedRotation = 0;
         bool targetFound = false;
 
-        await CordiPlugin.Framework.RunOnFrameworkThread(() =>
+        await Service.Framework.RunOnFrameworkThread(() =>
         {
             var localPlayer = Service.ObjectTable.LocalPlayer;
             if (localPlayer == null) return;
@@ -46,7 +42,7 @@ public class EmoteBackAction
                     VisibilityBridge.UnhidePlayer(pc, allowVoided: true, isEmote: true);
                 }
                 Service.TargetManager.Target = target;
-                _plugin._chat.SendMessage(command);
+                _chat.SendMessage(command);
                 targetFound = true;
             }
         });
@@ -55,7 +51,7 @@ public class EmoteBackAction
 
         await Task.Delay(8000);
 
-        await CordiPlugin.Framework.RunOnFrameworkThread(() =>
+        await Service.Framework.RunOnFrameworkThread(() =>
         {
             var localPlayer = Service.ObjectTable.LocalPlayer;
             if (localPlayer == null) return;

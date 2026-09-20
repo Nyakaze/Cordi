@@ -226,8 +226,6 @@ public class CordiPlugin : IDalamudPlugin
             LogService.Debug("Tomestone", "Initialized");
             await this.Discord.Start();
             LogService.Info("Discord", "Bot started");
-            this.EmoteLog.Initialize();
-            LogService.Debug("EmoteLog", "Initialized");
 
 
         });
