@@ -631,7 +631,7 @@ public partial class ActivityTab
             return;
         }
 
-        var result = run(new EmoteTitleImporter(plugin, service.Counters));
+        var result = run(new EmoteTitleImporter(plugin.Config, plugin.LogService, service.Counters));
 
         emoteImportMessage = result.Message;
     }

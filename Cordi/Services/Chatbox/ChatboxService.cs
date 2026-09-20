@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
@@ -15,17 +15,54 @@ namespace Cordi.Services.Chatbox;
 
 public sealed partial class ChatboxService : IDisposable
 {
-    private readonly CordiPlugin _plugin;
+    private readonly Configuration.Configuration _config;
+    private readonly CordiLogService _log;
+    private readonly Discord.Connection.DiscordConnection _connection;
+    private readonly Discord.Projections.DiscordChannelProjection _discordChannels;
+    private readonly Discord.AdvertisementFilterService _adFilter;
+    private readonly Emojis.EmojiTranslator _emoji;
+    private readonly Features.LodestoneService _lodestone;
+    private readonly AudioService _audio;
+    private readonly NotificationManager _notifications;
+    private readonly Packets.Handler.Chat.ChatMessenger _chat;
+    private readonly LocalPlayerProvider _localPlayer;
+    private readonly Lazy<UI.Windows.ChatboxWindow> _window;
+    private readonly Lazy<UI.Windows.ConversationWindowManager> _conversationWindows;
     private readonly Dictionary<string, ChatboxChannelState> _channels = new(StringComparer.Ordinal);
     private readonly ChatboxContentParser _parser;
     private readonly ReaderWriterLockSlim _channelLock = new(LockRecursionPolicy.SupportsRecursion);
     private long _sequence;
     private bool _disposed;
 
-    public ChatboxService(CordiPlugin plugin)
+    public ChatboxService(
+        Configuration.Configuration config,
+        CordiLogService log,
+        Discord.Connection.DiscordConnection connection,
+        Discord.Projections.DiscordChannelProjection discordChannels,
+        Discord.AdvertisementFilterService adFilter,
+        Emojis.EmojiTranslator emoji,
+        Features.LodestoneService lodestone,
+        AudioService audio,
+        NotificationManager notifications,
+        Packets.Handler.Chat.ChatMessenger chat,
+        LocalPlayerProvider localPlayer,
+        Lazy<UI.Windows.ChatboxWindow> window,
+        Lazy<UI.Windows.ConversationWindowManager> conversationWindows)
     {
-        _plugin = plugin;
-        _parser = new ChatboxContentParser(() => plugin.Config.Chatbox);
+        _config = config;
+        _log = log;
+        _connection = connection;
+        _discordChannels = discordChannels;
+        _adFilter = adFilter;
+        _emoji = emoji;
+        _lodestone = lodestone;
+        _audio = audio;
+        _notifications = notifications;
+        _chat = chat;
+        _localPlayer = localPlayer;
+        _window = window;
+        _conversationWindows = conversationWindows;
+        _parser = new ChatboxContentParser(() => config.Chatbox);
 
         var configDirectory = CordiPlugin.PluginInterface.ConfigDirectory.FullName;
         ChatboxImageCache.RemoveLegacyDirectory(configDirectory);
@@ -34,29 +71,29 @@ public sealed partial class ChatboxService : IDisposable
         Store = new ChatboxMessageStore(Database);
         ImageCache = new ChatboxImageCache(
             Database,
-            () => plugin.Config.Chatbox.ImageCacheMaxEntries,
-            () => plugin.Config.Chatbox.AnimateGifs,
-            () => plugin.Config.Chatbox.AnimateIdleUnloadSeconds)
+            () => config.Chatbox.ImageCacheMaxEntries,
+            () => config.Chatbox.AnimateGifs,
+            () => config.Chatbox.AnimateIdleUnloadSeconds)
         {
             AttachmentRefresher = RefreshAttachmentAsync
         };
-        EmbedCache = new ChatboxEmbedCache(Database, () => plugin.Config.Chatbox.EmbedCacheDays);
-        Emotes = new ChatboxEmoteLibrary(Database, () => plugin.Config.Chatbox.SeenEmoteLimit);
+        EmbedCache = new ChatboxEmbedCache(Database, () => config.Chatbox.EmbedCacheDays);
+        Emotes = new ChatboxEmoteLibrary(Database, () => config.Chatbox.SeenEmoteLimit);
         _sequence = Store.HighestSeq();
-        Translator = new TranslationService(configDirectory, () => plugin.Config.Translation, plugin.LogService);
-        XivimLogs = new XivimLogImporter(plugin);
+        Translator = new TranslationService(configDirectory, () => config.Translation, log);
+        XivimLogs = new XivimLogImporter(config, log);
 
         RebuildChannels();
         RestoreConversations();
         LoadHiddenEmbeds();
         InitializeSourceHook();
         InitializeContextMenu();
-        ChatboxAutoTranslate.Preload(plugin.LogService);
+        ChatboxAutoTranslate.Preload(log);
     }
 
     private async Task<string?> RefreshAttachmentAsync(string url, CancellationToken cancellationToken)
     {
-        var rest = _plugin.DiscordConnection?.Context?.Rest;
+        var rest = _connection.Context?.Rest;
         if (rest == null) return null;
 
         var refreshed = await rest.RefreshAttachmentUrlsAsync([url], cancellationToken).ConfigureAwait(false);
@@ -109,7 +146,7 @@ public sealed partial class ChatboxService : IDisposable
 
     public ChatboxInputHistory InputHistory { get; } = new();
 
-    private ChatboxConfig Config => _plugin.Config.Chatbox;
+    private ChatboxConfig Config => _config.Chatbox;
 
     public string ActiveChannelId { get; private set; } = string.Empty;
 
@@ -227,7 +264,7 @@ public sealed partial class ChatboxService : IDisposable
             PropagateGlobalRead(active);
         }
 
-        _plugin.Config.Save();
+        _config.Save();
         return divider;
     }
 
@@ -298,7 +335,7 @@ public sealed partial class ChatboxService : IDisposable
         }
 
         return WindowFocused
-               && _plugin.ChatboxWindow?.IsOpen == true
+               && _window.Value?.IsOpen == true
                && string.Equals(ResolveActiveChannelId(), channelId, StringComparison.Ordinal);
     }
 
@@ -331,7 +368,7 @@ public sealed partial class ChatboxService : IDisposable
         foreach (var config in Config.Channels)
             normalized |= NormalizeTellTypes(config);
 
-        if (normalized) _plugin.Config.Save();
+        if (normalized) _config.Save();
 
         _channelLock.EnterWriteLock();
         try

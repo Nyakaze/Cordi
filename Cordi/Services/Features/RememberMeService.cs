@@ -8,14 +8,14 @@ namespace Cordi.Services.Features;
 
 public class RememberMeService : IDisposable
 {
-    private readonly CordiPlugin plugin;
-
-    private CordiLogService Log => plugin.LogService;
+    private readonly Configuration.Configuration _config;
+    private readonly CordiLogService Log;
     private const string LogSource = "RememberMe";
 
-    public RememberMeService(CordiPlugin plugin)
+    public RememberMeService(Configuration.Configuration config, CordiLogService log)
     {
-        this.plugin = plugin;
+        _config = config;
+        Log = log;
     }
 
     private RememberedPlayerEntry? FindInList(List<RememberedPlayerEntry> list, string name, string world)
@@ -27,7 +27,7 @@ public class RememberMeService : IDisposable
 
     public RememberedPlayerEntry? FindPlayer(string name, string world)
     {
-        return FindInList(plugin.Config.RememberMe.RememberedPlayers, name, world);
+        return FindInList(_config.RememberMe.RememberedPlayers, name, world);
     }
 
     public RememberedPlayerEntry? FindPlayerByLodestoneId(string lodestoneId)
@@ -35,7 +35,7 @@ public class RememberMeService : IDisposable
         if (string.IsNullOrWhiteSpace(lodestoneId))
             return null;
 
-        return plugin.Config.RememberMe.RememberedPlayers
+        return _config.RememberMe.RememberedPlayers
         .FirstOrDefault(p => p.LodestoneId.Equals(lodestoneId, StringComparison.OrdinalIgnoreCase));
     }
 
@@ -69,11 +69,11 @@ public class RememberMeService : IDisposable
                 Notes = notes ?? string.Empty,
                 Glamour = glamour
             };
-            plugin.Config.RememberMe.RememberedPlayers.Add(newEntry);
+            _config.RememberMe.RememberedPlayers.Add(newEntry);
             Log.Info(LogSource, $"Remembered new player: {name}@{world}");
         }
 
-        plugin.Config.Save();
+        _config.Save();
     }
 
     public void UpdateNotes(string name, string world, string notes)
@@ -82,7 +82,7 @@ public class RememberMeService : IDisposable
         if (player != null)
         {
             player.Notes = notes;
-            plugin.Config.Save();
+            _config.Save();
         }
     }
 
@@ -92,24 +92,24 @@ public class RememberMeService : IDisposable
         if (player != null)
         {
             player.LastSeen = DateTime.Now;
-            plugin.Config.Save();
+            _config.Save();
         }
     }
 
     public void RemovePlayer(string name, string world)
     {
-        var player = FindInList(plugin.Config.RememberMe.RememberedPlayers, name, world);
+        var player = FindInList(_config.RememberMe.RememberedPlayers, name, world);
         if (player != null)
         {
-            plugin.Config.RememberMe.RememberedPlayers.Remove(player);
+            _config.RememberMe.RememberedPlayers.Remove(player);
             Log.Info(LogSource, $"Removed player: {name}@{world}");
-            plugin.Config.Save();
+            _config.Save();
         }
     }
 
     public List<RememberedPlayerEntry> GetAllPlayers()
     {
-        return plugin.Config.RememberMe.RememberedPlayers.OrderByDescending(p => p.LastSeen).ToList();
+        return _config.RememberMe.RememberedPlayers.OrderByDescending(p => p.LastSeen).ToList();
     }
 
     public List<RememberedPlayerEntry> SearchPlayers(string searchText)
@@ -118,7 +118,7 @@ public class RememberMeService : IDisposable
             return GetAllPlayers();
 
         var search = searchText.ToLower();
-        return plugin.Config.RememberMe.RememberedPlayers
+        return _config.RememberMe.RememberedPlayers
             .Where(p => p.Name.ToLower().Contains(search)
                      || p.World.ToLower().Contains(search)
                      || (p.Notes?.ToLower().Contains(search) ?? false))

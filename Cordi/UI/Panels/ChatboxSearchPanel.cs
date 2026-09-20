@@ -73,7 +73,7 @@ public sealed partial class ChatboxSearchPanel : IDisposable
         _plugin = plugin;
         _theme = theme;
         _id = id;
-        _session = new ChatboxSearchSession(plugin);
+        _session = new ChatboxSearchSession(plugin.Chatbox, plugin.LogService);
     }
 
     public Action<ChatboxMessage>? OnOpenMessage { get; set; }

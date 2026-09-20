@@ -69,7 +69,7 @@ public class CordiPlugin : IDalamudPlugin
 
     public Cordi.Configuration.Configuration Config = null!;
 
-    public ServiceCollection Services = new();
+    private readonly ServiceProvider _provider;
 
     private readonly ChatRouter _router;
     public NotificationManager NotificationManager { get; private set; }
@@ -141,62 +141,62 @@ public class CordiPlugin : IDalamudPlugin
         PluginInterface.Create<Service>();
         InitializeConfig();
 
-        LogService = new CordiLogService();
-        CacheRegistry = new CacheRegistry();
-        Players = new PlayerRegistry(CacheRegistry);
+        _provider = ServiceRegistration.Build(
+            this, Config, windowSystem, PluginInterface, CommandManager, ChatGui, Framework, ClientState);
+
+        LogService = _provider.GetRequiredService<CordiLogService>();
+        CacheRegistry = _provider.GetRequiredService<ICacheRegistry>();
+        Players = _provider.GetRequiredService<PlayerRegistry>();
         Player.Registry = Players;
-        LocalPlayer = new LocalPlayerProvider();
+        LocalPlayer = _provider.GetRequiredService<LocalPlayerProvider>();
 
         PluginInterface.UiBuilder.OpenConfigUi += ToggleConfigUI;
         PluginInterface.UiBuilder.OpenMainUi += ToggleConfigUI;
-        Lodestone = new LodestoneService(this, PluginInterface.ConfigDirectory.FullName);
-        Tomestone = new TomestoneService(this);
-        Webhook = new DiscordWebhookService(this);
-        AdvertisementFilterService = new AdvertisementFilterService(this, Webhook);
-        Discord = new DiscordHandler(this, Webhook, AdvertisementFilterService);
-        Screenshot = new ScreenshotService();
-        SlashCommandService = new DiscordSlashCommandService(this, Screenshot);
-        EmbedFactory = new DiscordEmbedFactory(Lodestone);
+        Lodestone = _provider.GetRequiredService<LodestoneService>();
+        Tomestone = _provider.GetRequiredService<TomestoneService>();
+        Webhook = _provider.GetRequiredService<DiscordWebhookService>();
+        AdvertisementFilterService = _provider.GetRequiredService<AdvertisementFilterService>();
+        Discord = _provider.GetRequiredService<DiscordHandler>();
+        Screenshot = _provider.GetRequiredService<ScreenshotService>();
+        SlashCommandService = _provider.GetRequiredService<DiscordSlashCommandService>();
+        EmbedFactory = _provider.GetRequiredService<DiscordEmbedFactory>();
 
-        NotificationManager = new NotificationManager();
-        Audio = new AudioService(this);
+        NotificationManager = _provider.GetRequiredService<NotificationManager>();
+        Audio = _provider.GetRequiredService<AudioService>();
 
-        EmoteLog = new EmoteLogService(this);
-        CordiPeep = new CordiPeepService(this);
-        HonorificBridge = new HonorificBridge(PluginInterface);
-        PartyService = new PartyService(this, NotificationManager);
-        RememberMe = new RememberMeService(this);
-        ActivityManager = new ActivityManager(this, HonorificBridge);
-        EmoteTitles = new EmoteTitleService(this, PluginInterface.ConfigDirectory.FullName);
+        EmoteLog = _provider.GetRequiredService<EmoteLogService>();
+        CordiPeep = _provider.GetRequiredService<CordiPeepService>();
+        HonorificBridge = _provider.GetRequiredService<HonorificBridge>();
+        PartyService = _provider.GetRequiredService<PartyService>();
+        RememberMe = _provider.GetRequiredService<RememberMeService>();
+        ActivityManager = _provider.GetRequiredService<ActivityManager>();
+        EmoteTitles = _provider.GetRequiredService<EmoteTitleService>();
 
-        DiscordConnection = new DiscordConnection(this);
-        DiscordDispatcher = new DiscordEventPump(this, DiscordConnection);
+        DiscordConnection = _provider.GetRequiredService<DiscordConnection>();
+        DiscordDispatcher = _provider.GetRequiredService<DiscordEventPump>();
         DiscordDispatcher.Bind();
-        PresenceWatcher = new DiscordPresenceWatcher(this, DiscordConnection);
-        Channels = new DiscordChannelProjection(this, DiscordConnection);
+        PresenceWatcher = _provider.GetRequiredService<DiscordPresenceWatcher>();
+        Channels = _provider.GetRequiredService<DiscordChannelProjection>();
         Channels.Bind();
         SlashCommandService.Bind();
 
-        DiscordSendQueue = new DiscordSendQueue(this);
+        DiscordSendQueue = _provider.GetRequiredService<DiscordSendQueue>();
         DiscordSendQueue.Start();
 
-        FrameworkScheduler = new FrameworkScheduler(this);
+        FrameworkScheduler = _provider.GetRequiredService<FrameworkScheduler>();
 
-        Emoji = new EmojiTranslator(
-            new GuildEmoteCache(() => Channels?.Guilds),
-            () => Chatbox?.Emotes,
-            () => Config.Chatbox.UseEmoticonsInGameChat);
+        Emoji = _provider.GetRequiredService<EmojiTranslator>();
 
-        Chatbox = new ChatboxService(this);
+        Chatbox = _provider.GetRequiredService<ChatboxService>();
 
         Cordi.UI.Themes.UiTheme.GlobalAccent = Cordi.UI.Themes.UiTheme.ParseAccent(Config.Appearance.AccentColor);
 
-        configWindow = new ConfigWindow(this);
-        discordWindow = new DiscordWindow(this);
-        CordiPeepWindow = new CordiPeepWindow(this);
-        this.EmoteLogWindow = new EmoteLogWindow(this);
-        CombinedWindow = new CombinedWindow(this);
-        ChatboxWindow = new ChatboxWindow(this);
+        configWindow = _provider.GetRequiredService<ConfigWindow>();
+        discordWindow = _provider.GetRequiredService<DiscordWindow>();
+        CordiPeepWindow = _provider.GetRequiredService<CordiPeepWindow>();
+        this.EmoteLogWindow = _provider.GetRequiredService<EmoteLogWindow>();
+        CombinedWindow = _provider.GetRequiredService<CombinedWindow>();
+        ChatboxWindow = _provider.GetRequiredService<ChatboxWindow>();
 
         windowSystem.AddWindow(discordWindow);
         windowSystem.AddWindow(configWindow);
@@ -205,21 +205,16 @@ public class CordiPlugin : IDalamudPlugin
         windowSystem.AddWindow(CombinedWindow);
         windowSystem.AddWindow(ChatboxWindow);
 
-        ConversationWindows = new ConversationWindowManager(this, windowSystem);
+        ConversationWindows = _provider.GetRequiredService<ConversationWindowManager>();
 
         PluginInterface.UiBuilder.DisableGposeUiHide = true;
         PluginInterface.UiBuilder.DisableCutsceneUiHide = true;
 
         PluginInterface.UiBuilder.Draw += DrawUI;
 
-        _chat = new ChatMessenger(ChatGui, Framework, ClientState, CommandManager)
-        {
-            MinInterval = TimeSpan.FromSeconds(1.2),
-            MaxLength = 450
-        };
+        _chat = _provider.GetRequiredService<ChatMessenger>();
 
-
-        this.commandManager = new CordiCommandManager<CordiPlugin>(this, CommandManager);
+        this.commandManager = _provider.GetRequiredService<CordiCommandManager<CordiPlugin>>();
 
         LogService.Info("Plugin", "Cordi plugin loading");
         Task.Run(async () =>
@@ -248,11 +243,7 @@ public class CordiPlugin : IDalamudPlugin
         Service.ClientState.Login += OnLoginEvent;
         Service.ClientState.Logout += OnLogoutEvent;
 
-        Services.AddSingleton<IChatHandlerFactory, AttributeChatHandlerFactory>();
-        Services.AddSingleton<ChatRouter>();
-        var provider = Services.BuildServiceProvider();
-        _router = provider.GetRequiredService<ChatRouter>();
-
+        _router = _provider.GetRequiredService<ChatRouter>();
 
         UpdateCommandVisibility();
 
@@ -535,32 +526,7 @@ public class CordiPlugin : IDalamudPlugin
     {
         if (!disposing) return;
 
-        // Unregister draw callback FIRST to stop all ImGui rendering immediately
         PluginInterface.UiBuilder.Draw -= DrawUI;
-
-        this.SlashCommandService?.Dispose();
-        this.Discord?.Stop();
-
-        this.commandManager.Dispose();
-        this.CordiPeep?.Dispose();
-        this.Chatbox?.Dispose();
-        this.ChatboxWindow?.Dispose();
-        this.ConversationWindows?.Dispose();
-        this.EmoteTitles?.Dispose();
-        this.EmoteLog?.Dispose();
-        this.ActivityManager?.Dispose();
-        this.HonorificBridge?.Dispose();
-        this.Lodestone?.Dispose();
-        this.Tomestone?.Dispose();
-        this.PartyService?.Dispose();
-        this.RememberMe?.Dispose();
-        this.FrameworkScheduler?.Dispose();
-        this.PresenceWatcher?.Dispose();
-        this.Channels?.Dispose();
-        this.DiscordDispatcher?.Dispose();
-        this.DiscordConnection?.DisposeAsync().AsTask().GetAwaiter().GetResult();
-        this.DiscordSendQueue?.Dispose();
-        this.LocalPlayer?.Dispose();
 
         Service.PluginInterface.UiBuilder.OpenConfigUi -= this.ToggleConfigUI;
         Service.PluginInterface.UiBuilder.OpenMainUi -= this.ToggleConfigUI;
@@ -570,6 +536,10 @@ public class CordiPlugin : IDalamudPlugin
         Service.ClientState.Login -= OnLoginEvent;
         Service.ClientState.Logout -= OnLogoutEvent;
 
+        this.Discord?.Stop();
+
+        _provider?.DisposeAsync().AsTask().GetAwaiter().GetResult();
+
         try
         {
             this.Config?.Save();
@@ -578,9 +548,6 @@ public class CordiPlugin : IDalamudPlugin
         {
             LogService?.Error("Plugin", "Failed to save configuration during shutdown", ex);
         }
-
-        Service.PluginInterface.UiBuilder.Draw -= configWindow.Draw;
-
     }
 
     public void Dispose()

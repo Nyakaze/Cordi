@@ -200,7 +200,7 @@ public sealed partial class ConfigWindow
         system.Add(MakeItem(PageIds.Debug, "Debug", FontAwesomeIcon.Bug, debugTab.Draw));
 #endif
 
-        if (plugin.IsLogsTabVisible)
+        if (config.LogsTabVisible)
             system.Add(MakeItem(PageIds.Logs, "Logs", FontAwesomeIcon.FileAlt, logsTab.Draw));
 
         return new List<NavSection>
@@ -265,8 +265,8 @@ public sealed partial class ConfigWindow
 
     private SidebarFooterState BuildFooterState()
     {
-        bool busy = plugin.Discord.IsBusy;
-        bool connected = plugin.DiscordConnection.IsConnected;
+        bool busy = discord.IsBusy;
+        bool connected = connection.IsConnected;
 
         return new SidebarFooterState
         {
@@ -281,13 +281,13 @@ public sealed partial class ConfigWindow
 
     private void ToggleBot()
     {
-        if (plugin.Discord.IsBusy)
+        if (discord.IsBusy)
             return;
 
-        if (plugin.DiscordConnection.IsConnected)
-            _ = plugin.Discord.Stop();
+        if (connection.IsConnected)
+            _ = discord.Stop();
         else
-            _ = plugin.Discord.Start();
+            _ = discord.Start();
     }
 
     private void OpenUrl(string url)
@@ -298,7 +298,7 @@ public sealed partial class ConfigWindow
         }
         catch (Exception ex)
         {
-            plugin.LogService.Error("UI", $"Failed to open {url}", ex);
+            log.Error("UI", $"Failed to open {url}", ex);
         }
     }
 }

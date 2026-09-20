@@ -7,15 +7,17 @@ namespace Cordi.Services.Chatbox;
 
 public sealed class ChatboxSearchSession : IDisposable
 {
-    private readonly CordiPlugin _plugin;
+    private readonly ChatboxService _chatbox;
+    private readonly CordiLogService _log;
 
     private CancellationTokenSource? _cts;
     private int _generation;
     private bool _disposed;
 
-    public ChatboxSearchSession(CordiPlugin plugin)
+    public ChatboxSearchSession(ChatboxService chatbox, CordiLogService log)
     {
-        _plugin = plugin;
+        _chatbox = chatbox;
+        _log = log;
     }
 
     public ChatboxSearchQuery Query { get; } = new();
@@ -39,7 +41,7 @@ public sealed class ChatboxSearchSession : IDisposable
         HasRun = true;
 
         var snapshot = Query.Clone();
-        var chatbox = _plugin.Chatbox;
+        var chatbox = _chatbox;
 
         Task.Run(() =>
         {
@@ -51,7 +53,7 @@ public sealed class ChatboxSearchSession : IDisposable
             }
             catch (Exception ex)
             {
-                _plugin.LogService.Error("Chatbox", "Message search failed", ex);
+                _log.Error("Chatbox", "Message search failed", ex);
                 results = new ChatboxSearchResults { Error = ex.Message };
             }
 

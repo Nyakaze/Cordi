@@ -13,7 +13,8 @@ public sealed class DiscordEventPump : IDisposable
 {
     private const string LogSource = "DiscordDispatcher";
 
-    private readonly CordiPlugin _plugin;
+    private readonly Configuration.Configuration _config;
+    private readonly CordiLogService Log;
     private readonly DiscordConnection _connection;
     private readonly DiscordHandlerRegistry _registry;
     private readonly Cache<ulong, DateTime> _processedMessages;
@@ -21,13 +22,19 @@ public sealed class DiscordEventPump : IDisposable
     private bool _bound;
     private bool _disposed;
 
-    public DiscordEventPump(CordiPlugin plugin, DiscordConnection connection)
+    public DiscordEventPump(
+        IServiceProvider services,
+        Configuration.Configuration config,
+        CordiLogService log,
+        ICacheRegistry caches,
+        DiscordConnection connection)
     {
-        _plugin = plugin;
+        _config = config;
+        Log = log;
         _connection = connection;
-        _registry = new DiscordHandlerRegistry(plugin);
+        _registry = new DiscordHandlerRegistry(services);
         _processedMessages = new Cache<ulong, DateTime>(
-            "discord.dispatch.processed", plugin.CacheRegistry,
+            "discord.dispatch.processed", caches,
             maxSize: 1000, ttl: TimeSpan.FromMinutes(10));
 
         Log.Info(LogSource,
@@ -63,7 +70,7 @@ public sealed class DiscordEventPump : IDisposable
 
         Log.Debug(LogSource, $"Received from {e.Author.DisplayName} in #{e.Channel.Name}: {e.Content}");
 
-        _plugin.Config.Stats.IncrementTotal();
+        _config.Stats.IncrementTotal();
 
         await FanOutAsync(_registry.MessageHandlers, handler => handler.HandleAsync(e, ct));
     }
@@ -96,6 +103,4 @@ public sealed class DiscordEventPump : IDisposable
         if (_disposed) return;
         _disposed = true;
     }
-
-    private CordiLogService Log => _plugin.LogService;
 }

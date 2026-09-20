@@ -1,3 +1,4 @@
+using Cordi.Domain;
 using Dalamud.Plugin.Services;
 
 namespace Cordi.Core.Scheduling.Handlers;
@@ -5,12 +6,12 @@ namespace Cordi.Core.Scheduling.Handlers;
 [FrameworkTick]
 public class LocalPlayerTickHandler : IFrameworkTickHandler
 {
-    private readonly CordiPlugin _plugin;
+    private readonly LocalPlayerProvider _localPlayer;
 
-    public LocalPlayerTickHandler(CordiPlugin plugin)
+    public LocalPlayerTickHandler(LocalPlayerProvider localPlayer)
     {
-        _plugin = plugin;
+        _localPlayer = localPlayer;
     }
 
-    public void Tick(IFramework framework) => _plugin.LocalPlayer.Tick(framework);
+    public void Tick(IFramework framework) => _localPlayer.Tick(framework);
 }

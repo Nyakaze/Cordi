@@ -15,15 +15,17 @@ public sealed class AudioService
     private const string LogSource = "Audio";
     private const int PollIntervalMs = 100;
 
-    private readonly CordiPlugin plugin;
+    private readonly Configuration.Configuration _config;
+    private readonly CordiLogService Log;
+    private readonly NotificationManager _notifications;
     private bool missingDeviceReported;
 
-    public AudioService(CordiPlugin plugin)
+    public AudioService(Configuration.Configuration config, CordiLogService log, NotificationManager notifications)
     {
-        this.plugin = plugin;
+        _config = config;
+        Log = log;
+        _notifications = notifications;
     }
-
-    private CordiLogService Log => plugin.LogService;
 
     public static IReadOnlyList<DirectSoundDeviceInfo> GetOutputDevices()
     {
@@ -41,7 +43,7 @@ public sealed class AudioService
 
     public string DescribeConfiguredDevice()
     {
-        var configured = plugin.Config.Audio.OutputDevice;
+        var configured = _config.Audio.OutputDevice;
         if (configured == Guid.Empty)
             return DefaultDeviceLabel;
 
@@ -51,7 +53,7 @@ public sealed class AudioService
 
     public bool IsConfiguredDeviceAvailable()
     {
-        var configured = plugin.Config.Audio.OutputDevice;
+        var configured = _config.Audio.OutputDevice;
         return configured == Guid.Empty || GetOutputDevices().Any(device => device.Guid == configured);
     }
 
@@ -100,7 +102,7 @@ public sealed class AudioService
 
     private Guid ResolveOutputDevice()
     {
-        var configured = plugin.Config.Audio.OutputDevice;
+        var configured = _config.Audio.OutputDevice;
         if (configured == Guid.Empty)
             return Guid.Empty;
 
@@ -121,7 +123,7 @@ public sealed class AudioService
 
         missingDeviceReported = true;
         Log.Warning(LogSource, "Configured output device is unavailable, falling back to the primary sound driver");
-        plugin.NotificationManager.Add(
+        _notifications.Add(
             "Audio device unavailable",
             "The selected output device was not found. Falling back to the primary sound driver.",
             CordiNotificationType.Warning);

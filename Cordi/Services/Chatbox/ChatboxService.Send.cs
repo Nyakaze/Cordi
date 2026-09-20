@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using System.Linq;
 using Cordi.Configuration;
 using Cordi.Domain;
@@ -45,7 +45,7 @@ public sealed partial class ChatboxService
         if (config.SendGameChatTypes.Count > 1) config.ActiveSendGameChatType = type;
         else Config.LastSendChatType = type;
 
-        _plugin.Config.Save();
+        _config.Save();
     }
 
     private static bool IsTellChannel(ChatboxChannelState channel) =>
@@ -82,10 +82,10 @@ public sealed partial class ChatboxService
 
     private void SendGameCommand(string text)
     {
-        var command = _plugin.Emoji.ToGame(text, Config.RelayEmotesAsUrls);
+        var command = _emoji.ToGame(text, Config.RelayEmotesAsUrls);
         if (command.Length == 0) return;
 
-        _ = _plugin._chat.SendCommandAsync(command);
+        _ = _chat.SendCommandAsync(command);
     }
 
     private List<string> SplitForSending(string text)
@@ -119,7 +119,7 @@ public sealed partial class ChatboxService
 
     private void SendToGame(ChatboxChannelState channel, string text, ChatboxReplyRef? reply)
     {
-        text = _plugin.Emoji.ToGame(text, Config.RelayEmotesAsUrls);
+        text = _emoji.ToGame(text, Config.RelayEmotesAsUrls);
         if (text.Length == 0) return;
 
         var body = reply != null ? FormatGameReply(reply, text) : text;
@@ -133,7 +133,7 @@ public sealed partial class ChatboxService
                 return;
             }
 
-            _ = _plugin._chat.SendTellAsync(recipient, text);
+            _ = _chat.SendTellAsync(recipient, text);
             return;
         }
 
@@ -146,7 +146,7 @@ public sealed partial class ChatboxService
                 return;
             }
 
-            _ = _plugin._chat.SendTellAsync(target!, text);
+            _ = _chat.SendTellAsync(target!, text);
             return;
         }
 
@@ -157,7 +157,7 @@ public sealed partial class ChatboxService
             return;
         }
 
-        _ = _plugin._chat.SendAsync(type, body);
+        _ = _chat.SendAsync(type, body);
     }
 
     private string? ResolveTellTarget(ChatboxChannelState channel, ChatboxReplyRef? reply)

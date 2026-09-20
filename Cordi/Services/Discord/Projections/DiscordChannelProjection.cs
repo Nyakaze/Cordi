@@ -25,7 +25,7 @@ public sealed class DiscordChannelProjection : IDisposable
 {
     private const string LogSource = "Projections";
 
-    private readonly CordiPlugin _plugin;
+    private readonly CordiLogService Log;
     private readonly DiscordConnection _connection;
 
     private readonly ConcurrentDictionary<ulong, byte> _pendingThreadFetches = new();
@@ -41,9 +41,9 @@ public sealed class DiscordChannelProjection : IDisposable
     private bool _bound;
     private bool _disposed;
 
-    public DiscordChannelProjection(CordiPlugin plugin, DiscordConnection connection)
+    public DiscordChannelProjection(CordiLogService log, DiscordConnection connection)
     {
-        _plugin = plugin;
+        Log = log;
         _connection = connection;
     }
 
@@ -248,6 +248,4 @@ public sealed class DiscordChannelProjection : IDisposable
             }
         });
     }
-
-    private CordiLogService Log => _plugin.LogService;
 }

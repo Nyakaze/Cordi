@@ -17,7 +17,11 @@ namespace Cordi.Services.Discord;
 
 public class DiscordSlashCommandService : IDisposable
 {
-    private readonly CordiPlugin _plugin;
+    private readonly Configuration.Configuration _config;
+    private readonly CordiLogService Log;
+    private readonly Connection.DiscordConnection _connection;
+    private readonly Projections.DiscordChannelProjection _channels;
+    private readonly Packets.Handler.Chat.ChatMessenger _chat;
     private readonly ScreenshotService _screenshotService;
     private bool _bound;
 
@@ -34,21 +38,30 @@ public class DiscordSlashCommandService : IDisposable
 
     private Snowflake? ResolveGuildId()
     {
-        if (_plugin.DiscordConnection.Session.GuildId is { } sessionGuild)
+        if (_connection.Session.GuildId is { } sessionGuild)
             return sessionGuild;
 
-        var guilds = _plugin.Channels.Guilds;
+        var guilds = _channels.Guilds;
         return guilds.Count > 0 ? guilds[0].Id : null;
     }
 
-    private CordiLogService Log => _plugin.LogService;
     private const string LogSource = "SlashCommands";
 
-    private ICrovusContext? Context => _plugin.DiscordConnection.Context;
+    private ICrovusContext? Context => _connection.Context;
 
-    public DiscordSlashCommandService(CordiPlugin plugin, ScreenshotService screenshotService)
+    public DiscordSlashCommandService(
+        Configuration.Configuration config,
+        CordiLogService log,
+        Connection.DiscordConnection connection,
+        Projections.DiscordChannelProjection channels,
+        Packets.Handler.Chat.ChatMessenger chat,
+        ScreenshotService screenshotService)
     {
-        _plugin = plugin;
+        _config = config;
+        Log = log;
+        _connection = connection;
+        _channels = channels;
+        _chat = chat;
         _screenshotService = screenshotService;
     }
 
@@ -57,13 +70,13 @@ public class DiscordSlashCommandService : IDisposable
         if (_bound) return;
         _bound = true;
 
-        _plugin.DiscordConnection.Ready += OnReadyAsync;
-        _plugin.DiscordConnection.Register<InteractionCreatedEvent>(OnInteractionCreatedAsync);
+        _connection.Ready += OnReadyAsync;
+        _connection.Register<InteractionCreatedEvent>(OnInteractionCreatedAsync);
     }
 
     private async Task OnReadyAsync(ReadyEvent e)
     {
-        if (!_plugin.Config.SlashCommands.Enabled) return;
+        if (!_config.SlashCommands.Enabled) return;
 
         try
         {
@@ -79,12 +92,12 @@ public class DiscordSlashCommandService : IDisposable
 
     public void PopulateEmoteCommands()
     {
-        var config = _plugin.Config.SlashCommands;
+        var config = _config.SlashCommands;
 
         int removed = config.Commands.RemoveAll(c => c.IsEmote);
         if (removed > 0)
         {
-            _plugin.Config.Save();
+            _config.Save();
             Log.Info(LogSource, $"Cleaned {removed} emote commands from config (now in-memory only).");
         }
 
@@ -237,7 +250,7 @@ public class DiscordSlashCommandService : IDisposable
 
     private List<ApplicationCommandRequest> BuildApplicationCommands(out int skipped)
     {
-        var config = _plugin.Config.SlashCommands;
+        var config = _config.SlashCommands;
         var result = new List<ApplicationCommandRequest>();
         var seen = new HashSet<string>();
         skipped = 0;
@@ -325,7 +338,7 @@ public class DiscordSlashCommandService : IDisposable
             return;
         }
 
-        var config = _plugin.Config.SlashCommands;
+        var config = _config.SlashCommands;
         if (!config.Enabled)
         {
             Log.Warning(LogSource, "Cannot register commands: slash commands are disabled in settings.");
@@ -363,7 +376,7 @@ public class DiscordSlashCommandService : IDisposable
         if (Context is not { } context) return;
         if (context.ApplicationId is not { } applicationId) return;
 
-        var config = _plugin.Config.SlashCommands;
+        var config = _config.SlashCommands;
         if (!config.Enabled) return;
 
         if (ResolveGuildId() is not { } guildId)
@@ -450,7 +463,7 @@ public class DiscordSlashCommandService : IDisposable
 
     private async Task OnInteractionCreatedAsync(InteractionCreatedEvent e, CancellationToken ct)
     {
-        var config = _plugin.Config.SlashCommands;
+        var config = _config.SlashCommands;
         if (!config.Enabled) return;
 
         var interaction = e.Interaction;
@@ -604,7 +617,7 @@ public class DiscordSlashCommandService : IDisposable
                         targetName = currentTarget.Name.TextValue;
                 }
 
-                _plugin._chat.SendMessage(finalGameCommand);
+                _chat.SendMessage(finalGameCommand);
                 Log.Info(LogSource, $"Executed game command: {finalGameCommand}");
             });
 
@@ -729,7 +742,7 @@ public class DiscordSlashCommandService : IDisposable
         }
 
         command.IsEnabled = enable;
-        _plugin.Config.Save();
+        _config.Save();
 
         try
         {
@@ -794,7 +807,7 @@ public class DiscordSlashCommandService : IDisposable
                 changed++;
             }
         }
-        _plugin.Config.Save();
+        _config.Save();
 
         try
         {
@@ -934,7 +947,7 @@ public class DiscordSlashCommandService : IDisposable
 
     public int GetEnabledCommandCount()
     {
-        return _plugin.Config.SlashCommands.Commands.Count(c => c.IsEnabled);
+        return _config.SlashCommands.Commands.Count(c => c.IsEnabled);
     }
 
     public bool WouldExceedLimit(int additional = 1)
@@ -947,6 +960,6 @@ public class DiscordSlashCommandService : IDisposable
         if (!_bound) return;
         _bound = false;
 
-        _plugin.DiscordConnection.Ready -= OnReadyAsync;
+        _connection.Ready -= OnReadyAsync;
     }
 }

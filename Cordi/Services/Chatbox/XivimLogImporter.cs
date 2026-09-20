@@ -25,11 +25,13 @@ public sealed partial class XivimLogImporter
     private const string TimestampFormat = "yyyy.MM.dd HH:mm:ss zzz";
     private const long MaxLogBytes = 32L * 1024 * 1024;
 
-    private readonly CordiPlugin _plugin;
+    private readonly Configuration.Configuration _config;
+    private readonly CordiLogService _log;
 
-    public XivimLogImporter(CordiPlugin plugin)
+    public XivimLogImporter(Configuration.Configuration config, CordiLogService log)
     {
-        _plugin = plugin;
+        _config = config;
+        _log = log;
     }
 
     [GeneratedRegex(@"^\[(.+?)\] From (.+?)@(\p{L}+): (.*)$")]
@@ -47,7 +49,7 @@ public sealed partial class XivimLogImporter
         }
         catch (Exception ex)
         {
-            _plugin.LogService.Error("Chatbox", "Failed to resolve the XIVInstantMessenger log folder.", ex);
+            _log.Error("Chatbox", "Failed to resolve the XIVInstantMessenger log folder.", ex);
         }
 
         return Path.Combine(
@@ -59,7 +61,7 @@ public sealed partial class XivimLogImporter
 
     public string ResolveFolder()
     {
-        var configured = _plugin.Config.Chatbox.Conversations.XivimLogFolder?.Trim() ?? string.Empty;
+        var configured = _config.Chatbox.Conversations.XivimLogFolder?.Trim() ?? string.Empty;
         return configured.Length > 0 ? configured : DefaultFolder();
     }
 
@@ -78,7 +80,7 @@ public sealed partial class XivimLogImporter
         }
         catch (Exception ex)
         {
-            _plugin.LogService.Error("Chatbox", "Failed to enumerate the XIVInstantMessenger log folders.", ex);
+            _log.Error("Chatbox", "Failed to enumerate the XIVInstantMessenger log folders.", ex);
         }
 
         return folders;
@@ -103,7 +105,7 @@ public sealed partial class XivimLogImporter
             }
             catch (Exception ex)
             {
-                _plugin.LogService.Error("Chatbox", $"Failed to list XIVInstantMessenger logs in '{folder}'.", ex);
+                _log.Error("Chatbox", $"Failed to list XIVInstantMessenger logs in '{folder}'.", ex);
             }
         }
 
@@ -145,7 +147,7 @@ public sealed partial class XivimLogImporter
             }
             catch (Exception ex)
             {
-                _plugin.LogService.Error("Chatbox", $"Failed to probe '{candidate}'.", ex);
+                _log.Error("Chatbox", $"Failed to probe '{candidate}'.", ex);
             }
         }
 
@@ -172,7 +174,7 @@ public sealed partial class XivimLogImporter
         }
         catch (Exception ex)
         {
-            _plugin.LogService.Error("Chatbox", $"Failed to read the XIVInstantMessenger log '{path}'.", ex);
+            _log.Error("Chatbox", $"Failed to read the XIVInstantMessenger log '{path}'.", ex);
         }
 
         return result;

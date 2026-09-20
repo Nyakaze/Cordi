@@ -5,17 +5,17 @@ using System.Linq;
 using System.Reflection;
 using Cordi.Services;
 using Dalamud.Plugin.Services;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Cordi.Core.Scheduling;
 
 public class FrameworkScheduler : IDisposable
 {
-    private readonly CordiPlugin _plugin;
+    private readonly CordiLogService Log;
     private readonly List<TickEntry> _entries;
     private bool _bound;
     private bool _disposed;
 
-    private CordiLogService Log => _plugin.LogService;
     private const string LogSource = "FrameworkScheduler";
 
     private sealed class TickEntry
@@ -25,10 +25,10 @@ public class FrameworkScheduler : IDisposable
         public Stopwatch Sw { get; } = Stopwatch.StartNew();
     }
 
-    public FrameworkScheduler(CordiPlugin plugin)
+    public FrameworkScheduler(IServiceProvider services, CordiLogService log)
     {
-        _plugin = plugin;
-        _entries = DiscoverHandlers(plugin);
+        Log = log;
+        _entries = DiscoverHandlers(services);
         Log.Info(LogSource, $"Registered {_entries.Count} tick handler(s)");
     }
 
@@ -64,7 +64,7 @@ public class FrameworkScheduler : IDisposable
         }
     }
 
-    private static List<TickEntry> DiscoverHandlers(CordiPlugin plugin)
+    private static List<TickEntry> DiscoverHandlers(IServiceProvider services)
     {
         return Assembly.GetExecutingAssembly().GetTypes()
             .Where(t => !t.IsAbstract
@@ -73,7 +73,7 @@ public class FrameworkScheduler : IDisposable
                      && t.GetCustomAttribute<FrameworkTickAttribute>() != null)
             .Select(t => new TickEntry
             {
-                Handler = (IFrameworkTickHandler)Activator.CreateInstance(t, plugin)!,
+                Handler = (IFrameworkTickHandler)ActivatorUtilities.CreateInstance(services, t),
                 Meta = t.GetCustomAttribute<FrameworkTickAttribute>()!,
             })
             .ToList();

@@ -42,12 +42,14 @@ public sealed class EmoteTitleImporter
         NumberHandling = JsonNumberHandling.AllowReadingFromString,
     };
 
-    private readonly CordiPlugin _plugin;
+    private readonly Configuration.Configuration _config;
+    private readonly CordiLogService _log;
     private readonly EmoteCounterStore _counters;
 
-    public EmoteTitleImporter(CordiPlugin plugin, EmoteCounterStore counters)
+    public EmoteTitleImporter(Configuration.Configuration config, CordiLogService log, EmoteCounterStore counters)
     {
-        _plugin = plugin;
+        _config = config;
+        _log = log;
         _counters = counters;
     }
 
@@ -156,7 +158,7 @@ public sealed class EmoteTitleImporter
 
         _counters.FlushIfDirty();
 
-        _plugin.LogService.Info(LogSource,
+        _log.Info(LogSource,
             $"Imported {imported} counter(s) for {characters} character(s) from PatMe.");
 
         return new EmoteImportResult(true, characters, imported, 0,
@@ -170,7 +172,7 @@ public sealed class EmoteTitleImporter
         if (!Read<HonorificFile>(PatMeHonorificPath, out var parsed, out var error))
             return new EmoteImportResult(false, 0, 0, 0, error);
 
-        var settings = _plugin.Config.ActivityConfig.EmoteTitles;
+        var settings = _config.ActivityConfig.EmoteTitles;
 
         var counters = 0;
         var characters = new HashSet<ulong>();
@@ -226,9 +228,9 @@ public sealed class EmoteTitleImporter
 
         _counters.FlushIfDirty();
 
-        if (rules > 0) _plugin.Config.Save();
+        if (rules > 0) _config.Save();
 
-        _plugin.LogService.Info(LogSource,
+        _log.Info(LogSource,
             $"Imported {rules} rule(s) and {counters} counter(s) from PatMeHonorific.");
 
         return new EmoteImportResult(true, characters.Count, counters, rules,
@@ -275,7 +277,7 @@ public sealed class EmoteTitleImporter
         }
         catch (Exception ex)
         {
-            _plugin.LogService.Error(LogSource, $"Failed to read {Path.GetFileName(path)}", ex);
+            _log.Error(LogSource, $"Failed to read {Path.GetFileName(path)}", ex);
             error = $"{Path.GetFileName(path)} could not be read: {ex.Message}";
 
             return false;

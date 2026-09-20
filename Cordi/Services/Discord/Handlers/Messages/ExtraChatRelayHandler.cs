@@ -9,15 +9,15 @@ namespace Cordi.Services.Discord.Handlers.Messages;
 [DiscordHandler]
 public class ExtraChatRelayHandler : IDiscordMessageHandler
 {
-    private readonly CordiPlugin _plugin;
+    private readonly DiscordHandler _discord;
 
-    public ExtraChatRelayHandler(CordiPlugin plugin)
+    public ExtraChatRelayHandler(DiscordHandler discord)
     {
-        _plugin = plugin;
+        _discord = discord;
     }
 
     public async Task HandleAsync(MessageCreatedEvent e, CancellationToken ct)
     {
-        await _plugin.Discord.MessageRouter.RouteExtraChatMessage(e.Message, e.ChannelId);
+        await _discord.MessageRouter.RouteExtraChatMessage(e.Message, e.ChannelId);
     }
 }

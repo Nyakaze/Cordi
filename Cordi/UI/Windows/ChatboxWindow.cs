@@ -13,7 +13,8 @@ public sealed class ChatboxWindow : ThemedWindow, IDisposable
 {
     private const string WindowId = "###CordiChatbox";
 
-    private readonly CordiPlugin _plugin;
+    private readonly Configuration.Configuration _config;
+    private readonly ChatboxService _chatbox;
     private readonly ChatboxSurface _surface;
 
     private int _titleMentions = -1;
@@ -21,10 +22,11 @@ public sealed class ChatboxWindow : ThemedWindow, IDisposable
     private bool _titleFlash;
     private bool _titleDot;
 
-    public ChatboxWindow(CordiPlugin plugin) : base(
+    public ChatboxWindow(CordiPlugin plugin, Configuration.Configuration config, ChatboxService chatbox) : base(
         "Chatbox" + WindowId, ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse)
     {
-        _plugin = plugin;
+        _config = config;
+        _chatbox = chatbox;
         _surface = new ChatboxSurface(plugin, _theme);
 
         SizeConstraints = new WindowSizeConstraints
@@ -36,8 +38,8 @@ public sealed class ChatboxWindow : ThemedWindow, IDisposable
         SizeCondition = ImGuiCond.FirstUseEver;
     }
 
-    private ChatboxConfig Config => _plugin.Config.Chatbox;
-    private ChatboxService Chatbox => _plugin.Chatbox;
+    private ChatboxConfig Config => _config.Chatbox;
+    private ChatboxService Chatbox => _chatbox;
 
     protected override IWindowChromeConfig Chrome => Config;
 

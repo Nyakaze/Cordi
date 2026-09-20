@@ -15,9 +15,9 @@ namespace Cordi.UI.Windows;
 public sealed class DiscordWindow : Window, IDisposable
 {
     private readonly UiTheme theme = new UiTheme();
-    private readonly CordiPlugin cfg;
+    private readonly Configuration.Configuration cfg;
 
-    public DiscordWindow(CordiPlugin cfg)
+    public DiscordWindow(Configuration.Configuration cfg)
         : base("DeinPlugin – Einstellungen",
             ImGuiWindowFlags.NoCollapse | ImGuiWindowFlags.None)
     {
@@ -44,9 +44,9 @@ public sealed class DiscordWindow : Window, IDisposable
             ImGui.Separator();
             theme.SpacerY(0.25f);
 
-            if (theme.PrimaryButton("Speichern")) cfg.Config.Save();
+            if (theme.PrimaryButton("Speichern")) cfg.Save();
             theme.SameLineGap();
-            if (theme.SecondaryButton("Zurücksetzen")) { cfg.Config.Save(); }
+            if (theme.SecondaryButton("Zurücksetzen")) { cfg.Save(); }
         }
 
         theme.SpacerY();

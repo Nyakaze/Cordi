@@ -15,14 +15,18 @@ public sealed class DiscordWebhookService
     private const string WebhookName = "Cordi Hook";
     private const string LogSource = "Webhook";
 
-    private readonly CordiPlugin _plugin;
+    private readonly CordiLogService Log;
+    private readonly Connection.DiscordConnection _connection;
+    private readonly Projections.DiscordChannelProjection _channels;
     private readonly Cache<ulong, DiscordWebhook> _webhookCache;
 
-    public DiscordWebhookService(CordiPlugin plugin)
+    public DiscordWebhookService(CordiLogService log, ICacheRegistry caches, Connection.DiscordConnection connection, Projections.DiscordChannelProjection channels)
     {
-        _plugin = plugin;
+        Log = log;
+        _connection = connection;
+        _channels = channels;
         _webhookCache = new Cache<ulong, DiscordWebhook>(
-            "webhook.byChannel", plugin.CacheRegistry,
+            "webhook.byChannel", caches,
             maxSize: 100, ttl: TimeSpan.FromHours(2));
     }
 
@@ -93,13 +97,13 @@ public sealed class DiscordWebhookService
 
     private async Task<WebhookTarget?> ResolveAsync(ulong channelId, CancellationToken cancellationToken)
     {
-        if (_plugin.DiscordConnection.Context is not { } context)
+        if (_connection.Context is not { } context)
         {
             Log.Warning(LogSource, $"Cannot resolve webhook for channel {channelId}: not connected");
             return null;
         }
 
-        var channel = _plugin.Channels.Find(channelId)
+        var channel = _channels.Find(channelId)
                       ?? await context.Services.Channels.GetAsync(channelId, cancellationToken);
 
         var hostId = channel.IsThread ? channel.ParentId?.Value ?? 0UL : channel.Id.Value;
@@ -122,8 +126,6 @@ public sealed class DiscordWebhookService
 
         return new WebhookTarget(context, webhook, threadId);
     }
-
-    private CordiLogService Log => _plugin.LogService;
 
     private readonly record struct WebhookTarget(ICrovusContext Context, DiscordWebhook Webhook, Snowflake? ThreadId);
 }

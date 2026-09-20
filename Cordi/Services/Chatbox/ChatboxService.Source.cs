@@ -22,7 +22,7 @@ public sealed partial class ChatboxService
         }
         catch (Exception ex)
         {
-            _plugin.LogService.Error("Chatbox", "Failed to hook chat message source resolver", ex);
+            _log.Error("Chatbox", "Failed to hook chat message source resolver", ex);
             _sourceHook = null;
         }
     }
@@ -47,7 +47,7 @@ public sealed partial class ChatboxService
         }
         catch (Exception ex)
         {
-            _plugin.LogService.Error("Chatbox", "Chat message source resolver threw", ex);
+            _log.Error("Chatbox", "Chat message source resolver threw", ex);
             return;
         }
 

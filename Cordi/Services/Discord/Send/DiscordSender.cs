@@ -17,13 +17,37 @@ public sealed class DiscordSender
 {
     private const string LogSource = "Send";
 
-    private readonly CordiPlugin _plugin;
+    private readonly Configuration.Configuration _config;
+    private readonly CordiLogService Log;
+    private readonly Connection.DiscordConnection _connection;
+    private readonly Projections.DiscordChannelProjection _channels;
+    private readonly Queue.DiscordSendQueue _queue;
+    private readonly Emojis.EmojiTranslator _emoji;
+    private readonly Features.LodestoneService _lodestone;
+    private readonly NotificationManager _notifications;
     private readonly DiscordWebhookService _webhooks;
     private readonly AdvertisementFilterService _adFilter;
 
-    public DiscordSender(CordiPlugin plugin, DiscordWebhookService webhooks, AdvertisementFilterService adFilter)
+    public DiscordSender(
+        Configuration.Configuration config,
+        CordiLogService log,
+        Connection.DiscordConnection connection,
+        Projections.DiscordChannelProjection channels,
+        Queue.DiscordSendQueue queue,
+        Emojis.EmojiTranslator emoji,
+        Features.LodestoneService lodestone,
+        NotificationManager notifications,
+        DiscordWebhookService webhooks,
+        AdvertisementFilterService adFilter)
     {
-        _plugin = plugin;
+        _config = config;
+        Log = log;
+        _connection = connection;
+        _channels = channels;
+        _queue = queue;
+        _emoji = emoji;
+        _lodestone = lodestone;
+        _notifications = notifications;
         _webhooks = webhooks;
         _adFilter = adFilter;
     }
@@ -35,7 +59,7 @@ public sealed class DiscordSender
     public async Task SendMessage(ulong? channelId, string content, Player sender,
         XivChatType chatType = XivChatType.None, string? correspondentName = null, string? avatarUrl = null)
     {
-        if (_plugin.DiscordConnection.Context is not { } context) return;
+        if (_connection.Context is not { } context) return;
 
         if ((channelId ?? ResolveMappedChannel(chatType)) is not { } targetId)
         {
@@ -50,7 +74,7 @@ public sealed class DiscordSender
             if (channel?.Type is ChannelType.GuildForum && !string.IsNullOrEmpty(correspondentName))
                 targetId = await ResolveTellThreadAsync(context, targetId, correspondentName);
 
-            var converted = _plugin.Emoji.ToDiscord(content);
+            var converted = _emoji.ToDiscord(content);
             var sanitized = DiscordTextSanitizer.Sanitize(converted);
 
             if (string.IsNullOrWhiteSpace(sanitized))
@@ -60,9 +84,9 @@ public sealed class DiscordSender
             }
 
             var finalAvatarUrl = NormalizeAvatar(
-                avatarUrl ?? await _plugin.Lodestone.GetAvatarUrlAsync(sender));
+                avatarUrl ?? await _lodestone.GetAvatarUrlAsync(sender));
 
-            var mapping = _plugin.Config.Chat.Mappings.FirstOrDefault(m => m.GameChatType == chatType);
+            var mapping = _config.Chat.Mappings.FirstOrDefault(m => m.GameChatType == chatType);
             var channelFilterEnabled = mapping?.EnableAdvertisementFilter ?? true;
 
             if (_adFilter.IsAdvertisementOrPenalized(sender, sanitized, channelFilterEnabled, targetId))
@@ -75,9 +99,9 @@ public sealed class DiscordSender
 
             _adFilter.AddMessageToBuffer(sender, sanitized, sentMessageId, channelFilterEnabled);
 
-            _plugin.Config.Stats.IncrementTotal();
-            if (chatType != XivChatType.None) _plugin.Config.Stats.IncrementChatType(chatType);
-            if (!string.IsNullOrEmpty(correspondentName)) _plugin.Config.Stats.IncrementTell(correspondentName);
+            _config.Stats.IncrementTotal();
+            if (chatType != XivChatType.None) _config.Stats.IncrementChatType(chatType);
+            if (!string.IsNullOrEmpty(correspondentName)) _config.Stats.IncrementTell(correspondentName);
         }
         catch (Exception ex)
         {
@@ -89,14 +113,14 @@ public sealed class DiscordSender
     {
         if (!IsConnected) return Task.FromResult(0UL);
 
-        var converted = _plugin.Emoji.ToDiscord(content);
+        var converted = _emoji.ToDiscord(content);
         var sanitized = DiscordTextSanitizer.Sanitize(converted);
 
         if (string.IsNullOrWhiteSpace(sanitized)) return Task.FromResult(0UL);
 
         return QueuedSendAsync($"webhook send (channel {channelId})", "webhook", async () =>
         {
-            var avatarUrl = NormalizeAvatar(await _plugin.Lodestone.GetAvatarUrlAsync(sender));
+            var avatarUrl = NormalizeAvatar(await _lodestone.GetAvatarUrlAsync(sender));
 
             return await _webhooks.ExecuteAsync(channelId, message =>
                 message.WithContent(sanitized).As(sender.FullName, avatarUrl));
@@ -109,7 +133,7 @@ public sealed class DiscordSender
 
         return QueuedSendAsync($"webhook embed (channel {channelId})", "webhook", async () =>
         {
-            var avatarUrl = NormalizeAvatar(await _plugin.Lodestone.GetAvatarUrlAsync(sender));
+            var avatarUrl = NormalizeAvatar(await _lodestone.GetAvatarUrlAsync(sender));
 
             return await _webhooks.ExecuteAsync(channelId, message =>
                 message.AddEmbed(embed).As(sender.FullName, avatarUrl));
@@ -136,7 +160,7 @@ public sealed class DiscordSender
 
     public Task AddReaction(ulong channelId, ulong messageId, string emoji)
     {
-        if (_plugin.DiscordConnection.Context is not { } context) return Task.CompletedTask;
+        if (_connection.Context is not { } context) return Task.CompletedTask;
 
         return QueuedSendAsync($"add reaction {emoji} on {messageId}", "reaction", () =>
             context.Services.Reactions.AddAsync(channelId, messageId, emoji));
@@ -144,7 +168,7 @@ public sealed class DiscordSender
 
     public Task RemoveReaction(ulong channelId, ulong messageId, string emoji)
     {
-        if (_plugin.DiscordConnection.Context is not { } context) return Task.CompletedTask;
+        if (_connection.Context is not { } context) return Task.CompletedTask;
 
         return QueuedSendAsync($"remove reaction {emoji} on {messageId}", "reaction", () =>
             context.Services.Reactions.RemoveAsync(channelId, messageId, emoji));
@@ -152,7 +176,7 @@ public sealed class DiscordSender
 
     public Task<ulong> SendEmbedToChannelAsync(ulong channelId, DiscordEmbed embed)
     {
-        if (_plugin.DiscordConnection.Context is not { } context) return Task.FromResult(0UL);
+        if (_connection.Context is not { } context) return Task.FromResult(0UL);
 
         return QueuedSendAsync($"bot embed (channel {channelId})", "bot", async () =>
         {
@@ -164,11 +188,11 @@ public sealed class DiscordSender
 
     public async Task<bool> EditEmbedInChannelAsync(ulong channelId, ulong messageId, DiscordEmbed embed)
     {
-        if (_plugin.DiscordConnection.Context is not { } context) return false;
+        if (_connection.Context is not { } context) return false;
 
         try
         {
-            return await _plugin.DiscordSendQueue.RunAsync(
+            return await _queue.RunAsync(
                 $"bot embed edit (channel {channelId} msg {messageId})", "bot", async () =>
                 {
                     await context.Services.Messages.EditAsync(channelId, messageId, m => m.AddEmbed(embed));
@@ -189,7 +213,7 @@ public sealed class DiscordSender
 
     public Task DeleteChannelMessageAsync(ulong channelId, ulong messageId)
     {
-        if (_plugin.DiscordConnection.Context is not { } context) return Task.CompletedTask;
+        if (_connection.Context is not { } context) return Task.CompletedTask;
 
         return QueuedSendAsync($"bot delete (channel {channelId} msg {messageId})", "bot", async () =>
         {
@@ -203,13 +227,13 @@ public sealed class DiscordSender
         });
     }
 
-    private bool IsConnected => _plugin.DiscordConnection.Context is not null;
+    private bool IsConnected => _connection.Context is not null;
 
     private ulong? ResolveMappedChannel(XivChatType chatType)
     {
-        var targetChannelId = chatType != XivChatType.Debug ? _plugin.Config.Discord.DefaultChannelId : string.Empty;
+        var targetChannelId = chatType != XivChatType.Debug ? _config.Discord.DefaultChannelId : string.Empty;
 
-        if (_plugin.Config.MappingCache.TryGetValue(chatType, out var mappedId))
+        if (_config.MappingCache.TryGetValue(chatType, out var mappedId))
             targetChannelId = mappedId;
 
         return ulong.TryParse(targetChannelId, out var id) ? id : null;
@@ -217,7 +241,7 @@ public sealed class DiscordSender
 
     private async Task<DiscordChannel?> FindChannelAsync(ICrovusContext context, ulong channelId)
     {
-        if (_plugin.Channels.Find(channelId) is { } known) return known;
+        if (_channels.Find(channelId) is { } known) return known;
 
         try
         {
@@ -232,7 +256,7 @@ public sealed class DiscordSender
 
     private async Task<ulong> ResolveTellThreadAsync(ICrovusContext context, ulong forumId, string correspondentName)
     {
-        if (_plugin.Config.Chat.TellThreadMappings.TryGetValue(correspondentName, out var mapped)
+        if (_config.Chat.TellThreadMappings.TryGetValue(correspondentName, out var mapped)
             && ulong.TryParse(mapped, out var mappedThreadId))
         {
             var existing = await FindChannelAsync(context, mappedThreadId);
@@ -242,9 +266,9 @@ public sealed class DiscordSender
         var post = await context.Services.Threads.CreatePostAsync(forumId, correspondentName,
             $"Started conversation with {correspondentName}");
 
-        _plugin.Config.Chat.TellThreadMappings[correspondentName] = post.Id.ToString();
-        _plugin.Config.Save();
-        _plugin.NotificationManager.Add("New Conversation!", $"Created Channel for: {correspondentName}",
+        _config.Chat.TellThreadMappings[correspondentName] = post.Id.ToString();
+        _config.Save();
+        _notifications.Add("New Conversation!", $"Created Channel for: {correspondentName}",
             CordiNotificationType.Success);
 
         Log.Info(LogSource, $"Created forum post '{correspondentName}' ({post.Id}) in forum {forumId}");
@@ -259,7 +283,7 @@ public sealed class DiscordSender
     {
         try
         {
-            return await _plugin.DiscordSendQueue.RunAsync(description, category, action);
+            return await _queue.RunAsync(description, category, action);
         }
         catch (Exception ex)
         {
@@ -272,13 +296,11 @@ public sealed class DiscordSender
     {
         try
         {
-            await _plugin.DiscordSendQueue.RunAsync(description, category, action);
+            await _queue.RunAsync(description, category, action);
         }
         catch (Exception ex)
         {
             Log.Error(LogSource, $"{description} ultimately failed", ex);
         }
     }
-
-    private CordiLogService Log => _plugin.LogService;
 }

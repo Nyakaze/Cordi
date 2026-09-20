@@ -11,7 +11,8 @@ namespace Cordi.UI.Windows;
 
 public sealed class ConversationWindow : ThemedWindow, IDisposable
 {
-    private readonly CordiPlugin _plugin;
+    private readonly Configuration.Configuration _config;
+    private readonly ChatboxService _chatbox;
     private readonly ChatboxSurface _surface;
     private readonly string _windowId;
     private readonly ConversationConfig _entry;
@@ -19,11 +20,16 @@ public sealed class ConversationWindow : ThemedWindow, IDisposable
     private bool _titleUnread;
     private string _titleLabel = string.Empty;
 
-    public ConversationWindow(CordiPlugin plugin, ConversationConfig entry) : base(
+    public ConversationWindow(
+        CordiPlugin plugin,
+        Configuration.Configuration config,
+        ChatboxService chatbox,
+        ConversationConfig entry) : base(
         entry.Label + "###CordiConversation-" + entry.Id,
         ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse)
     {
-        _plugin = plugin;
+        _config = config;
+        _chatbox = chatbox;
         _entry = entry;
         _windowId = "###CordiConversation-" + entry.Id;
         ChannelId = entry.Id;
@@ -49,9 +55,9 @@ public sealed class ConversationWindow : ThemedWindow, IDisposable
 
     public string ChannelId { get; }
 
-    private ChatboxConfig Config => _plugin.Config.Chatbox;
+    private ChatboxConfig Config => _config.Chatbox;
 
-    private ChatboxService Chatbox => _plugin.Chatbox;
+    private ChatboxService Chatbox => _chatbox;
 
     protected override IWindowChromeConfig Chrome => Config.Conversations.Window;
 
@@ -134,7 +140,7 @@ public sealed class ConversationWindow : ThemedWindow, IDisposable
     public override void OnClose()
     {
         _surface.OnClose();
-        _plugin.Config.Save();
+        _config.Save();
     }
 
     public void Dispose() => _surface.Dispose();

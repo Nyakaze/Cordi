@@ -9,15 +9,15 @@ namespace Cordi.Services.Discord.Handlers.Messages;
 [DiscordHandler]
 public class TellRelayHandler : IDiscordMessageHandler
 {
-    private readonly CordiPlugin _plugin;
+    private readonly DiscordHandler _discord;
 
-    public TellRelayHandler(CordiPlugin plugin)
+    public TellRelayHandler(DiscordHandler discord)
     {
-        _plugin = plugin;
+        _discord = discord;
     }
 
     public async Task HandleAsync(MessageCreatedEvent e, CancellationToken ct)
     {
-        await _plugin.Discord.MessageRouter.RouteTellMessage(e.Message, e.ChannelId);
+        await _discord.MessageRouter.RouteTellMessage(e.Message, e.ChannelId);
     }
 }

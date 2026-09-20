@@ -15,10 +15,11 @@ namespace Cordi.Services.Discord;
 public class DiscordHandler : IDisposable
 {
     static readonly IPluginLog Logger = Service.Log;
-    private readonly CordiPlugin _plugin;
+    private readonly Configuration.Configuration _config;
+    private readonly Connection.DiscordConnection _connection;
     private readonly Guid _instanceId = Guid.NewGuid();
 
-    public bool IsBusy => _plugin.DiscordConnection.IsBusy;
+    public bool IsBusy => _connection.IsBusy;
 
     private readonly DiscordWebhookService _webhooks;
     private readonly DiscordSender _sender;
@@ -26,18 +27,23 @@ public class DiscordHandler : IDisposable
     public DiscordMessageRouter MessageRouter => _messageRouter;
     public DiscordSender Sender => _sender;
 
-    private CordiLogService Log => _plugin.LogService;
     private const string LogSource = "Discord";
 
-    public DiscordHandler(CordiPlugin plugin, DiscordWebhookService webhooks, AdvertisementFilterService adFilter)
+    public DiscordHandler(
+        Configuration.Configuration config,
+        Connection.DiscordConnection connection,
+        DiscordWebhookService webhooks,
+        DiscordSender sender,
+        DiscordMessageRouter messageRouter)
     {
-        _plugin = plugin;
+        _config = config;
+        _connection = connection;
         _webhooks = webhooks;
-        _sender = new DiscordSender(plugin, webhooks, adFilter);
-        _messageRouter = new DiscordMessageRouter(plugin);
+        _sender = sender;
+        _messageRouter = messageRouter;
     }
 
-    public Task Start() => _plugin.DiscordConnection.StartAsync();
+    public Task Start() => _connection.StartAsync();
 
     public Task SendMessage(ulong? channelId, SeString message, Player sender,
         XivChatType chatType = XivChatType.None, string? correspondentName = null) =>
@@ -78,10 +84,10 @@ public class DiscordHandler : IDisposable
     {
         Logger.Info($"[{_instanceId}] Disconnecting Discord client...");
 
-        await _plugin.DiscordConnection.StopAsync();
+        await _connection.StopAsync();
 
         _webhooks.ClearCache();
-        _plugin.Config.Save();
+        _config.Save();
     }
 
     public void Dispose()

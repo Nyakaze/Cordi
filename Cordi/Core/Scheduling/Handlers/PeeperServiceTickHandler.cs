@@ -6,12 +6,12 @@ namespace Cordi.Core.Scheduling.Handlers;
 [FrameworkTick(IntervalSeconds = CordiPeepService.TickIntervalSeconds, RequiresLogin = true)]
 public class PeeperServiceTickHandler : IFrameworkTickHandler
 {
-    private readonly CordiPlugin _plugin;
+    private readonly CordiPeepService _peeper;
 
-    public PeeperServiceTickHandler(CordiPlugin plugin)
+    public PeeperServiceTickHandler(CordiPeepService peeper)
     {
-        _plugin = plugin;
+        _peeper = peeper;
     }
 
-    public void Tick(IFramework framework) => _plugin.CordiPeep.OnFrameworkUpdate(framework);
+    public void Tick(IFramework framework) => _peeper.OnFrameworkUpdate(framework);
 }

@@ -128,12 +128,12 @@ public sealed partial class ChatboxService
 
         var state = EnsureConversationChannel(entry);
         MaybeImportXivimHistory(entry);
-        _plugin.Config.Save();
-        _plugin.ConversationWindows?.Sync();
+        _config.Save();
+        _conversationWindows.Value?.Sync();
 
         if (!activate || state == null) return state;
 
-        if (IsConversationDetached(state.Id)) _plugin.ConversationWindows?.Focus(state.Id);
+        if (IsConversationDetached(state.Id)) _conversationWindows.Value?.Focus(state.Id);
         else SetActiveChannel(state.Id);
 
         return state;
@@ -148,7 +148,7 @@ public sealed partial class ChatboxService
 
         if (IsConversationDetached(state.Id)) return state;
 
-        var window = _plugin.ChatboxWindow;
+        var window = _window.Value;
         if (window != null) window.IsOpen = true;
 
         RequestInputFocus = true;
@@ -192,8 +192,8 @@ public sealed partial class ChatboxService
         }
 
         _conversationConfigs.Remove(id);
-        _plugin.Config.Save();
-        _plugin.ConversationWindows?.Sync();
+        _config.Save();
+        _conversationWindows.Value?.Sync();
         SetChannelViewed(id, false);
 
         if (!string.Equals(ActiveChannelId, id, StringComparison.Ordinal)) return;
@@ -210,8 +210,8 @@ public sealed partial class ChatboxService
         if (entry == null) return;
 
         ConversationSettings.Items.Remove(entry);
-        _plugin.Config.Save();
-        _plugin.ConversationWindows?.Sync();
+        _config.Save();
+        _conversationWindows.Value?.Sync();
     }
 
     private void TouchConversation(string id)
@@ -239,7 +239,7 @@ public sealed partial class ChatboxService
         foreach (var entry in settings.Items.Where(e => e.Open).ToList())
             EnsureConversationChannel(entry);
 
-        _plugin.ConversationWindows?.Sync();
+        _conversationWindows.Value?.Sync();
     }
 
     public void RefreshConversationChannels()
@@ -251,7 +251,7 @@ public sealed partial class ChatboxService
             BuildConversationChannel(entry);
         }
 
-        _plugin.ConversationWindows?.Sync();
+        _conversationWindows.Value?.Sync();
     }
 
     private ChatboxChannelState? EnsureConversationChannel(ConversationConfig entry)
@@ -470,7 +470,7 @@ public sealed partial class ChatboxService
             }
             catch (Exception ex)
             {
-                _plugin.LogService.Error("Chatbox", "Failed to alert the game window.", ex);
+                _log.Error("Chatbox", "Failed to alert the game window.", ex);
             }
         });
     }
@@ -488,7 +488,7 @@ public sealed partial class ChatboxService
         }
         catch (Exception ex)
         {
-            _plugin.LogService.Error("Chatbox", "Failed to stop the taskbar flash.", ex);
+            _log.Error("Chatbox", "Failed to stop the taskbar flash.", ex);
         }
     }
 
@@ -496,7 +496,7 @@ public sealed partial class ChatboxService
     {
         if (IsConversationDetached(channel.Id))
         {
-            var manager = _plugin.ConversationWindows;
+            var manager = _conversationWindows.Value;
             if (manager == null) return;
 
             manager.Sync();
@@ -510,7 +510,7 @@ public sealed partial class ChatboxService
             return;
         }
 
-        var window = _plugin.ChatboxWindow;
+        var window = _window.Value;
         if (window == null) return;
 
         window.IsOpen = true;
@@ -537,7 +537,7 @@ public sealed partial class ChatboxService
 
         if (settings.UseCustomSound)
         {
-            _plugin.Audio.Play(settings.CustomSoundPath, settings.CustomSoundVolume);
+            _audio.Play(settings.CustomSoundPath, settings.CustomSoundVolume);
             return;
         }
 
@@ -565,7 +565,7 @@ public sealed partial class ChatboxService
         }
         catch (Exception ex)
         {
-            _plugin.LogService.Error("Chatbox", "Failed to play the conversation sound.", ex);
+            _log.Error("Chatbox", "Failed to play the conversation sound.", ex);
         }
     }
 }

@@ -16,7 +16,8 @@ namespace Cordi.UI.Panels;
 
 public class CordiPeepPanel
 {
-    private readonly CordiPlugin _plugin;
+    private readonly Configuration.Configuration _config;
+    private readonly CordiPeepService _peeper;
 
     private ulong? _hoveredPeeperId;
     private string? _hoveredPeeperName;
@@ -30,9 +31,10 @@ public class CordiPeepPanel
 
     private readonly UiTheme _theme;
 
-    public CordiPeepPanel(CordiPlugin plugin, UiTheme theme)
+    public CordiPeepPanel(Configuration.Configuration config, CordiPeepService peeper, UiTheme theme)
     {
-        _plugin = plugin;
+        _config = config;
+        _peeper = peeper;
         _theme = theme;
     }
 
@@ -44,8 +46,7 @@ public class CordiPeepPanel
         _hoveredTargetId = null;
         _hoveredTargetName = null;
 
-        var cordiPeep = _plugin.CordiPeep;
-        if (cordiPeep == null) return;
+        var cordiPeep = _peeper;
 
         if (cordiPeep.ActivePeepers.IsEmpty && cordiPeep.History.Count == 0)
         {
@@ -73,7 +74,7 @@ public class CordiPeepPanel
             }
         }
 
-        if (_plugin.Config.CordiPeep.FocusOnHover)
+        if (_config.CordiPeep.FocusOnHover)
         {
             // Determine which ID and name to focus: prefer hoveredTarget, fallback to peeper itself
             var focusId = _hoveredTargetId ?? _hoveredPeeperId;
@@ -119,7 +120,7 @@ public class CordiPeepPanel
     {
         var avail = ImGui.GetContentRegionAvail().X;
         var style = ImGui.GetStyle();
-        var config = _plugin.Config.CordiPeep;
+        var config = _config.CordiPeep;
 
         // Build distance text and direction
         bool showArrow = (isActive && config.ShowDirection) || (!isActive && config.ShowDirectionInHistory && peeper.IsPresent);
@@ -207,7 +208,7 @@ public class CordiPeepPanel
                         DisableSound = true,
                         DisableDiscord = true,
                     });
-                    _plugin.Config.Save();
+                    _config.Save();
                 }
             }
         }
@@ -302,7 +303,7 @@ public class CordiPeepPanel
         uint textColor;
         if (isActive)
         {
-            textColor = ImGui.GetColorU32(_plugin.Config.CordiPeep.TargetingHighlightColor);
+            textColor = ImGui.GetColorU32(_config.CordiPeep.TargetingHighlightColor);
         }
         else
         {

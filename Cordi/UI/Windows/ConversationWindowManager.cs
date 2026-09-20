@@ -10,16 +10,24 @@ namespace Cordi.UI.Windows;
 public sealed class ConversationWindowManager : IDisposable
 {
     private readonly CordiPlugin _plugin;
+    private readonly Configuration.Configuration _config;
+    private readonly Lazy<Services.Chatbox.ChatboxService> _chatbox;
     private readonly WindowSystem _windows;
     private readonly Dictionary<string, ConversationWindow> _open = new(StringComparer.Ordinal);
 
-    public ConversationWindowManager(CordiPlugin plugin, WindowSystem windows)
+    public ConversationWindowManager(
+        CordiPlugin plugin,
+        Configuration.Configuration config,
+        Lazy<Services.Chatbox.ChatboxService> chatbox,
+        WindowSystem windows)
     {
         _plugin = plugin;
+        _config = config;
+        _chatbox = chatbox;
         _windows = windows;
     }
 
-    private ConversationSettings Settings => _plugin.Config.Chatbox.Conversations;
+    private ConversationSettings Settings => _config.Chatbox.Conversations;
 
     public bool IsDetached(ConversationConfig entry) =>
         Settings.Enabled && entry.Open && Settings.OpenInOwnWindow;
@@ -53,7 +61,7 @@ public sealed class ConversationWindowManager : IDisposable
     {
         if (_open.ContainsKey(entry.Id)) return;
 
-        var window = new ConversationWindow(_plugin, entry) { IsOpen = true };
+        var window = new ConversationWindow(_plugin, _config, _chatbox.Value, entry) { IsOpen = true };
 
         _open[entry.Id] = window;
         _windows.AddWindow(window);

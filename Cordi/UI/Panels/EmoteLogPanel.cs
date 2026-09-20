@@ -13,18 +13,20 @@ namespace Cordi.UI.Panels;
 
 public class EmoteLogPanel
 {
-    private readonly CordiPlugin _plugin;
+    private readonly Configuration.Configuration _config;
+    private readonly EmoteLogService _emoteLog;
     private readonly UiTheme _theme;
 
-    public EmoteLogPanel(CordiPlugin plugin, UiTheme theme)
+    public EmoteLogPanel(Configuration.Configuration config, EmoteLogService emoteLog, UiTheme theme)
     {
-        _plugin = plugin;
+        _config = config;
+        _emoteLog = emoteLog;
         _theme = theme;
     }
 
     public void Draw(bool textShadow = false)
     {
-        var logs = _plugin.EmoteLog.Logs;
+        var logs = _emoteLog.Logs;
 
         lock (logs)
         {
@@ -44,7 +46,7 @@ public class EmoteLogPanel
 
                 _theme.ShadowedText(text, textShadow);
 
-                if (_plugin.Config.EmoteLog.ShowReplyButton)
+                if (_config.EmoteLog.ShowReplyButton)
                 {
                     ImGui.SameLine();
                     ImGui.SetCursorPosX(ImGui.GetCursorPosX() + rightAlignPos - ImGui.GetCursorPosX());
@@ -64,7 +66,7 @@ public class EmoteLogPanel
                                 if (!cmd.StartsWith("/")) cmd = "/" + cmd;
                             }
 
-                            _ = _plugin.EmoteLog.PerformEmoteBack(
+                            _ = _emoteLog.PerformEmoteBack(
                                 entry.User,
                                 entry.World,
                                 cmd,

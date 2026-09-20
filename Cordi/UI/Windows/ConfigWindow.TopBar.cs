@@ -44,10 +44,10 @@ public sealed partial class ConfigWindow
 
     private IReadOnlyList<StatChip> BuildStatChips()
     {
-        var stats = plugin.Config.Stats;
+        var stats = config.Stats;
         var chips = new List<StatChip>();
 
-        if (plugin.Config.Chat.Mappings.Count > 0)
+        if (config.Chat.Mappings.Count > 0)
         {
             chips.Add(new StatChip
             {
@@ -58,7 +58,7 @@ public sealed partial class ConfigWindow
             });
         }
 
-        if (plugin.Config.CordiPeep.Enabled)
+        if (config.CordiPeep.Enabled)
         {
             chips.Add(new StatChip
             {
@@ -69,7 +69,7 @@ public sealed partial class ConfigWindow
             });
         }
 
-        if (plugin.Config.EmoteLog.Enabled)
+        if (config.EmoteLog.Enabled)
         {
             chips.Add(new StatChip
             {

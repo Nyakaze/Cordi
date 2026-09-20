@@ -13,13 +13,13 @@ namespace Cordi.Services.Features
 {
     public class ExtraChatService
     {
-        private readonly CordiPlugin _plugin;
+        private readonly Configuration.Configuration _config;
 
         private DateTime _lastSyncTime = DateTime.MinValue;
 
-        public ExtraChatService(CordiPlugin plugin)
+        public ExtraChatService(Configuration.Configuration config)
         {
-            _plugin = plugin;
+            _config = config;
         }
 
         private string GetExtraChatConfigPath()
@@ -85,7 +85,7 @@ namespace Cordi.Services.Features
                 if (charConfig.ChannelOrder == null) return 0;
 
                 int changes = 0;
-                var currentMappings = _plugin.Config.Chat.ExtraChatMappings;
+                var currentMappings = _config.Chat.ExtraChatMappings;
 
                 foreach (var kvp in charConfig.ChannelOrder)
                 {
@@ -167,7 +167,7 @@ namespace Cordi.Services.Features
 
                 if (changes > 0)
                 {
-                    _plugin.Config.Save();
+                    _config.Save();
                 }
 
                 _lastSyncTime = DateTime.Now;

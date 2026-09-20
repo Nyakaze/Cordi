@@ -13,32 +13,44 @@ public sealed class EmoteTitleService : IDisposable
 {
     private const string LogSource = "Activity";
 
-    private readonly CordiPlugin _plugin;
+    private readonly Configuration.Configuration _config;
+    private readonly CordiLogService Log;
+    private readonly ActivityManager _activity;
+    private readonly EmoteLogService _emoteLog;
+    private readonly Domain.LocalPlayerProvider _localPlayer;
     private readonly EmoteCounterStore _counters;
 
     private bool _disposed;
 
-    public EmoteTitleService(CordiPlugin plugin, string configDirectory)
+    public EmoteTitleService(
+        Configuration.Configuration config,
+        CordiLogService log,
+        ActivityManager activity,
+        EmoteLogService emoteLog,
+        Domain.LocalPlayerProvider localPlayer,
+        string configDirectory)
     {
-        _plugin = plugin;
-        _counters = new EmoteCounterStore(configDirectory, plugin.LogService);
+        _config = config;
+        Log = log;
+        _activity = activity;
+        _emoteLog = emoteLog;
+        _localPlayer = localPlayer;
+        _counters = new EmoteCounterStore(configDirectory, log);
         _counters.Load();
 
-        if (plugin.EmoteLog is not null) plugin.EmoteLog.EmoteObserved += OnEmoteObserved;
+        _emoteLog.EmoteObserved += OnEmoteObserved;
     }
 
     public EmoteCounterStore Counters => _counters;
 
-    private EmoteTitleSettings Settings => _plugin.Config.ActivityConfig.EmoteTitles;
-
-    private CordiLogService Log => _plugin.LogService;
+    private EmoteTitleSettings Settings => _config.ActivityConfig.EmoteTitles;
 
     public void OnFrameworkUpdate()
     {
         if (_disposed) return;
 
-        if (_plugin.ActivityManager is { PriorityTitleExpired: true })
-            _plugin.ActivityManager.ReleasePriorityTitle();
+        if (_activity is { PriorityTitleExpired: true })
+            _activity.ReleasePriorityTitle();
 
         _counters.FlushIfDirty();
     }
@@ -55,7 +67,7 @@ public sealed class EmoteTitleService : IDisposable
 
         _disposed = true;
 
-        if (_plugin.EmoteLog is not null) _plugin.EmoteLog.EmoteObserved -= OnEmoteObserved;
+        _emoteLog.EmoteObserved -= OnEmoteObserved;
 
         _counters.FlushIfDirty();
     }
@@ -67,7 +79,7 @@ public sealed class EmoteTitleService : IDisposable
         var settings = Settings;
         if (!settings.Enabled || settings.Rules.Count == 0) return;
 
-        var localPlayer = _plugin.cachedLocalPlayer;
+        var localPlayer = _localPlayer.Character;
         if (localPlayer is null) return;
 
         if (Service.ObjectTable.FirstOrDefault(x => (ulong)x.Address == instigatorAddr) is not IPlayerCharacter instigator)
@@ -119,7 +131,7 @@ public sealed class EmoteTitleService : IDisposable
 
         try
         {
-            _plugin.ActivityManager?.PushPriorityTitle(localPlayer, title, rule, hold);
+            _activity.PushPriorityTitle(localPlayer, title, rule, hold);
         }
         catch (Exception ex)
         {
@@ -182,7 +194,7 @@ public sealed class EmoteTitleService : IDisposable
 
         var rendered = ActivityText.ApplyReplacements(
             ActivityText.CollapseWhitespace(builder.ToString()),
-            _plugin.Config.ActivityConfig.Replacements);
+            _config.ActivityConfig.Replacements);
 
         return ActivityText.Truncate(rendered, DiscordActivityConfig.MaxTitleLength);
     }
@@ -197,6 +209,6 @@ public sealed class EmoteTitleService : IDisposable
         foreach (var id in rule.EmoteIds)
             total += _counters.GetTotal(new EmoteCounterKey(characterId, rule.Direction, id));
 
-        return Render(rule, total, 1, 1, emoteId, _plugin.cachedLocalPlayer?.Name.ToString() ?? "Someone");
+        return Render(rule, total, 1, 1, emoteId, _localPlayer.Character?.Name.ToString() ?? "Someone");
     }
 }

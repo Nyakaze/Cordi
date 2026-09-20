@@ -13,7 +13,9 @@ public sealed class DiscordPresenceWatcher : IDisposable
     private const string LogSource = "Presence";
     private const string SubscriptionName = "Cordi.ActivityManager";
 
-    private readonly CordiPlugin _plugin;
+    private readonly Configuration.Configuration _config;
+    private readonly CordiLogService Log;
+    private readonly ActivityManager _activity;
     private readonly DiscordConnection _connection;
 
     private PresenceTracker? _tracker;
@@ -22,9 +24,11 @@ public sealed class DiscordPresenceWatcher : IDisposable
     private volatile DiscordPresence? _lastDelivered;
     private bool _disposed;
 
-    public DiscordPresenceWatcher(CordiPlugin plugin, DiscordConnection connection)
+    public DiscordPresenceWatcher(Configuration.Configuration config, CordiLogService log, ActivityManager activity, DiscordConnection connection)
     {
-        _plugin = plugin;
+        _config = config;
+        Log = log;
+        _activity = activity;
         _connection = connection;
     }
 
@@ -33,7 +37,7 @@ public sealed class DiscordPresenceWatcher : IDisposable
         if (_disposed) return;
 
         var tracker = _connection.Presences;
-        var targetId = _plugin.Config.ActivityConfig?.TargetUserId ?? 0;
+        var targetId = _config.ActivityConfig?.TargetUserId ?? 0;
 
         if (!ReferenceEquals(tracker, _tracker) || targetId != _watchedUserId)
             Rebind(tracker, targetId);
@@ -64,7 +68,7 @@ public sealed class DiscordPresenceWatcher : IDisposable
         _watchedUserId = targetId;
         _lastDelivered = null;
 
-        _plugin.ActivityManager.ForgetPresence();
+        _activity.ForgetPresence();
 
         if (tracker is null || targetId == 0) return;
 
@@ -77,7 +81,7 @@ public sealed class DiscordPresenceWatcher : IDisposable
     {
         _lastDelivered = e.Presence;
 
-        return _plugin.ActivityManager.OnPresenceUpdated(e);
+        return _activity.OnPresenceUpdated(e);
     }
 
     private void Deliver(DiscordPresence presence, string name)
@@ -87,7 +91,7 @@ public sealed class DiscordPresenceWatcher : IDisposable
         Log.Debug(LogSource,
             $"Picked up cached presence for user {_watchedUserId} with {presence.Activities.Count} activities.");
 
-        _ = _plugin.ActivityManager.OnPresenceUpdated(new PresenceUpdatedEvent(presence, null) { Name = name });
+        _ = _activity.OnPresenceUpdated(new PresenceUpdatedEvent(presence, null) { Name = name });
     }
 
     private void Unbind()
@@ -95,6 +99,4 @@ public sealed class DiscordPresenceWatcher : IDisposable
         _subscription?.Dispose();
         _subscription = null;
     }
-
-    private CordiLogService Log => _plugin.LogService;
 }

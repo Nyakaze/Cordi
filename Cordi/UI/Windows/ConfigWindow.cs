@@ -14,7 +14,10 @@ namespace Cordi.UI.Windows;
 
 public sealed partial class ConfigWindow : Window, IDisposable
 {
-    private readonly CordiPlugin plugin;
+    private readonly Configuration.Configuration config;
+    private readonly Services.Discord.DiscordHandler discord;
+    private readonly Services.Discord.Connection.DiscordConnection connection;
+    private readonly Services.CordiLogService log;
     private readonly UiTheme theme = new UiTheme();
 
     private readonly SidebarNav sidebar;
@@ -37,10 +40,18 @@ public sealed partial class ConfigWindow : Window, IDisposable
 
     private string selectedPageId = PageIds.ChannelMappings;
 
-    public ConfigWindow(CordiPlugin plugin)
+    public ConfigWindow(
+        CordiPlugin plugin,
+        Configuration.Configuration config,
+        Services.Discord.DiscordHandler discord,
+        Services.Discord.Connection.DiscordConnection connection,
+        Services.CordiLogService log)
         : base("Cordi", ImGuiWindowFlags.None)
     {
-        this.plugin = plugin;
+        this.config = config;
+        this.discord = discord;
+        this.connection = connection;
+        this.log = log;
 
         chatsTab = new ChatsTab(plugin, theme);
         activityTab = new ActivityTab(plugin, theme);
@@ -60,8 +71,8 @@ public sealed partial class ConfigWindow : Window, IDisposable
         searchBox = new SearchBox(theme, searchIndex);
         SettingsCatalog.Register(searchIndex);
 
-        UiTheme.GlobalFontScale = plugin.Config.Font.GlobalScale;
-        UiTheme.GlobalFontBold = plugin.Config.Font.Bold;
+        UiTheme.GlobalFontScale = config.Font.GlobalScale;
+        UiTheme.GlobalFontBold = config.Font.Bold;
 
         SizeConstraints = new WindowSizeConstraints
         {

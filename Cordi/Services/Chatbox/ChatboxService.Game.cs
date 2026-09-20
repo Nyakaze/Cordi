@@ -117,9 +117,9 @@ public sealed partial class ChatboxService
 
     private bool AnyChatboxSurfaceOpen()
     {
-        if (_plugin.ChatboxWindow?.IsOpen == true) return true;
+        if (_window.Value?.IsOpen == true) return true;
 
-        var manager = _plugin.ConversationWindows;
+        var manager = _conversationWindows.Value;
         if (manager == null) return false;
 
         foreach (var entry in ConversationSettings.Items)
@@ -270,7 +270,7 @@ public sealed partial class ChatboxService
     }
 
     private void LogGameSoundFailure(UiConfigOption option, Exception ex) =>
-        _plugin.LogService.Log(
+        _log.Log(
             "Chatbox",
             CordiLogLevel.Warning,
             $"Could not change the game chat sound setting {option}",
@@ -280,7 +280,7 @@ public sealed partial class ChatboxService
     {
         if (!Config.Enabled || !Service.ClientState.IsLoggedIn) return;
 
-        var window = _plugin.ChatboxWindow;
+        var window = _window.Value;
         if (window == null) return;
 
         var addon = (AddonChatLog*)Service.GameGui.GetAddonByName("ChatLog").Address;
@@ -376,7 +376,7 @@ public sealed partial class ChatboxService
 
     private bool ShouldClaimChatActivation(out ChatboxWindow window)
     {
-        window = _plugin.ChatboxWindow;
+        window = _window.Value;
 
         return window != null && (window.IsOpen || _gameChatHidden);
     }
@@ -446,7 +446,7 @@ public sealed partial class ChatboxService
 
         if (!SlotsEqual(chat, _chatKeybind) || !SlotsEqual(command, _commandKeybind))
         {
-            _plugin.LogService.Debug(
+            _log.Debug(
                 "Chatbox",
                 $"Chat keybinds: focus={DescribeSlots(chat)} command={DescribeSlots(command)}");
         }

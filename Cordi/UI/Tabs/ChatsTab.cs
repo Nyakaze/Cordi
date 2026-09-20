@@ -19,7 +19,7 @@ public partial class ChatsTab : ConfigTabBase
 
     public ChatsTab(CordiPlugin plugin, UiTheme theme) : base(plugin, theme)
     {
-        extraChatService = new Cordi.Services.Features.ExtraChatService(plugin);
+        extraChatService = new Cordi.Services.Features.ExtraChatService(plugin.Config);
     }
 
     protected override IReadOnlyList<(string Label, Action Draw)> GetSubTabs()

@@ -1,3 +1,5 @@
+using Cordi.Services;
+using Cordi.Services.Discord.Presence;
 using Dalamud.Plugin.Services;
 
 namespace Cordi.Core.Scheduling.Handlers;
@@ -5,16 +7,18 @@ namespace Cordi.Core.Scheduling.Handlers;
 [FrameworkTick]
 public class ActivityManagerTickHandler : IFrameworkTickHandler
 {
-    private readonly CordiPlugin _plugin;
+    private readonly DiscordPresenceWatcher _presence;
+    private readonly ActivityManager _activity;
 
-    public ActivityManagerTickHandler(CordiPlugin plugin)
+    public ActivityManagerTickHandler(DiscordPresenceWatcher presence, ActivityManager activity)
     {
-        _plugin = plugin;
+        _presence = presence;
+        _activity = activity;
     }
 
     public void Tick(IFramework framework)
     {
-        _plugin.PresenceWatcher.Sync();
-        _plugin.ActivityManager.OnFrameworkUpdate(framework);
+        _presence.Sync();
+        _activity.OnFrameworkUpdate(framework);
     }
 }

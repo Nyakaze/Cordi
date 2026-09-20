@@ -9,13 +9,13 @@ namespace Cordi.Services.Discord.Handlers.Reactions;
 [DiscordHandler]
 public class EmoteReactionHandler : IDiscordReactionHandler
 {
-    private readonly CordiPlugin _plugin;
+    private readonly EmoteLogService _emoteLog;
 
-    public EmoteReactionHandler(CordiPlugin plugin)
+    public EmoteReactionHandler(EmoteLogService emoteLog)
     {
-        _plugin = plugin;
+        _emoteLog = emoteLog;
     }
 
     public Task HandleAsync(ReactionAddedEvent e, CancellationToken ct)
-        => _plugin.EmoteLog.DiscordNotifier.OnDiscordReactionAdded(e);
+        => _emoteLog.DiscordNotifier.OnDiscordReactionAdded(e);
 }

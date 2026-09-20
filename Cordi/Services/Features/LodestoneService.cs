@@ -17,7 +17,9 @@ public class LodestoneService : IDisposable
     private const string LogSource = "Lodestone";
     private const int MaxSearchPages = 10;
 
-    private readonly CordiPlugin _plugin;
+    private readonly Configuration.Configuration _config;
+    private readonly CordiLogService Log;
+    private readonly PlayerRegistry _players;
     private readonly SemaphoreSlim _initGate = new(1, 1);
     private readonly Cache<string, string> _avatarCache;
     private readonly Cache<string, int> _gearLevelCache;
@@ -26,16 +28,23 @@ public class LodestoneService : IDisposable
 
     private LodestoneClient? _lodestone;
 
-    public LodestoneService(CordiPlugin plugin, string configDirectory)
+    public LodestoneService(
+        Configuration.Configuration config,
+        CordiLogService log,
+        ICacheRegistry caches,
+        PlayerRegistry players,
+        string configDirectory)
     {
-        _plugin = plugin;
-        _avatarCache = new Cache<string, string>("lodestone.avatars", plugin.CacheRegistry,
+        _config = config;
+        Log = log;
+        _players = players;
+        _avatarCache = new Cache<string, string>("lodestone.avatars", caches,
             maxSize: 500, ttl: TimeSpan.FromHours(6));
-        _gearLevelCache = new Cache<string, int>("lodestone.gearLevels", plugin.CacheRegistry,
+        _gearLevelCache = new Cache<string, int>("lodestone.gearLevels", caches,
             maxSize: 200, ttl: TimeSpan.FromHours(1));
-        _notFound = new Cache<string, byte>("lodestone.notFound", plugin.CacheRegistry,
+        _notFound = new Cache<string, byte>("lodestone.notFound", caches,
             maxSize: 500, ttl: TimeSpan.FromHours(1));
-        _ids = new LodestoneIdStore(configDirectory, plugin.LogService);
+        _ids = new LodestoneIdStore(configDirectory, log);
     }
 
     public LodestoneIdStore Ids => _ids;
@@ -43,8 +52,6 @@ public class LodestoneService : IDisposable
     public IReadOnlyCollection<string> AvatarCacheKeys => _avatarCache.Keys;
 
     public bool TryGetAvatar(string key, out string url) => _avatarCache.TryGet(key, out url);
-
-    private CordiLogService Log => _plugin.LogService;
 
     public async Task InitializeAsync()
     {
@@ -56,11 +63,11 @@ public class LodestoneService : IDisposable
         {
             if (_lodestone != null) return;
 
-            var migrating = _plugin.Config.Lodestone.CharacterIdCache.Count > 0;
+            var migrating = _config.Lodestone.CharacterIdCache.Count > 0;
 
-            _ids.Load(_plugin.Config.Lodestone.CharacterIdCache);
+            _ids.Load(_config.Lodestone.CharacterIdCache);
 
-            if (migrating) _plugin.Config.Save();
+            if (migrating) _config.Save();
 
             _lodestone = await LodestoneClient.GetClientAsync();
 
@@ -88,7 +95,7 @@ public class LodestoneService : IDisposable
             return cached;
         }
 
-        if (_plugin.Config.Chat.CustomAvatars.TryGetValue(key, out var custom) && !string.IsNullOrEmpty(custom))
+        if (_config.Chat.CustomAvatars.TryGetValue(key, out var custom) && !string.IsNullOrEmpty(custom))
         {
             _avatarCache.Set(key, custom);
             player.AvatarUrl = custom;
@@ -250,7 +257,7 @@ public class LodestoneService : IDisposable
 
         var parts = key.Split('@', 2);
 
-        if (parts.Length == 2 && _plugin.Players.TryGet(parts[0], parts[1], out var player))
+        if (parts.Length == 2 && _players.TryGet(parts[0], parts[1], out var player))
             player.AvatarUrl = url;
     }
 

@@ -44,11 +44,11 @@ public sealed partial class ChatboxService
 
             _chatLogRefreshHook.Enable();
 
-            _plugin.LogService.Debug("Chatbox", "Hooked the game chat activation");
+            _log.Debug("Chatbox", "Hooked the game chat activation");
         }
         catch (Exception ex)
         {
-            _plugin.LogService.Log(
+            _log.Log(
                 "Chatbox",
                 CordiLogLevel.Warning,
                 "Could not hook the game chat activation, falling back to keybind polling",
@@ -64,7 +64,7 @@ public sealed partial class ChatboxService
         }
         catch (Exception ex)
         {
-            _plugin.LogService.Log("Chatbox", CordiLogLevel.Warning, "Game chat activation handler failed", ex);
+            _log.Log("Chatbox", CordiLogLevel.Warning, "Game chat activation handler failed", ex);
         }
 
         return _chatLogRefreshHook!.Original(addon, valueCount, values);
@@ -82,7 +82,7 @@ public sealed partial class ChatboxService
 
         var prefill = ReadActivationText(values + 2) ?? (CommandKeybindDown ? "/" : null);
 
-        _plugin.LogService.Debug("Chatbox", $"Game chat activation {values->UInt:X2} prefill '{prefill}'");
+        _log.Debug("Chatbox", $"Game chat activation {values->UInt:X2} prefill '{prefill}'");
 
         RequestInputFocus = true;
         PendingInputText = prefill;

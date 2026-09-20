@@ -13,9 +13,9 @@ namespace Cordi.Services.Discord;
 public class AdvertisementFilterService
 {
     private static readonly IPluginLog Logger = Service.Log;
-    private CordiLogService Log => _plugin.LogService;
     private const string LogSource = "AdFilter";
-    private readonly CordiPlugin _plugin;
+    private readonly Configuration.Configuration _config;
+    private readonly CordiLogService Log;
     private readonly DiscordWebhookService _webhooks;
 
     private readonly ConcurrentDictionary<string, List<(string Content, DateTime Timestamp, ulong MessageId)>> _messageBuffer = new();
@@ -25,9 +25,10 @@ public class AdvertisementFilterService
     private const int PreviewWindowSeconds = 5;
     private const int PreviewBufferSenderCap = 256;
 
-    public AdvertisementFilterService(CordiPlugin plugin, DiscordWebhookService webhooks)
+    public AdvertisementFilterService(Configuration.Configuration config, CordiLogService log, DiscordWebhookService webhooks)
     {
-        _plugin = plugin;
+        _config = config;
+        Log = log;
         _webhooks = webhooks;
     }
 
@@ -66,7 +67,7 @@ public class AdvertisementFilterService
             combinedMessage = string.Join(" ", recentContent);
         }
 
-        bool checkAd(string content) => AdvertisementFilter.IsAdvertisement(content, _plugin.Config.AdvertisementFilter);
+        bool checkAd(string content) => AdvertisementFilter.IsAdvertisement(content, _config.AdvertisementFilter);
 
         isAd = checkAd(sanitizedContent);
 
@@ -144,10 +145,10 @@ public class AdvertisementFilterService
     }
 
     private bool Score(string content) =>
-        AdvertisementFilter.IsAdvertisement(content, _plugin.Config.AdvertisementFilter);
+        AdvertisementFilter.IsAdvertisement(content, _config.AdvertisementFilter);
 
     public FilterEvaluation Evaluate(string content) =>
-        AdvertisementFilter.Evaluate(content, _plugin.Config.AdvertisementFilter);
+        AdvertisementFilter.Evaluate(content, _config.AdvertisementFilter);
 
     public void AddMessageToBuffer(Player sender, string sanitizedContent, ulong sentMessageId, bool channelFilterEnabled)
     {

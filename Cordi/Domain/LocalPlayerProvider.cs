@@ -1,4 +1,5 @@
 ﻿using System;
+using Dalamud.Game.ClientState.Objects.SubKinds;
 using Dalamud.Plugin.Services;
 
 namespace Cordi.Domain;
@@ -8,6 +9,8 @@ public class LocalPlayerProvider : IDisposable
     private bool _disposed;
 
     public LocalPlayer? Current { get; private set; }
+
+    public IPlayerCharacter? Character { get; private set; }
 
     public event Action<LocalPlayer>? OnLogin;
     public event Action? OnLogout;
@@ -22,6 +25,8 @@ public class LocalPlayerProvider : IDisposable
         if (_disposed) return;
 
         var lp = Service.ObjectTable.LocalPlayer;
+
+        Character = lp;
 
         if (lp == null)
         {
@@ -45,6 +50,8 @@ public class LocalPlayerProvider : IDisposable
 
     private void HandleLogout(int type, int code)
     {
+        Character = null;
+
         if (Current != null)
         {
             Current = null;
@@ -58,5 +65,6 @@ public class LocalPlayerProvider : IDisposable
         _disposed = true;
         Service.ClientState.Logout -= HandleLogout;
         Current = null;
+        Character = null;
     }
 }

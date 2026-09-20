@@ -63,7 +63,7 @@ public sealed partial class ChatboxService
         }
         catch (Exception ex)
         {
-            _plugin.LogService.Log(
+            _log.Log(
                 "Chatbox",
                 CordiLogLevel.Warning,
                 "Could not hook the game tell target, Send Tell keeps using the game chat",
@@ -87,7 +87,7 @@ public sealed partial class ChatboxService
         }
         catch (Exception ex)
         {
-            _plugin.LogService.Log("Chatbox", CordiLogLevel.Warning, "Send Tell handler failed", ex);
+            _log.Log("Chatbox", CordiLogLevel.Warning, "Send Tell handler failed", ex);
         }
 
         return _tellTargetHook!.Original(module, playerName, worldName, worldId, accountId, contentId, reason, setChatType);
@@ -97,7 +97,7 @@ public sealed partial class ChatboxService
     {
         if (_disposed || !Config.Enabled || playerName == null) return false;
 
-        var window = _plugin.ChatboxWindow;
+        var window = _window.Value;
         if (window == null) return false;
 
         var name = playerName->ToString().Trim();
@@ -149,7 +149,7 @@ public sealed partial class ChatboxService
         }
         catch (Exception ex)
         {
-            _plugin.LogService.Error("Chatbox", "Failed to build the player context menu entry.", ex);
+            _log.Error("Chatbox", "Failed to build the player context menu entry.", ex);
         }
     }
 
@@ -206,7 +206,7 @@ public sealed partial class ChatboxService
 
     private bool IsLocalPlayer(string name, string world)
     {
-        var local = _plugin.cachedLocalPlayer;
+        var local = _localPlayer.Character;
         if (local == null) return false;
 
         if (!string.Equals(local.Name.TextValue, name, StringComparison.Ordinal)) return false;

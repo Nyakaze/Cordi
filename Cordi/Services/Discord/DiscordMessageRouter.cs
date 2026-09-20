@@ -13,22 +13,33 @@ public class DiscordMessageRouter
     private const string LogSource = "Relay";
     private const int MaxRelayLength = 400;
 
-    private readonly CordiPlugin _plugin;
+    private readonly Configuration.Configuration _config;
+    private readonly CordiLogService Log;
+    private readonly Emojis.EmojiTranslator _emoji;
+    private readonly Packets.Handler.Chat.ChatMessenger _chat;
+    private readonly Lazy<Chatbox.ChatboxService> _chatbox;
 
-    public DiscordMessageRouter(CordiPlugin plugin)
+    public DiscordMessageRouter(
+        Configuration.Configuration config,
+        CordiLogService log,
+        Emojis.EmojiTranslator emoji,
+        Packets.Handler.Chat.ChatMessenger chat,
+        Lazy<Chatbox.ChatboxService> chatbox)
     {
-        _plugin = plugin;
+        _config = config;
+        Log = log;
+        _emoji = emoji;
+        _chat = chat;
+        _chatbox = chatbox;
     }
-
-    private CordiLogService Log => _plugin.LogService;
 
     private string ParseForGame(DiscordMessage message, bool translateEmoji)
     {
         var content = message.Content;
-        _plugin.Chatbox?.RegisterEmotes(content);
+        _chatbox.Value.RegisterEmotes(content);
 
         var parsed = translateEmoji
-            ? _plugin.Emoji.ToGame(content, _plugin.Config.Chatbox.RelayEmotesAsUrls)
+            ? _emoji.ToGame(content, _config.Chatbox.RelayEmotesAsUrls)
             : content ?? string.Empty;
 
         return AppendAttachments(parsed, message.Attachments);
@@ -57,7 +68,7 @@ public class DiscordMessageRouter
 
     public Task<bool> RouteExtraChatMessage(DiscordMessage message, ulong channelId)
     {
-        var extraChatMapping = _plugin.Config.Chat.ExtraChatMappings.FirstOrDefault(x => x.Value.DiscordChannelId == channelId.ToString());
+        var extraChatMapping = _config.Chat.ExtraChatMappings.FirstOrDefault(x => x.Value.DiscordChannelId == channelId.ToString());
 
         if (string.IsNullOrEmpty(extraChatMapping.Key))
             return Task.FromResult(false);
@@ -73,32 +84,32 @@ public class DiscordMessageRouter
 
         return RelayAsync(message, true,
             content => Service.Framework.RunOnFrameworkThread(
-                () => _plugin._chat.SendMessage($"/ecl{connection.ExtraChatNumber} {content}")),
+                () => _chat.SendMessage($"/ecl{connection.ExtraChatNumber} {content}")),
             content => $"Forwarded to ExtraChat {connection.ExtraChatNumber} ({label}): {content}",
             () => $"Failed to forward message to ExtraChat {label}");
     }
 
     public Task<bool> RouteStandardMessage(DiscordMessage message, ulong channelId)
     {
-        var mapping = _plugin.Config.Chat.Mappings.FirstOrDefault(m => m.DiscordChannelId == channelId.ToString());
+        var mapping = _config.Chat.Mappings.FirstOrDefault(m => m.DiscordChannelId == channelId.ToString());
         if (mapping == null) return Task.FromResult(false);
 
         return RelayAsync(message, mapping.TranslateEmoji,
-            content => _plugin._chat.SendAsync(mapping.GameChatType, content),
+            content => _chat.SendAsync(mapping.GameChatType, content),
             content => $"Forwarded to {mapping.GameChatType}: {content}",
             () => $"Failed to forward message to {mapping.GameChatType}");
     }
 
     public Task<bool> RouteTellMessage(DiscordMessage message, ulong channelId)
     {
-        var tellTarget = _plugin.Config.Chat.TellThreadMappings.FirstOrDefault(x => x.Value == channelId.ToString()).Key;
+        var tellTarget = _config.Chat.TellThreadMappings.FirstOrDefault(x => x.Value == channelId.ToString()).Key;
         if (string.IsNullOrEmpty(tellTarget)) return Task.FromResult(false);
 
-        var mapping = _plugin.Config.Chat.Mappings
+        var mapping = _config.Chat.Mappings
             .FirstOrDefault(m => m.GameChatType == Dalamud.Game.Text.XivChatType.TellIncoming);
 
         return RelayAsync(message, mapping?.TranslateEmoji ?? true,
-            content => _plugin._chat.SendTellAsync(tellTarget, content),
+            content => _chat.SendTellAsync(tellTarget, content),
             content => $"Forwarded tell reply to {tellTarget}: {content}",
             () => $"Failed to forward tell reply to {tellTarget}");
     }

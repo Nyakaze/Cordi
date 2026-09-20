@@ -17,7 +17,7 @@ public class DiscordSendQueue : IDisposable
         TimeSpan.FromSeconds(8),
     };
 
-    private readonly CordiPlugin _plugin;
+    private readonly CordiLogService Log;
     private readonly int _maxPending;
     private readonly ConcurrentQueue<DiscordSendOperation> _queue = new();
     private readonly SemaphoreSlim _signal = new(0);
@@ -39,12 +39,11 @@ public class DiscordSendQueue : IDisposable
     public int Capacity => _maxPending;
     public DateTime CreatedAt { get; } = DateTime.UtcNow;
 
-    private CordiLogService Log => _plugin.LogService;
     private const string LogSource = "DiscordQueue";
 
-    public DiscordSendQueue(CordiPlugin plugin, int maxPending = MaxPendingDefault)
+    public DiscordSendQueue(CordiLogService log, int maxPending = MaxPendingDefault)
     {
-        _plugin = plugin;
+        Log = log;
         _maxPending = maxPending;
     }
 

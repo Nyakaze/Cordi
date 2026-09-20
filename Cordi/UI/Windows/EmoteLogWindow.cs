@@ -11,13 +11,14 @@ namespace Cordi.UI.Windows;
 
 public class EmoteLogWindow : ThemedWindow, IDisposable
 {
-    private readonly CordiPlugin _plugin;
+    private readonly Configuration.Configuration _config;
     private readonly EmoteLogPanel _panel;
 
-    public EmoteLogWindow(CordiPlugin plugin) : base("Emote Log##CordiEmoteLog", ImGuiWindowFlags.None)
+    public EmoteLogWindow(Configuration.Configuration config, Services.EmoteLogService emoteLog)
+        : base("Emote Log##CordiEmoteLog", ImGuiWindowFlags.None)
     {
-        _plugin = plugin;
-        _panel = new EmoteLogPanel(plugin, _theme);
+        _config = config;
+        _panel = new EmoteLogPanel(config, emoteLog, _theme);
 
         this.SizeConstraints = new WindowSizeConstraints
         {
@@ -25,18 +26,18 @@ public class EmoteLogWindow : ThemedWindow, IDisposable
         };
     }
 
-    protected override IWindowChromeConfig Chrome => _plugin.Config.EmoteLog;
+    protected override IWindowChromeConfig Chrome => _config.EmoteLog;
 
     public override void Draw()
     {
         _theme.ApplyFontScale();
-        if (!_plugin.Config.EmoteLog.WindowEnabled)
+        if (!_config.EmoteLog.WindowEnabled)
         {
             IsOpen = false;
             return;
         }
 
-        _panel.Draw(_plugin.Config.EmoteLog.TextShadow);
+        _panel.Draw(_config.EmoteLog.TextShadow);
     }
 
     public void Dispose()

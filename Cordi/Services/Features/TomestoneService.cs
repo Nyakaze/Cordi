@@ -27,7 +27,7 @@ public record RaidActivity(
 public class TomestoneService : IDisposable
 {
     private static readonly IPluginLog Logger = Service.Log;
-    private readonly CordiPlugin _plugin;
+    private readonly LodestoneService _lodestone;
     private readonly HttpClient _httpClient;
     private readonly Cache<string, GearInfo> _gearLevelCache;
     private readonly Cache<string, RaidActivity> _raidActivityCache;
@@ -58,12 +58,12 @@ public class TomestoneService : IDisposable
         ["BLU"] = "BlueMage"
     };
 
-    public TomestoneService(CordiPlugin plugin)
+    public TomestoneService(ICacheRegistry caches, LodestoneService lodestone)
     {
-        _plugin = plugin;
-        _gearLevelCache = new Cache<string, GearInfo>("tomestone.gearLevels", plugin.CacheRegistry,
+        _lodestone = lodestone;
+        _gearLevelCache = new Cache<string, GearInfo>("tomestone.gearLevels", caches,
             maxSize: 200, ttl: TimeSpan.FromHours(1));
-        _raidActivityCache = new Cache<string, RaidActivity>("tomestone.raidActivity", plugin.CacheRegistry,
+        _raidActivityCache = new Cache<string, RaidActivity>("tomestone.raidActivity", caches,
             maxSize: 200, ttl: TimeSpan.FromHours(2));
         _httpClient = new HttpClient
         {
@@ -102,7 +102,7 @@ public class TomestoneService : IDisposable
             }
 
             Logger.Debug($"Tomestone.gg unavailable for {name}@{world}, trying Lodestone");
-            var lodestoneLevel = await _plugin.Lodestone.GetAverageItemLevelAsync(
+            var lodestoneLevel = await _lodestone.GetAverageItemLevelAsync(
                 Player.FromNameWorld(name, world));
             if (lodestoneLevel > 0)
             {
@@ -122,7 +122,7 @@ public class TomestoneService : IDisposable
 
     private async Task<GearInfo> GetItemLevelFromTomestoneAsync(string name, string world, string? classJob)
     {
-        var lodestoneId = _plugin.Lodestone.PeekLodestoneId(Player.FromNameWorld(name, world));
+        var lodestoneId = _lodestone.PeekLodestoneId(Player.FromNameWorld(name, world));
 
         if (string.IsNullOrEmpty(lodestoneId))
         {

@@ -1,69 +1,76 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using Cordi.Core;
 using Cordi.Domain;
-using Dalamud.Plugin.Services;
 
 namespace Cordi.Services.Features;
 
 public class PartyDiscordNotifier
 {
-    private readonly CordiPlugin _plugin;
-    private readonly IPluginLog _logger;
+    private readonly Configuration.Configuration _config;
+    private readonly Discord.DiscordHandler _discord;
+    private readonly Discord.DiscordEmbedFactory _embeds;
+    private readonly LodestoneService _lodestone;
 
-    public PartyDiscordNotifier(CordiPlugin plugin)
+    public PartyDiscordNotifier(
+        Configuration.Configuration config,
+        Discord.DiscordHandler discord,
+        Discord.DiscordEmbedFactory embeds,
+        LodestoneService lodestone)
     {
-        _plugin = plugin;
-        _logger = Service.Log;
+        _config = config;
+        _discord = discord;
+        _embeds = embeds;
+        _lodestone = lodestone;
     }
 
     public async Task<ulong> SendNotificationAsync(string title, string description, int color, Player? character = null)
     {
-        if (!_plugin.Config.Party.DiscordEnabled) return 0;
+        if (!_config.Party.DiscordEnabled) return 0;
 
-        var channelIdStr = _plugin.Config.Party.DiscordChannelId;
+        var channelIdStr = _config.Party.DiscordChannelId;
         if (!ulong.TryParse(channelIdStr, out var channelId)) return 0;
 
         string? avatarUrl = null;
         if (character is not null)
         {
-            avatarUrl = await _plugin.Lodestone.GetAvatarUrlAsync(character);
+            avatarUrl = await _lodestone.GetAvatarUrlAsync(character);
         }
 
-        var embedBuilder = _plugin.EmbedFactory.CreateEmbedBuilder(title, description, color, avatarUrl);
+        var embedBuilder = _embeds.CreateEmbedBuilder(title, description, color, avatarUrl);
 
         var username = character?.FullName ?? "Party Notification";
 
-        return await _plugin.Discord.SendWebhookMessageRaw(channelId, embedBuilder.Build(), username, avatarUrl);
+        return await _discord.SendWebhookMessageRaw(channelId, embedBuilder.Build(), username, avatarUrl);
     }
 
     public async Task<ulong> SendSummaryAsync(string title, string description, int color,
         IReadOnlyList<(string Name, string Value)> fields, string username)
     {
-        if (!_plugin.Config.Party.DiscordEnabled) return 0;
+        if (!_config.Party.DiscordEnabled) return 0;
 
-        var channelIdStr = _plugin.Config.Party.DiscordChannelId;
+        var channelIdStr = _config.Party.DiscordChannelId;
         if (!ulong.TryParse(channelIdStr, out var channelId)) return 0;
 
-        var embedBuilder = _plugin.EmbedFactory.CreateEmbedBuilder(title, description, color);
+        var embedBuilder = _embeds.CreateEmbedBuilder(title, description, color);
 
         foreach (var field in fields)
             embedBuilder.AddField(field.Name, field.Value, inline: true);
 
-        return await _plugin.Discord.SendWebhookMessageRaw(channelId, embedBuilder.Build(), username, null);
+        return await _discord.SendWebhookMessageRaw(channelId, embedBuilder.Build(), username, null);
     }
 
     public async Task UpdateNotificationAsync(ulong msgId, string title, string description, int color, Player? character = null)
     {
-        if (!_plugin.Config.Party.DiscordEnabled) return;
+        if (!_config.Party.DiscordEnabled) return;
 
-        var channelIdStr = _plugin.Config.Party.DiscordChannelId;
+        var channelIdStr = _config.Party.DiscordChannelId;
         if (!ulong.TryParse(channelIdStr, out var channelId)) return;
 
-        var embedBuilder = await _plugin.EmbedFactory.CreatePlayerEmbedBuilderAsync(title, description, color, character);
+        var embedBuilder = await _embeds.CreatePlayerEmbedBuilderAsync(title, description, color, character);
 
-        await _plugin.Discord.EditWebhookMessage(channelId, msgId, embedBuilder.Build());
+        await _discord.EditWebhookMessage(channelId, msgId, embedBuilder.Build());
     }
 
     public static string CleanRaidName(string name)

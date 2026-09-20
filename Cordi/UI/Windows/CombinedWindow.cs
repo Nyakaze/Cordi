@@ -11,17 +11,20 @@ namespace Cordi.UI.Windows;
 
 public class CombinedWindow : ThemedWindow
 {
-    private readonly CordiPlugin _plugin;
+    private readonly Configuration.Configuration _config;
     private readonly EmoteLogPanel _emoteLogPanel;
     private readonly CordiPeepPanel _peepPanel;
 
-    public CombinedWindow(CordiPlugin plugin) : base(
+    public CombinedWindow(
+        Configuration.Configuration config,
+        Services.EmoteLogService emoteLog,
+        Services.CordiPeepService peeper) : base(
         "Emote Log & Peeper###CordiCombo",
         ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse)
     {
-        _plugin = plugin;
-        _emoteLogPanel = new EmoteLogPanel(plugin, _theme);
-        _peepPanel = new CordiPeepPanel(plugin, _theme);
+        _config = config;
+        _emoteLogPanel = new EmoteLogPanel(config, emoteLog, _theme);
+        _peepPanel = new CordiPeepPanel(config, peeper, _theme);
 
         this.SizeConstraints = new WindowSizeConstraints
         {
@@ -29,12 +32,12 @@ public class CombinedWindow : ThemedWindow
         };
     }
 
-    protected override IWindowChromeConfig Chrome => _plugin.Config.CombinedWindow;
+    protected override IWindowChromeConfig Chrome => _config.CombinedWindow;
 
     public override void Draw()
     {
         _theme.ApplyFontScale();
-        var cfg = _plugin.Config.CombinedWindow;
+        var cfg = _config.CombinedWindow;
         var swap = cfg.SwapPanels;
 
         var tableBorder = _theme.WindowBorder;

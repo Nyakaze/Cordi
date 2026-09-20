@@ -15,7 +15,9 @@ namespace Cordi.Services
         private const string LogSource = "Activity";
         private const double RefreshIntervalSeconds = 1.0;
 
-        private readonly CordiPlugin _plugin;
+        private readonly Configuration.Configuration _config;
+        private readonly CordiLogService Log;
+        private readonly Domain.LocalPlayerProvider _localPlayer;
         private readonly ActivityCycler _cycler = new();
         private readonly ActivityTitleBroadcaster _broadcaster;
 
@@ -37,9 +39,15 @@ namespace Cordi.Services
 
         public int CurrentCycleIndex => _cycler.Index;
 
-        public ActivityManager(CordiPlugin plugin, HonorificBridge honorific)
+        public ActivityManager(
+            Configuration.Configuration config,
+            CordiLogService log,
+            Domain.LocalPlayerProvider localPlayer,
+            HonorificBridge honorific)
         {
-            _plugin = plugin;
+            _config = config;
+            Log = log;
+            _localPlayer = localPlayer;
             _broadcaster = new ActivityTitleBroadcaster(honorific);
 
             Log.Info(LogSource, "Initialized and listening for presence updates.");
@@ -97,7 +105,7 @@ namespace Cordi.Services
 
         public void ReleasePriorityTitle()
         {
-            _broadcaster.ReleasePriority(_plugin.cachedLocalPlayer);
+            _broadcaster.ReleasePriority(_localPlayer.Character);
 
             if (_disposed) return;
 
@@ -130,7 +138,7 @@ namespace Cordi.Services
 
         private void ProcessPresence(bool quiet)
         {
-            var config = _plugin.Config.ActivityConfig;
+            var config = _config.ActivityConfig;
 
             if (config is null)
             {
@@ -167,7 +175,7 @@ namespace Cordi.Services
                 title = ActivityText.Truncate(title, DiscordActivityConfig.MaxTitleLength);
             }
 
-            var player = _plugin.cachedLocalPlayer;
+            var player = _localPlayer.Character;
 
             if (player is null)
             {
@@ -197,20 +205,18 @@ namespace Cordi.Services
             _lastCandidate = null;
 
             _cycler.Reset();
-            _broadcaster.Clear(_plugin.cachedLocalPlayer);
+            _broadcaster.Clear(_localPlayer.Character);
 
             Log.Debug(LogSource, "Title cleared.", mute: quiet);
         }
 
         private bool IsCustomAlwaysOn()
         {
-            var config = _plugin.Config.ActivityConfig;
+            var config = _config.ActivityConfig;
 
             if (config is null) return false;
 
             return config.EnabledTypes().Includes(ActivityType.Custom);
         }
-
-        private CordiLogService Log => _plugin.LogService;
     }
 }

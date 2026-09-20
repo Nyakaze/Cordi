@@ -6,12 +6,12 @@ namespace Cordi.Core.Scheduling.Handlers;
 [FrameworkTick(IntervalSeconds = PartyService.TickIntervalSeconds, RequiresLogin = true)]
 public class PartyServiceTickHandler : IFrameworkTickHandler
 {
-    private readonly CordiPlugin _plugin;
+    private readonly PartyService _party;
 
-    public PartyServiceTickHandler(CordiPlugin plugin)
+    public PartyServiceTickHandler(PartyService party)
     {
-        _plugin = plugin;
+        _party = party;
     }
 
-    public void Tick(IFramework framework) => _plugin.PartyService.OnFrameworkUpdate(framework);
+    public void Tick(IFramework framework) => _party.OnFrameworkUpdate(framework);
 }

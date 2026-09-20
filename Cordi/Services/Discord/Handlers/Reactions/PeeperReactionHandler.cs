@@ -9,13 +9,13 @@ namespace Cordi.Services.Discord.Handlers.Reactions;
 [DiscordHandler]
 public class PeeperReactionHandler : IDiscordReactionHandler
 {
-    private readonly CordiPlugin _plugin;
+    private readonly CordiPeepService _peeper;
 
-    public PeeperReactionHandler(CordiPlugin plugin)
+    public PeeperReactionHandler(CordiPeepService peeper)
     {
-        _plugin = plugin;
+        _peeper = peeper;
     }
 
     public Task HandleAsync(ReactionAddedEvent e, CancellationToken ct)
-        => _plugin.CordiPeep.OnDiscordReactionAdded(e);
+        => _peeper.OnDiscordReactionAdded(e);
 }

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
@@ -17,7 +17,11 @@ namespace Cordi.Services.Features;
 
 public class PartyService : IDisposable
 {
-    private readonly CordiPlugin plugin;
+    private readonly Configuration.Configuration _config;
+    private readonly CordiLogService Log;
+    private readonly LodestoneService _lodestone;
+    private readonly TomestoneService _tomestone;
+    private readonly RememberMeService _rememberMe;
     private readonly NotificationManager notificationService;
     private readonly PartyDiscordNotifier _discordNotifier;
     private readonly HashSet<ulong> currentPartyMembers = new();
@@ -33,19 +37,29 @@ public class PartyService : IDisposable
     private List<PartyMemberInfo> _partyMembers = new();
     public IReadOnlyList<PartyMemberInfo> PartyMembers => _partyMembers;
 
-    private CordiLogService Log => plugin.LogService;
     private const string LogSource = "Party";
 
-    public PartyService(CordiPlugin plugin, NotificationManager notificationService)
+    public PartyService(
+        Configuration.Configuration config,
+        CordiLogService log,
+        LodestoneService lodestone,
+        TomestoneService tomestone,
+        RememberMeService rememberMe,
+        NotificationManager notificationService,
+        PartyDiscordNotifier discordNotifier)
     {
-        this.plugin = plugin;
+        _config = config;
+        Log = log;
+        _lodestone = lodestone;
+        _tomestone = tomestone;
+        _rememberMe = rememberMe;
         this.notificationService = notificationService;
-        _discordNotifier = new PartyDiscordNotifier(plugin);
+        _discordNotifier = discordNotifier;
     }
 
     public void OnFrameworkUpdate(IFramework framework)
     {
-        if (!plugin.Config.Party.Enabled)
+        if (!_config.Party.Enabled)
         {
             if (currentPartyMembers.Count > 0) currentPartyMembers.Clear();
             if (_partyMembers.Count > 0) _partyMembers.Clear();
@@ -120,7 +134,7 @@ public class PartyService : IDisposable
 
 
         // Exclude Alliance Config Check
-        if (plugin.Config.Party.ExcludeAlliance && partyList.IsAlliance)
+        if (_config.Party.ExcludeAlliance && partyList.IsAlliance)
         {
             if (currentPartyMembers.Count > 0) currentPartyMembers.Clear();
             if (_partyMembers.Count > 0) _partyMembers.Clear();
@@ -196,12 +210,12 @@ public class PartyService : IDisposable
         if (currentPartyMembers.Count < 8 && newMembers.Count == 8)
         {
             Log.Info(LogSource, "Party is full (8/8)");
-            if (plugin.Config.Party.NotifyFull)
+            if (_config.Party.NotifyFull)
             {
                 _ = SendDiscordNotificationAsync("Party Full", "The party is now full (8/8)!", 0x7289DA);
             }
 
-            if (plugin.Config.Party.AutoSendSummary)
+            if (_config.Party.AutoSendSummary)
             {
                 _ = SendPartySummary();
             }
@@ -230,9 +244,9 @@ public class PartyService : IDisposable
     {
         try
         {
-            if (!plugin.Config.Party.NotifyJoin) return;
+            if (!_config.Party.NotifyJoin) return;
 
-            if (!plugin.Config.Party.IncludeSelf)
+            if (!_config.Party.IncludeSelf)
             {
                 var localPlayer = Service.ObjectTable.LocalPlayer;
                 if (localPlayer != null && name == localPlayer.Name.TextValue && (world == "Unknown" || world == localPlayer.HomeWorld.Value.Name.ToString()))
@@ -251,7 +265,7 @@ public class PartyService : IDisposable
             var message = $"**{name}@{world}** has joined the party. ({count}/8)";
             var msgId = await SendDiscordNotificationAsync("Party Join", message, 0x00FF00, Player.FromNameWorld(name, world));
 
-            if (plugin.Config.Party.ShowGearLevel && msgId > 0)
+            if (_config.Party.ShowGearLevel && msgId > 0)
             {
                 // Wait up to 10 seconds for data to be fetched
                 var member = _partyMembers.FirstOrDefault(m => m.Name == name && m.World == world);
@@ -259,7 +273,7 @@ public class PartyService : IDisposable
                 while (attempts < 20 && member != null)
                 {
                     bool hasILvl = member.ItemLevel != null;
-                    bool needRaid = plugin.Config.Party.ShowSavageProgress;
+                    bool needRaid = _config.Party.ShowSavageProgress;
                     bool hasRaid = member.RaidActivity != null;
 
                     if (hasILvl && (!needRaid || hasRaid)) break;
@@ -272,7 +286,7 @@ public class PartyService : IDisposable
                 {
                     var updatedMessage = message + $"\nItem Level: [{classJobAbbr}] {member.ItemLevel}";
 
-                    if (plugin.Config.Party.ShowSavageProgress)
+                    if (_config.Party.ShowSavageProgress)
                     {
                         updatedMessage += "\n\n**Savage Progress:**";
 
@@ -303,9 +317,9 @@ public class PartyService : IDisposable
                         }
                     }
 
-                    if (plugin.Config.RememberMe.Enabled)
+                    if (_config.RememberMe.Enabled)
                     {
-                        var rememberedPlayer = plugin.RememberMe.FindPlayer(name, world);
+                        var rememberedPlayer = _rememberMe.FindPlayer(name, world);
                         if (rememberedPlayer != null && !string.IsNullOrWhiteSpace(rememberedPlayer.Notes))
                         {
                             updatedMessage += $"\n\n**Note:** {rememberedPlayer.Notes}";
@@ -339,20 +353,20 @@ public class PartyService : IDisposable
             var classJob = classJobSheet?.GetRow(member.JobId);
             var classJobAbbr = classJob?.Abbreviation.ToString() ?? string.Empty;
 
-            var gearInfo = await plugin.Tomestone.GetAverageItemLevelAsync(member.Name, member.World, classJobAbbr);
+            var gearInfo = await _tomestone.GetAverageItemLevelAsync(member.Name, member.World, classJobAbbr);
             member.ItemLevel = gearInfo.ItemLevel;
             member.LastUpdated = DateTime.Now;
 
             var memberPlayer = Player.FromNameWorld(member.Name, member.World);
 
-            if (plugin.Config.Party.ShowSavageProgress)
+            if (_config.Party.ShowSavageProgress)
             {
-                var lodestoneId = plugin.Lodestone.PeekLodestoneId(memberPlayer);
+                var lodestoneId = _lodestone.PeekLodestoneId(memberPlayer);
                 if (!string.IsNullOrEmpty(lodestoneId))
                 {
                     member.LodestoneId = lodestoneId;
                     var slug = member.Name.ToLower().Replace(" ", "-").Replace("'", "");
-                    var raidActivity = await plugin.Tomestone.GetRaidActivityAsync(member.Name, member.World, lodestoneId, slug);
+                    var raidActivity = await _tomestone.GetRaidActivityAsync(member.Name, member.World, lodestoneId, slug);
                     member.RaidActivity = raidActivity;
                 }
                 else
@@ -362,14 +376,14 @@ public class PartyService : IDisposable
                 }
             }
 
-            if (plugin.Config.RememberMe.Enabled)
+            if (_config.RememberMe.Enabled)
             {
                 // Ensure LodestoneId is cached for RememberMe as well
                 if (string.IsNullOrEmpty(member.LodestoneId))
-                    member.LodestoneId = plugin.Lodestone.PeekLodestoneId(memberPlayer);
+                    member.LodestoneId = _lodestone.PeekLodestoneId(memberPlayer);
                 if (!string.IsNullOrEmpty(member.LodestoneId))
                 {
-                    plugin.RememberMe.AddOrUpdatePlayer(member.Name, member.World, member.LodestoneId);
+                    _rememberMe.AddOrUpdatePlayer(member.Name, member.World, member.LodestoneId);
                 }
             }
         }
@@ -392,7 +406,7 @@ public class PartyService : IDisposable
     {
         try
         {
-            if (!plugin.Config.Party.NotifyLeave) return;
+            if (!_config.Party.NotifyLeave) return;
 
             string name = "Unknown";
             string world = "Unknown";
@@ -403,7 +417,7 @@ public class PartyService : IDisposable
                 memberCache.Remove(id);
             }
 
-            if (!plugin.Config.Party.IncludeSelf)
+            if (!_config.Party.IncludeSelf)
             {
                 var localPlayer = Service.ObjectTable.LocalPlayer;
                 if (localPlayer != null && name == localPlayer.Name.TextValue && (world == "Unknown" || world == localPlayer.HomeWorld.Value.Name.ToString()))

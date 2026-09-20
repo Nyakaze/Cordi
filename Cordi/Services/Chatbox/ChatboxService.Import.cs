@@ -56,7 +56,7 @@ public sealed partial class ChatboxService
 
         RefreshImportedChannel(entry.Id);
 
-        _plugin.LogService.Info(
+        _log.Info(
             "Chatbox",
             $"Imported {pending.Count} message(s) for {entry.Label} from XIVInstantMessenger.");
 
@@ -95,8 +95,8 @@ public sealed partial class ChatboxService
             messages += imported;
         }
 
-        _plugin.Config.Save();
-        _plugin.ConversationWindows?.Sync();
+        _config.Save();
+        _conversationWindows.Value?.Sync();
 
         return (people, messages);
     }

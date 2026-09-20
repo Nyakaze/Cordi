@@ -28,7 +28,8 @@ public sealed class DiscordConnection : IAsyncDisposable
 
     private const string LogSource = "Discord";
 
-    private readonly CordiPlugin _plugin;
+    private readonly Configuration.Configuration _config;
+    private readonly CordiLogService Log;
     private readonly DiscordSession _session = new();
 
     private readonly List<Func<CrovusClient, IDisposable>> _registrations = [];
@@ -41,9 +42,10 @@ public sealed class DiscordConnection : IAsyncDisposable
     private IDisposable? _logSubscription;
     private bool _disposed;
 
-    public DiscordConnection(CordiPlugin plugin)
+    public DiscordConnection(Configuration.Configuration config, CordiLogService log)
     {
-        _plugin = plugin;
+        _config = config;
+        Log = log;
     }
 
     public DiscordSession Session => _session;
@@ -78,13 +80,13 @@ public sealed class DiscordConnection : IAsyncDisposable
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
 
-        var token = _plugin.Config.Discord.BotToken;
+        var token = _config.Discord.BotToken;
 
         if (string.IsNullOrWhiteSpace(token))
         {
             Log.Error(LogSource, "Bot token is empty, cannot start");
-            _plugin.Config.Discord.BotStarted = false;
-            _plugin.Config.Save();
+            _config.Discord.BotStarted = false;
+            _config.Save();
             return;
         }
 
@@ -120,12 +122,12 @@ public sealed class DiscordConnection : IAsyncDisposable
             _cts = new CancellationTokenSource();
             _runner = Task.Run(() => RunAsync(client, _cts.Token));
 
-            _plugin.Config.Discord.BotStarted = true;
+            _config.Discord.BotStarted = true;
         }
         catch (Exception ex)
         {
             Log.Error(LogSource, $"Bot connection failed: {Describe(ex)}");
-            _plugin.Config.Discord.BotStarted = false;
+            _config.Discord.BotStarted = false;
             await TeardownAsync();
         }
         finally
@@ -133,7 +135,7 @@ public sealed class DiscordConnection : IAsyncDisposable
             IsBusy = false;
         }
 
-        _plugin.Config.Save();
+        _config.Save();
     }
 
     public async Task StopAsync()
@@ -158,7 +160,7 @@ public sealed class DiscordConnection : IAsyncDisposable
 
         await TeardownAsync();
 
-        _plugin.Config.Discord.BotStarted = false;
+        _config.Discord.BotStarted = false;
         Log.Info(LogSource, "Bot disconnected");
     }
 
@@ -239,6 +241,4 @@ public sealed class DiscordConnection : IAsyncDisposable
     }
 
     private static string Describe(Exception ex) => $"{ex.GetType().Name}: {ex.Message}";
-
-    private CordiLogService Log => _plugin.LogService;
 }

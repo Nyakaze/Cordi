@@ -21,7 +21,7 @@ namespace Cordi.Services.Chatbox;
 
 public sealed partial class ChatboxService
 {
-    private EmojiTranslator Emoji => _plugin.Emoji;
+    private EmojiTranslator Emoji => _emoji;
 
     private bool FilterAdvertisementsFor(ChatboxChannelState channel) =>
         channel.Config.FilterAdvertisements;
@@ -63,7 +63,7 @@ public sealed partial class ChatboxService
             return;
 
         var (prefix, prefixColor) = ResolveSenderPrefix(message);
-        var localName = _plugin.cachedLocalPlayer?.Name.TextValue ?? string.Empty;
+        var localName = _localPlayer.Character?.Name.TextValue ?? string.Empty;
         var isSelf = message.ChatType == XivChatType.TellOutgoing
                      || (!string.IsNullOrEmpty(localName) && string.Equals(name, localName, StringComparison.Ordinal));
         var raw = message.Message?.TextValue ?? string.Empty;
@@ -74,7 +74,7 @@ public sealed partial class ChatboxService
 
         var filtered = !isSelf
                        && targets.Any(FilterAdvertisementsFor)
-                       && _plugin.AdvertisementFilterService.IsAdvertisementPreview(Player.FromNameWorld(name, world), raw);
+                       && _adFilter.IsAdvertisementPreview(Player.FromNameWorld(name, world), raw);
 
         foreach (var target in targets)
         {
@@ -117,7 +117,7 @@ public sealed partial class ChatboxService
 
     private (string Name, string World) LocalAuthor(string fallbackName, string fallbackWorld)
     {
-        var local = _plugin.cachedLocalPlayer;
+        var local = _localPlayer.Character;
         if (local == null) return (fallbackName, fallbackWorld);
 
         var name = local.Name.TextValue;
@@ -391,14 +391,14 @@ public sealed partial class ChatboxService
 
         if (entry.MentionsMe && Config.NotifyOnMention)
         {
-            _plugin.NotificationManager.Add(
+            _notifications.Add(
                 $"{target.Config.Name} — mention",
                 $"{entry.AuthorName}: {Excerpt(entry.RawContent, 80)}",
                 CordiNotificationType.Info);
         }
         else if (Config.NotifyOnUnread)
         {
-            _plugin.NotificationManager.Add(
+            _notifications.Add(
                 target.Config.Name,
                 $"{entry.AuthorName}: {Excerpt(entry.RawContent, 80)}",
                 CordiNotificationType.Info);
@@ -415,7 +415,7 @@ public sealed partial class ChatboxService
         if (DateTime.Now - _lastMentionSound < TimeSpan.FromSeconds(2)) return;
 
         _lastMentionSound = DateTime.Now;
-        _plugin.Audio.Play(Config.MentionSoundPath, Config.MentionSoundVolume);
+        _audio.Play(Config.MentionSoundPath, Config.MentionSoundVolume);
     }
 
     private static string Excerpt(string text, int max)
@@ -572,7 +572,7 @@ public sealed partial class ChatboxService
         {
             try
             {
-                var url = await _plugin.Lodestone.GetAvatarUrlAsync(
+                var url = await _lodestone.GetAvatarUrlAsync(
                     Player.FromNameWorld(entry.AuthorName, entry.AuthorWorld));
                 if (!string.IsNullOrEmpty(url)) entry.AvatarUrl = url;
             }
@@ -584,11 +584,11 @@ public sealed partial class ChatboxService
     }
 
     private ulong ParseSelfDiscordId() =>
-        _plugin.Config.ActivityConfig?.TargetUserId ?? 0UL;
+        _config.ActivityConfig?.TargetUserId ?? 0UL;
 
     private MentionResolver BuildResolver(ChatboxChannelState channel)
     {
-        var local = _plugin.cachedLocalPlayer;
+        var local = _localPlayer.Character;
         var fullName = local?.Name.TextValue ?? string.Empty;
 
         return new MentionResolver
@@ -610,15 +610,15 @@ public sealed partial class ChatboxService
 
     private string? ResolveDiscordUserName(ulong id)
     {
-        var member = _plugin.Channels?.FindMember(id);
+        var member = _discordChannels?.FindMember(id);
         if (member == null) return null;
 
         return string.IsNullOrEmpty(member.Nickname) ? member.User.DisplayName : member.Nickname;
     }
 
-    private string? ResolveDiscordRoleName(ulong id) => _plugin.Channels?.FindRole(id)?.Name;
+    private string? ResolveDiscordRoleName(ulong id) => _discordChannels?.FindRole(id)?.Name;
 
-    private string? ResolveDiscordChannelName(ulong id) => _plugin.Channels?.Find(id)?.Name;
+    private string? ResolveDiscordChannelName(ulong id) => _discordChannels?.Find(id)?.Name;
 
     private string? ResolveGuildEmoteUrl(string name) => Emoji.ResolveUrlByName(name);
 
