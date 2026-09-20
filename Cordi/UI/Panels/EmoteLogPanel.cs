@@ -28,70 +28,67 @@ public class EmoteLogPanel
     {
         var logs = _emoteLog.Logs;
 
-        lock (logs)
+        var buttonSize = new Vector2(ImGui.GetFrameHeight());
+        var rightAlignPos = ImGui.GetContentRegionAvail().X - buttonSize.X - ImGui.GetStyle().ItemSpacing.X;
+
+        for (int i = logs.Count - 1; i >= 0; i--)
         {
-            var buttonSize = new Vector2(ImGui.GetFrameHeight());
-            var rightAlignPos = ImGui.GetContentRegionAvail().X - buttonSize.X - ImGui.GetStyle().ItemSpacing.X;
+            var entry = logs[i];
+            var time = entry.LastUpdate.ToString("HH:mm");
 
-            for (int i = logs.Count - 1; i >= 0; i--)
+            var text = $"[{time}] {entry.User} used {entry.EmoteName}";
+            if (entry.Count > 1)
             {
-                var entry = logs[i];
-                var time = entry.LastUpdate.ToString("HH:mm");
+                text += $" [{entry.Count}]";
+            }
 
-                var text = $"[{time}] {entry.User} used {entry.EmoteName}";
-                if (entry.Count > 1)
+            _theme.ShadowedText(text, textShadow);
+
+            if (_config.EmoteLog.ShowReplyButton)
+            {
+                ImGui.SameLine();
+                ImGui.SetCursorPosX(ImGui.GetCursorPosX() + rightAlignPos - ImGui.GetCursorPosX());
+
+                using (var font = ImRaii.PushFont(UiBuilder.IconFont))
+                using (var style = ImRaii.PushStyle(ImGuiStyleVar.FramePadding, Vector2.Zero))
                 {
-                    text += $" [{entry.Count}]";
-                }
+                    bool keepTarget = ImGui.GetIO().KeyShift;
+                    bool keepRotation = ImGui.GetIO().KeyAlt;
 
-                _theme.ShadowedText(text, textShadow);
-
-                if (_config.EmoteLog.ShowReplyButton)
-                {
-                    ImGui.SameLine();
-                    ImGui.SetCursorPosX(ImGui.GetCursorPosX() + rightAlignPos - ImGui.GetCursorPosX());
-
-                    using (var font = ImRaii.PushFont(UiBuilder.IconFont))
-                    using (var style = ImRaii.PushStyle(ImGuiStyleVar.FramePadding, Vector2.Zero))
+                    if (ImGui.Button($"{FontAwesomeIcon.Reply.ToIconString()}##{i}", buttonSize))
                     {
-                        bool keepTarget = ImGui.GetIO().KeyShift;
-                        bool keepRotation = ImGui.GetIO().KeyAlt;
-
-                        if (ImGui.Button($"{FontAwesomeIcon.Reply.ToIconString()}##{i}", buttonSize))
+                        var cmd = entry.Command;
+                        if (string.IsNullOrEmpty(cmd))
                         {
-                            var cmd = entry.Command;
-                            if (string.IsNullOrEmpty(cmd))
-                            {
-                                cmd = entry.EmoteName;
-                                if (!cmd.StartsWith("/")) cmd = "/" + cmd;
-                            }
-
-                            _ = _emoteLog.PerformEmoteBack(
-                                entry.User,
-                                entry.World,
-                                cmd,
-                                entry.GameObjectId,
-                                keepTarget,
-                                keepRotation
-                            );
+                            cmd = entry.EmoteName;
+                            if (!cmd.StartsWith("/")) cmd = "/" + cmd;
                         }
-                    }
 
-                    if (ImGui.IsItemHovered())
-                    {
-                        ImGui.SetTooltip($"Emote Back ({(!string.IsNullOrEmpty(entry.Command) ? entry.Command : entry.EmoteName)})\n[Shift] Keep target\n[Alt] Keep rotation");
+                        _emoteLog.PerformEmoteBack(
+                            entry.User,
+                            entry.World,
+                            cmd,
+                            entry.GameObjectId,
+                            keepTarget,
+                            keepRotation
+                        );
                     }
                 }
 
-                if (ImGui.IsItemClicked(ImGuiMouseButton.Right))
-                {
-                    var target = Service.ObjectTable.FindPlayerByName(entry.User);
-                    if (target != null) Service.TargetManager.Target = target;
-                }
                 if (ImGui.IsItemHovered())
                 {
-                    ImGui.SetTooltip("Left-click to emote back\nRight-click to target");
+                    ImGui.SetTooltip($"Emote Back ({(!string.IsNullOrEmpty(entry.Command) ? entry.Command : entry.EmoteName)})\n[Shift] Keep target\n[Alt] Keep rotation");
                 }
+            }
+
+            if (ImGui.IsItemClicked(ImGuiMouseButton.Right))
+            {
+                var target = Service.ObjectTable.FindPlayerByName(entry.User);
+                if (target != null) Service.TargetManager.Target = target;
+            }
+            if (ImGui.IsItemHovered())
+            {
+                ImGui.SetTooltip("Left-click to emote back\nRight-click to target");
             }
         }
     }

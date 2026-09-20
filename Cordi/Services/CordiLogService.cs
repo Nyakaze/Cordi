@@ -2,6 +2,8 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace Cordi.Services;
 
@@ -67,6 +69,17 @@ public sealed class CordiLogService
 
     public void Error(string source, string message, Exception exception, bool mute = false) =>
         Log(source, CordiLogLevel.Error, message, exception, mute);
+
+    public void FireAndForget(Task task, string source, string message)
+    {
+        if (task.IsCompletedSuccessfully) return;
+
+        task.ContinueWith(
+            t => Log(source, CordiLogLevel.Error, message, t.Exception?.GetBaseException()),
+            CancellationToken.None,
+            TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
+            TaskScheduler.Default);
+    }
 
     private static void Forward(string source, CordiLogLevel level, string message, Exception? exception)
     {

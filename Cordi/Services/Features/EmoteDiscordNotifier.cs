@@ -78,29 +78,22 @@ public class EmoteDiscordNotifier
 
         _active.Set(key, state);
 
-        try
+        var avatarUrl = await _lodestone.GetAvatarUrlAsync(player);
+        var lodestoneId = await _lodestone.ResolveLodestoneIdAsync(player);
+        var embed = BuildEmoteEmbed(state, lodestoneId, avatarUrl);
+
+        if (updateExisting && state.MessageId != 0)
         {
-            var avatarUrl = await _lodestone.GetAvatarUrlAsync(player);
-            var lodestoneId = await _lodestone.ResolveLodestoneIdAsync(player);
-            var embed = BuildEmoteEmbed(state, lodestoneId, avatarUrl);
-
-            if (updateExisting && state.MessageId != 0)
-            {
-                await _discord.EditWebhookMessage(channelId, state.MessageId, embed);
-                return;
-            }
-
-            state.MessageId = await _discord.SendWebhookMessage(channelId, embed, player);
-
-            if (state.MessageId != 0)
-            {
-                _messageIdCache.Set(state.MessageId, state);
-                await _discord.AddReaction(channelId, state.MessageId, "🔙");
-            }
+            await _discord.EditWebhookMessage(channelId, state.MessageId, embed);
+            return;
         }
-        catch (Exception ex)
+
+        state.MessageId = await _discord.SendWebhookMessage(channelId, embed, player);
+
+        if (state.MessageId != 0)
         {
-            _log.Error(LogSource, "Failed to process Discord emote log", ex);
+            _messageIdCache.Set(state.MessageId, state);
+            await _discord.AddReaction(channelId, state.MessageId, "🔙");
         }
     }
 
@@ -148,7 +141,10 @@ public class EmoteDiscordNotifier
         var cmd = state.Command;
         if (string.IsNullOrEmpty(cmd)) cmd = "/" + state.EmoteName.ToLower().Replace(" ", "");
 
-        await _emoteBackAction.PerformAsync(state.User, state.World, cmd, state.GameObjectId);
+        _log.FireAndForget(
+            _emoteBackAction.PerformAsync(state.User, state.World, cmd, state.GameObjectId),
+            LogSource,
+            $"Failed to emote back at {state.User}@{state.World}");
 
         if (!ulong.TryParse(_config.EmoteLog.ChannelId, out var channelId)) return;
 

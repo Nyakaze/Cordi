@@ -204,7 +204,11 @@ public class CordiPeepService : IDisposable
         state.StartTime = now;
         state.EndTime = null;
         state.TargetedBack = false;
-        _ = SendAlert(state, GetLocalPlayerTargetName());
+
+        Log.FireAndForget(
+            SendAlert(state, GetLocalPlayerTargetName()),
+            LogSource,
+            $"Failed to send the peeper alert for {state.Player.FullName}");
     }
 
     private void Track(Player player)
@@ -237,7 +241,11 @@ public class CordiPeepService : IDisposable
 
         _registry.Add(state);
         Log.Info(LogSource, $"Peeper detected: {player.FullName}");
-        _ = SendAlert(state, GetLocalPlayerTargetName(), skipNotifications);
+
+        Log.FireAndForget(
+            SendAlert(state, GetLocalPlayerTargetName(), skipNotifications),
+            LogSource,
+            $"Failed to send the peeper alert for {player.FullName}");
 
         _config.Stats.IncrementPeepsTracked();
         _config.Stats.RecordPeep(player.Name, player.World);
@@ -254,7 +262,10 @@ public class CordiPeepService : IDisposable
 
         _registry.Retire(state);
 
-        _ = UpdateAlertStopped(state, GetLocalPlayerTargetName());
+        Log.FireAndForget(
+            UpdateAlertStopped(state, GetLocalPlayerTargetName()),
+            LogSource,
+            $"Failed to update the peeper alert for {state.Player.FullName}");
     }
 
     private DiscordEmbed BuildPeeperEmbed(PeeperState state, string myTargetName, string? lodestoneId)
@@ -436,36 +447,31 @@ public class CordiPeepService : IDisposable
             return Task.CompletedTask;
         }
 
-        Service.Framework.RunOnFrameworkThread(() =>
+        return Service.Framework.RunOnFrameworkThread(() =>
         {
-            try
+            var target = peeper.Live
+                         ?? Service.ObjectTable.SearchById(peeper.GameObjectId)
+                         ?? Service.ObjectTable.FindPlayerByName(peeper.Name, peeper.World);
+
+            if (target == null)
             {
-                var target = peeper.Live
-                             ?? Service.ObjectTable.SearchById(peeper.GameObjectId)
-                             ?? Service.ObjectTable.FindPlayerByName(peeper.Name, peeper.World);
-
-                if (target == null)
-                {
-                    Log.Warning(LogSource, $"Target not found in object table: {peeper.Player.FullName}");
-                    return;
-                }
-
-                if (target is IPlayerCharacter pc)
-                {
-                    VisibilityBridge.UnhidePlayer(pc, allowVoided: true, isEmote: false);
-                }
-
-                Service.TargetManager.Target = target;
-                Log.Info(LogSource, $"Targeted via reaction: {target.Name} (ID: {target.GameObjectId:X})");
-                _ = UpdateEmbedTargetedBack(peeper);
+                Log.Warning(LogSource, $"Target not found in object table: {peeper.Player.FullName}");
+                return;
             }
-            catch (Exception ex)
+
+            if (target is IPlayerCharacter pc)
             {
-                Log.Error(LogSource, "Error while attempting to target peeper", ex);
+                VisibilityBridge.UnhidePlayer(pc, allowVoided: true, isEmote: false);
             }
+
+            Service.TargetManager.Target = target;
+            Log.Info(LogSource, $"Targeted via reaction: {target.Name} (ID: {target.GameObjectId:X})");
+
+            Log.FireAndForget(
+                UpdateEmbedTargetedBack(peeper),
+                LogSource,
+                $"Failed to update the peeper embed for {peeper.Player.FullName}");
         });
-
-        return Task.CompletedTask;
     }
 
     private unsafe void UpdatePeeperData(IPlayerCharacter player, IPlayerCharacter localPlayer)
@@ -527,38 +533,30 @@ public class CordiPeepService : IDisposable
         return target.Name.ToString();
     }
 
-    public async Task<bool> TargetPlayer(string name, string? world = null)
-    {
-        var tcs = new TaskCompletionSource<bool>();
-
-        await Service.Framework.RunOnFrameworkThread(() =>
+    public Task<bool> TargetPlayer(string name, string? world = null)
+        => Service.Framework.RunOnFrameworkThread(() =>
         {
             try
             {
                 var target = Service.ObjectTable.FindPlayerByName(name, world);
 
-                if (target != null)
-                {
-                    VisibilityBridge.UnhidePlayer(target, allowVoided: true, isEmote: false);
-                    Service.TargetManager.Target = target;
-                    Log.Info(LogSource, $"Targeted: {target.Name}");
-                    tcs.SetResult(true);
-                }
-                else
+                if (target == null)
                 {
                     Log.Warning(LogSource, $"Could not find {name}{(string.IsNullOrEmpty(world) ? "" : "@" + world)}");
-                    tcs.SetResult(false);
+                    return false;
                 }
+
+                VisibilityBridge.UnhidePlayer(target, allowVoided: true, isEmote: false);
+                Service.TargetManager.Target = target;
+                Log.Info(LogSource, $"Targeted: {target.Name}");
+                return true;
             }
             catch (Exception ex)
             {
                 Log.Error(LogSource, "Error while targeting player", ex);
-                tcs.SetResult(false);
+                return false;
             }
         });
-
-        return await tcs.Task;
-    }
 
     private unsafe void DrawTargetingDots()
     {
