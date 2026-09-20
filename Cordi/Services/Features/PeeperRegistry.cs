@@ -109,7 +109,7 @@ public sealed class PeeperRegistry
         {
             foreach (var state in _active.Values)
             {
-                if (state.DiscordMessageId == messageId) return state;
+                if (state.MessageId == messageId) return state;
             }
 
             return null;

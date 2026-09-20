@@ -4,6 +4,7 @@ using Cordi.Core.Caching;
 using Cordi.Domain;
 using Cordi.Services.Discord;
 using Cordi.Services.Discord.Connection;
+using Cordi.Services.Watchers;
 using Crovus.Events;
 using Crovus.Models;
 
@@ -15,15 +16,15 @@ public class EmoteDiscordNotifier
 
     private const string LogSource = "EmoteLog";
 
+    private const string Reaction = "🔙";
+
     private readonly Configuration.Configuration _config;
     private readonly CordiLogService _log;
-    private readonly DiscordHandler _discord;
     private readonly DiscordEmbedFactory _embeds;
     private readonly DiscordConnection _connection;
-    private readonly LodestoneService _lodestone;
     private readonly EmoteBackAction _emoteBackAction;
 
-    private readonly Cache<ulong, EmoteEvent> _messageIdCache;
+    private readonly WatcherNotifier<EmoteEvent> _notifier;
     private readonly Cache<string, EmoteEvent> _active;
 
     public EmoteDiscordNotifier(
@@ -38,34 +39,35 @@ public class EmoteDiscordNotifier
     {
         _config = config;
         _log = log;
-        _discord = discord;
         _embeds = embeds;
         _connection = connection;
-        _lodestone = lodestone;
         _emoteBackAction = emoteBackAction;
 
-        _messageIdCache = new Cache<ulong, EmoteEvent>(
-            "emote.messages", caches, maxSize: 100, ttl: TimeSpan.FromHours(2));
+        _notifier = new WatcherNotifier<EmoteEvent>(
+            "emote.messages",
+            Reaction,
+            () => _config.EmoteLog.ChannelId,
+            BuildEmoteEmbed,
+            caches,
+            discord,
+            lodestone);
 
         _active = new Cache<string, EmoteEvent>(
             "emote.active", caches, maxSize: 100, ttl: SpamThreshold);
     }
 
-    public Cache<ulong, EmoteEvent> MessageIdCache => _messageIdCache;
+    public Cache<ulong, EmoteEvent> MessageIdCache => _notifier.Messages;
 
     public Cache<string, EmoteEvent> Active => _active;
 
-    public async Task ProcessDiscordEmote(Player player, string emoteName, string command)
+    public Task ProcessDiscordEmote(Player player, string emoteName, string command)
     {
-        if (!_config.EmoteLog.DiscordEnabled) return;
-        if (!ulong.TryParse(_config.EmoteLog.ChannelId, out var channelId)) return;
-        if (_connection.Context is null) return;
+        if (!_config.EmoteLog.DiscordEnabled) return Task.CompletedTask;
+        if (_connection.Context is null) return Task.CompletedTask;
 
         var key = $"{player.FullName}-{emoteName}";
 
-        var updateExisting = _active.TryGet(key, out var state);
-
-        if (updateExisting)
+        if (_active.TryGet(key, out var state))
         {
             state.Count++;
             state.LastUpdate = DateTime.Now;
@@ -78,26 +80,10 @@ public class EmoteDiscordNotifier
 
         _active.Set(key, state);
 
-        var avatarUrl = await _lodestone.GetAvatarUrlAsync(player);
-        var lodestoneId = await _lodestone.ResolveLodestoneIdAsync(player);
-        var embed = BuildEmoteEmbed(state, lodestoneId, avatarUrl);
-
-        if (updateExisting && state.MessageId != 0)
-        {
-            await _discord.EditWebhookMessage(channelId, state.MessageId, embed);
-            return;
-        }
-
-        state.MessageId = await _discord.SendWebhookMessage(channelId, embed, player);
-
-        if (state.MessageId != 0)
-        {
-            _messageIdCache.Set(state.MessageId, state);
-            await _discord.AddReaction(channelId, state.MessageId, "🔙");
-        }
+        return _notifier.PublishAsync(state);
     }
 
-    private DiscordEmbed BuildEmoteEmbed(EmoteEvent state, string? lodestoneId, string avatarUrl)
+    private DiscordEmbed BuildEmoteEmbed(EmoteEvent state, string? lodestoneId)
     {
         var nameLink = !string.IsNullOrEmpty(lodestoneId)
             ? $"[{state.Player.FullName}](https://na.finalfantasyxiv.com/lodestone/character/{lodestoneId}/)"
@@ -105,13 +91,13 @@ public class EmoteDiscordNotifier
 
         var color = state.EmotedBack ? 0x2ECC71 : 0x5865F2;
         var description = $"**{nameLink}** used **{state.EmoteName}** on you!";
-        var footerText = state.EmotedBack ? "Interaction Complete" : "React with 🔙 to emote back";
+        var footerText = state.EmotedBack ? "Interaction Complete" : $"React with {Reaction} to emote back";
 
         var embedBuilder = _embeds.CreateEmbedBuilder(
             "Emote Detected",
             description,
             color,
-            avatarUrl,
+            state.AvatarUrl,
             footerText
         );
 
@@ -132,8 +118,8 @@ public class EmoteDiscordNotifier
 
     public async Task OnDiscordReactionAdded(ReactionAddedEvent e)
     {
-        if (e.Emoji.Name != "🔙") return;
-        if (!_messageIdCache.TryGet(e.MessageId, out var state)) return;
+        if (!_notifier.Matches(e)) return;
+        if (!_notifier.Messages.TryGet(e.MessageId, out var state)) return;
         if (state.EmotedBack) return;
 
         state.EmotedBack = true;
@@ -146,20 +132,7 @@ public class EmoteDiscordNotifier
             LogSource,
             $"Failed to emote back at {state.User}@{state.World}");
 
-        if (!ulong.TryParse(_config.EmoteLog.ChannelId, out var channelId)) return;
-
-        try
-        {
-            var avatarUrl = await _lodestone.GetAvatarUrlAsync(state.Player);
-            var lodestoneId = await _lodestone.ResolveLodestoneIdAsync(state.Player);
-            var embed = BuildEmoteEmbed(state, lodestoneId, avatarUrl);
-
-            await _discord.EditWebhookMessage(channelId, state.MessageId, embed);
-            await _discord.RemoveReaction(channelId, state.MessageId, "🔙");
-        }
-        catch (Exception ex)
-        {
-            _log.Error(LogSource, "Failed to update embed after reaction", ex);
-        }
+        await _notifier.EditAsync(state);
+        await _notifier.ClearReactionAsync(state);
     }
 }

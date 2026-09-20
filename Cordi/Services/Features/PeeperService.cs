@@ -16,21 +16,22 @@ using Cordi.Domain;
 using Cordi.Extensions;
 using FFXIVClientStructs.FFXIV.Client.Game.Control;
 using Cordi.Services.Features;
+using Cordi.Services.Watchers;
 
 namespace Cordi.Services;
 
 public class CordiPeepService : IDisposable
 {
+    private const string Reaction = "👀";
+
     private readonly Configuration.Configuration _config;
     private readonly CordiLogService Log;
-    private readonly DiscordHandler _discord;
     private readonly DiscordEmbedFactory _embeds;
-    private readonly LodestoneService _lodestone;
     private readonly AudioService _audio;
     private readonly Lazy<UI.Windows.CordiPeepWindow> _window;
 
     private readonly PeeperRegistry _registry = new();
-    private readonly Cache<ulong, PeeperState> _messageIdCache;
+    private readonly WatcherNotifier<PeeperState> _notifier;
     private readonly TimeSpan _minAlertInterval = TimeSpan.FromSeconds(5);
     private readonly List<PeeperState> _simulatedPeepers = new();
     private readonly HashSet<ulong> currentPeepers = new();
@@ -56,14 +57,18 @@ public class CordiPeepService : IDisposable
     {
         _config = config;
         Log = log;
-        _discord = discord;
         _embeds = embeds;
-        _lodestone = lodestone;
         _audio = audio;
         _window = window;
 
-        _messageIdCache = new Cache<ulong, PeeperState>(
-            "peeper.messages", caches, maxSize: 100, ttl: TimeSpan.FromHours(2));
+        _notifier = new WatcherNotifier<PeeperState>(
+            "peeper.messages",
+            Reaction,
+            () => _config.CordiPeep.DiscordChannelId,
+            BuildPeeperEmbed,
+            caches,
+            discord,
+            lodestone);
 
         Service.PluginInterface.UiBuilder.Draw += DrawTargetingDots;
     }
@@ -204,9 +209,10 @@ public class CordiPeepService : IDisposable
         state.StartTime = now;
         state.EndTime = null;
         state.TargetedBack = false;
+        state.MyTargetName = GetLocalPlayerTargetName();
 
         Log.FireAndForget(
-            SendAlert(state, GetLocalPlayerTargetName()),
+            SendAlert(state),
             LogSource,
             $"Failed to send the peeper alert for {state.Player.FullName}");
     }
@@ -237,13 +243,15 @@ public class CordiPeepService : IDisposable
             TargetedBack = false,
         };
 
-        if (previous != null && skipNotifications) state.DiscordMessageId = previous.DiscordMessageId;
+        if (previous != null && skipNotifications) state.MessageId = previous.MessageId;
+
+        state.MyTargetName = GetLocalPlayerTargetName();
 
         _registry.Add(state);
         Log.Info(LogSource, $"Peeper detected: {player.FullName}");
 
         Log.FireAndForget(
-            SendAlert(state, GetLocalPlayerTargetName(), skipNotifications),
+            SendAlert(state, skipNotifications),
             LogSource,
             $"Failed to send the peeper alert for {player.FullName}");
 
@@ -259,16 +267,17 @@ public class CordiPeepService : IDisposable
 
         state.IsLooking = false;
         state.EndTime = DateTime.Now;
+        state.MyTargetName = GetLocalPlayerTargetName();
 
         _registry.Retire(state);
 
         Log.FireAndForget(
-            UpdateAlertStopped(state, GetLocalPlayerTargetName()),
+            _notifier.EditAsync(state),
             LogSource,
             $"Failed to update the peeper alert for {state.Player.FullName}");
     }
 
-    private DiscordEmbed BuildPeeperEmbed(PeeperState state, string myTargetName, string? lodestoneId)
+    private DiscordEmbed BuildPeeperEmbed(PeeperState state, string? lodestoneId)
     {
         var nameLink = !string.IsNullOrEmpty(lodestoneId)
             ? $"[{state.Player.FullName}](https://na.finalfantasyxiv.com/lodestone/character/{lodestoneId}/)"
@@ -302,7 +311,7 @@ public class CordiPeepService : IDisposable
             embedBuilder.AddField("Duration", $"{duration.TotalSeconds:F1}s", true);
         }
 
-        embedBuilder.AddField("Your Target", myTargetName, true);
+        embedBuilder.AddField("Your Target", state.MyTargetName, true);
 
         if (state.TargetedBack)
         {
@@ -314,25 +323,15 @@ public class CordiPeepService : IDisposable
 
     private async Task UpdateEmbedTargetedBack(PeeperState state)
     {
-        if (state.DiscordMessageId == 0) return;
+        if (state.MessageId == 0) return;
 
         state.TargetedBack = true;
+        state.MyTargetName = await Service.Framework.RunOnFrameworkThread(GetLocalPlayerTargetName);
 
-        if (!ulong.TryParse(_config.CordiPeep.DiscordChannelId, out var channelId)) return;
-
-        string finalTargetName = "None";
-        await Service.Framework.RunOnFrameworkThread(() =>
-        {
-            finalTargetName = GetLocalPlayerTargetName();
-        });
-
-        var lodestoneId = await _lodestone.ResolveLodestoneIdAsync(state.Player);
-        var embed = BuildPeeperEmbed(state, finalTargetName, lodestoneId);
-
-        await _discord.EditWebhookMessage(channelId, state.DiscordMessageId, embed);
+        await _notifier.EditAsync(state);
     }
 
-    private async Task SendAlert(PeeperState state, string myTargetName, bool skipNotifications = false)
+    private async Task SendAlert(PeeperState state, bool skipNotifications = false)
     {
         var blacklistEntry = _config.CordiPeep.Blacklist.FirstOrDefault(x => x.Name == state.Name && x.World == state.World);
 
@@ -342,21 +341,11 @@ public class CordiPeepService : IDisposable
         }
 
         if (!_config.CordiPeep.DiscordEnabled) return;
-
-        if (!ulong.TryParse(_config.CordiPeep.DiscordChannelId, out var channelId)) return;
+        if (blacklistEntry?.DisableDiscord == true) return;
 
         if (skipNotifications)
         {
-            if (state.DiscordMessageId != 0 && (blacklistEntry == null || !blacklistEntry.DisableDiscord))
-            {
-                _messageIdCache.Set(state.DiscordMessageId, state);
-
-                var skipLodestoneId = await _lodestone.ResolveLodestoneIdAsync(state.Player);
-                var skipEmbed = BuildPeeperEmbed(state, myTargetName, skipLodestoneId);
-
-                await _discord.EditWebhookMessage(channelId, state.DiscordMessageId, skipEmbed);
-            }
-
+            await _notifier.EditAsync(state);
             return;
         }
 
@@ -366,51 +355,19 @@ public class CordiPeepService : IDisposable
             return;
         if (_config.CordiPeep.DisableDiscordInPvP && Service.ClientState.IsPvP)
             return;
-        if (blacklistEntry?.DisableDiscord == true) return;
 
-        state.AvatarUrl = await _lodestone.GetAvatarUrlAsync(state.Player);
+        var hadMessage = state.MessageId != 0;
 
-        var lodestoneId = await _lodestone.ResolveLodestoneIdAsync(state.Player);
-        var embed = BuildPeeperEmbed(state, myTargetName, lodestoneId);
+        await _notifier.PublishAsync(state);
 
-        if (state.DiscordMessageId == 0)
-        {
-            state.DiscordMessageId = await _discord.SendWebhookMessage(channelId, embed, state.Player);
-            if (state.DiscordMessageId != 0)
-            {
-                _messageIdCache.Set(state.DiscordMessageId, state);
-                configChanged = true;
-            }
-        }
-        else
-        {
-            _messageIdCache.Set(state.DiscordMessageId, state);
-        }
-
-        if (state.DiscordMessageId == 0) return;
-
-        await _discord.AddReaction(channelId, state.DiscordMessageId, "👀");
+        if (state.MessageId == 0) return;
+        if (!hadMessage) configChanged = true;
 
         if (state.IsLooking) return;
 
-        string finalTargetName = "None";
-        await Service.Framework.RunOnFrameworkThread(() =>
-        {
-            finalTargetName = GetLocalPlayerTargetName();
-        });
+        state.MyTargetName = await Service.Framework.RunOnFrameworkThread(GetLocalPlayerTargetName);
 
-        await UpdateAlertStopped(state, finalTargetName);
-    }
-
-    private async Task UpdateAlertStopped(PeeperState state, string myTargetName)
-    {
-        if (state.DiscordMessageId == 0) return;
-        if (!ulong.TryParse(_config.CordiPeep.DiscordChannelId, out var channelId)) return;
-
-        var lodestoneId = await _lodestone.ResolveLodestoneIdAsync(state.Player);
-        var embed = BuildPeeperEmbed(state, myTargetName, lodestoneId);
-
-        await _discord.EditWebhookMessage(channelId, state.DiscordMessageId, embed);
+        await _notifier.EditAsync(state);
     }
 
     private void PlaySound()
@@ -431,19 +388,15 @@ public class CordiPeepService : IDisposable
 
     public Task OnDiscordReactionAdded(ReactionAddedEvent e)
     {
-        if (e.Emoji.Name != "👀")
-        {
-            Log.Debug(LogSource, $"Ignored reaction '{e.Emoji.Name}' on msg {e.MessageId}");
-            return Task.CompletedTask;
-        }
+        if (!_notifier.Matches(e)) return Task.CompletedTask;
 
-        var peeper = _messageIdCache.TryGet(e.MessageId, out var cachedPeeper)
+        var peeper = _notifier.Messages.TryGet(e.MessageId, out var cachedPeeper)
             ? cachedPeeper
             : _registry.FindByMessageId(e.MessageId);
 
         if (peeper == null)
         {
-            Log.Warning(LogSource, $"No peeper state found for message {e.MessageId} (cache size: {_messageIdCache.Count})");
+            Log.Warning(LogSource, $"No peeper state found for message {e.MessageId} (cache size: {_notifier.Messages.Count})");
             return Task.CompletedTask;
         }
 

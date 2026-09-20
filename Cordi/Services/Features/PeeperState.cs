@@ -1,10 +1,11 @@
 using System;
 using Cordi.Domain;
+using Cordi.Services.Watchers;
 using Dalamud.Game.ClientState.Objects.Types;
 
 namespace Cordi.Services;
 
-public sealed class PeeperState
+public sealed class PeeperState : IWatcherAlert
 {
     public PeeperState(Player player)
     {
@@ -26,10 +27,12 @@ public sealed class PeeperState
         set => Player.AvatarUrl = value;
     }
 
+    public ulong MessageId { get; set; }
+
     public DateTime StartTime;
     public DateTime LastSeen;
     public DateTime? EndTime;
-    public ulong DiscordMessageId;
+    public string MyTargetName = "None";
     public bool IsLooking;
     public float Distance;
     public float DirectionAngle;

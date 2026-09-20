@@ -1,9 +1,10 @@
 using System;
 using Cordi.Domain;
+using Cordi.Services.Watchers;
 
 namespace Cordi.Services;
 
-public sealed class EmoteEvent
+public sealed class EmoteEvent : IWatcherAlert
 {
     public EmoteEvent(Player player, string emoteName, string command)
     {
@@ -23,12 +24,19 @@ public sealed class EmoteEvent
 
     public string World => Player.World;
 
+    public string AvatarUrl
+    {
+        get => Player.AvatarUrl ?? string.Empty;
+        set => Player.AvatarUrl = value;
+    }
+
     public string EmoteName { get; }
 
     public string Command { get; set; }
 
+    public ulong MessageId { get; set; }
+
     public int Count = 1;
-    public ulong MessageId;
     public bool EmotedBack;
     public DateTime FirstSeen;
     public DateTime LastUpdate;
