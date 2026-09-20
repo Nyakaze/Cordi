@@ -59,6 +59,7 @@ internal static class ServiceRegistration
         });
 
         services.AddSingleton<AudioService>();
+        services.AddSingleton<VisibilityService>();
         services.AddSingleton(sp => ActivatorUtilities.CreateInstance<LodestoneService>(sp, configDirectory));
         services.AddSingleton<TomestoneService>();
         services.AddSingleton<DiscordEmbedFactory>();

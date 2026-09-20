@@ -1,4 +1,7 @@
+using System;
+using System.Threading;
 using System.Threading.Tasks;
+using Cordi.Core;
 using Cordi.Packets.Handler.Chat;
 using Dalamud.Game.ClientState.Objects.SubKinds;
 using Dalamud.Game.ClientState.Objects.Types;
@@ -6,19 +9,37 @@ using Cordi.Extensions;
 
 namespace Cordi.Services.Features;
 
-public class EmoteBackAction
+public class EmoteBackAction : IDisposable
 {
-    private readonly ChatMessenger _chat;
+    private const int MinHoldSeconds = 1;
+    private const int MaxHoldSeconds = 60;
 
-    public EmoteBackAction(ChatMessenger chat)
+    private readonly Configuration.Configuration _config;
+    private readonly ChatMessenger _chat;
+    private readonly VisibilityService _visibility;
+
+    private CancellationTokenSource _logout = new();
+    private bool _disposed;
+
+    public EmoteBackAction(Configuration.Configuration config, ChatMessenger chat, VisibilityService visibility)
     {
+        _config = config;
         _chat = chat;
+        _visibility = visibility;
+
+        Service.ClientState.Logout += OnLogout;
     }
 
     public async Task PerformAsync(string targetName, string targetWorld, string command, ulong targetId = 0, bool keepTarget = false, bool keepRotation = false)
     {
+        if (_disposed) return;
+
+        var hold = TimeSpan.FromSeconds(Math.Clamp(_config.EmoteLog.EmoteBackHoldSeconds, MinHoldSeconds, MaxHoldSeconds));
+        var token = _logout.Token;
+
         float savedRotation = 0;
         bool targetFound = false;
+        ulong unheldId = 0;
 
         await Service.Framework.RunOnFrameworkThread(() =>
         {
@@ -39,7 +60,8 @@ public class EmoteBackAction
             {
                 if (target is IPlayerCharacter pc)
                 {
-                    VisibilityBridge.UnhidePlayer(pc, allowVoided: true, isEmote: true);
+                    _visibility.Unhide(pc, hold + TimeSpan.FromSeconds(2));
+                    unheldId = pc.GameObjectId;
                 }
                 Service.TargetManager.Target = target;
                 _chat.SendMessage(command);
@@ -49,10 +71,20 @@ public class EmoteBackAction
 
         if (!targetFound) return;
 
-        await Task.Delay(8000);
+        try
+        {
+            await Task.Delay(hold, token);
+        }
+        catch (OperationCanceledException)
+        {
+            if (unheldId != 0) _visibility.Release(unheldId);
+            return;
+        }
 
         await Service.Framework.RunOnFrameworkThread(() =>
         {
+            if (unheldId != 0) _visibility.Release(unheldId);
+
             var localPlayer = Service.ObjectTable.LocalPlayer;
             if (localPlayer == null) return;
 
@@ -66,21 +98,6 @@ public class EmoteBackAction
                         Service.TargetManager.Target = null;
                     }
                 }
-
-                ulong finalTargetId = targetId;
-                if (finalTargetId == 0)
-                {
-                    var targetPlayer = Service.ObjectTable.FindPlayerByName(targetName, targetWorld);
-                    if (targetPlayer != null)
-                    {
-                        finalTargetId = targetPlayer.GameObjectId;
-                    }
-                }
-
-                if (finalTargetId != 0)
-                {
-                    VisibilityBridge.RestorePlayerHiddenState(finalTargetId);
-                }
             }
 
             if (!keepRotation)
@@ -92,5 +109,25 @@ public class EmoteBackAction
                 }
             }
         });
+    }
+
+    public void Dispose()
+    {
+        if (_disposed) return;
+        _disposed = true;
+
+        Service.ClientState.Logout -= OnLogout;
+
+        _logout.Cancel();
+        _logout.Dispose();
+    }
+
+    private void OnLogout(int type, int code)
+    {
+        var previous = _logout;
+        _logout = new CancellationTokenSource();
+
+        previous.Cancel();
+        previous.Dispose();
     }
 }

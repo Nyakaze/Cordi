@@ -15,6 +15,7 @@ public class EmoteLogConfig : IWindowChromeConfig
     public bool CollapseDuplicates { get; set; } = false;
     public int MaxEntries { get; set; } = 200;
     public bool ShowReplyButton { get; set; } = true;
+    public int EmoteBackHoldSeconds { get; set; } = 8;
     public bool DiscordEnabled { get; set; } = true;
     public bool DetectWhenClosed { get; set; } = true;
     public bool WindowEnabled { get; set; } = true;

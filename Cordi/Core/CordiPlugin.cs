@@ -122,6 +122,7 @@ public class CordiPlugin : IDalamudPlugin
 
     public ChatMessenger _chat = null!;
     public AudioService Audio { get; private set; }
+    public VisibilityService Visibility { get; private set; }
     public CordiPeepService CordiPeep { get; private set; }
     public CordiPeepWindow CordiPeepWindow { get; private set; }
     public EmoteLogService EmoteLog { get; private set; }
@@ -164,6 +165,7 @@ public class CordiPlugin : IDalamudPlugin
         NotificationManager = _provider.GetRequiredService<NotificationManager>();
         Audio = _provider.GetRequiredService<AudioService>();
 
+        Visibility = _provider.GetRequiredService<VisibilityService>();
         EmoteLog = _provider.GetRequiredService<EmoteLogService>();
         CordiPeep = _provider.GetRequiredService<CordiPeepService>();
         HonorificBridge = _provider.GetRequiredService<HonorificBridge>();
@@ -353,10 +355,10 @@ public class CordiPlugin : IDalamudPlugin
             var character = (FFXIVClientStructs.FFXIV.Client.Game.Character.Character*)player.Address;
             var renderFlags = character != null ? character->GameObject.RenderFlags : 0;
             var rawTargetId = character != null ? (ulong)character->TargetId : 0UL;
-            Service.Log.Info($"Player: {player.Name}@{player.HomeWorld.Value.Name}, GameObjectId: {player.GameObjectId:X}, TargetObjectId: {player.TargetObjectId:X}, RawTargetId: {rawTargetId:X}, ContentId: {(character != null ? character->ContentId : 0):X}, RenderFlags: {renderFlags}, IsHidden: {VisibilityBridge.IsPlayerHidden(player.GameObjectId)}");
+            Service.Log.Info($"Player: {player.Name}@{player.HomeWorld.Value.Name}, GameObjectId: {player.GameObjectId:X}, TargetObjectId: {player.TargetObjectId:X}, RawTargetId: {rawTargetId:X}, ContentId: {(character != null ? character->ContentId : 0):X}, RenderFlags: {renderFlags}");
         }
         Service.Log.Info("---------------------------------------");
-        VisibilityBridge.DumpDebugInfo();
+        Visibility.DumpDebugInfo();
     }
 
 
@@ -439,7 +441,7 @@ public class CordiPlugin : IDalamudPlugin
     public void OnFrameworkUpdate(IFramework framework)
     {
         cachedLocalPlayer = Service.ObjectTable.LocalPlayer;
-        VisibilityBridge.OnFrameworkUpdate();
+        Visibility?.OnFrameworkUpdate();
         Chatbox?.OnFrameworkUpdate();
         EmoteTitles?.OnFrameworkUpdate();
 

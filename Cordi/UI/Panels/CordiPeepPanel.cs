@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Numerics;
 using Cordi.Services;
 using Dalamud.Bindings.ImGui;
@@ -91,7 +91,7 @@ public class CordiPeepPanel
                     {
                         if (obj is IPlayerCharacter pc)
                         {
-                            VisibilityBridge.UnhidePlayer(pc, allowVoided: true, isEmote: false);
+                            _peeper.Visibility.Unhide(pc);
                         }
                         Service.TargetManager.FocusTarget = obj;
                         focusSet = true;
@@ -162,7 +162,7 @@ public class CordiPeepPanel
                     var obj = FindPeeper(peeper);
                     if (obj is IPlayerCharacter pc)
                     {
-                        VisibilityBridge.UnhidePlayer(pc, allowVoided: true, isEmote: false);
+                        _peeper.Visibility.Unhide(pc);
                     }
                     if (obj != null) Service.TargetManager.Target = obj;
                 }
@@ -171,7 +171,7 @@ public class CordiPeepPanel
                     var obj = FindPeeper(peeper);
                     if (obj is IPlayerCharacter pc)
                     {
-                        VisibilityBridge.UnhidePlayer(pc, allowVoided: true, isEmote: false);
+                        _peeper.Visibility.Unhide(pc);
                     }
                     if (obj != null) Service.TargetManager.FocusTarget = obj;
                 }
@@ -180,7 +180,7 @@ public class CordiPeepPanel
                     var obj = FindPeeper(peeper);
                     if (obj is IPlayerCharacter pc)
                     {
-                        VisibilityBridge.UnhidePlayer(pc, allowVoided: true, isEmote: false);
+                        _peeper.Visibility.Unhide(pc);
                     }
                     if (obj != null) Examine(obj.GameObjectId);
                 }
@@ -189,7 +189,7 @@ public class CordiPeepPanel
                     var obj = FindPeeper(peeper);
                     if (obj is IPlayerCharacter pc)
                     {
-                        VisibilityBridge.UnhidePlayer(pc, allowVoided: true, isEmote: false);
+                        _peeper.Visibility.Unhide(pc);
                     }
                     if (obj != null) OpenAdventurePlate(obj.GameObjectId);
                 }
@@ -243,7 +243,7 @@ public class CordiPeepPanel
                         var tObj = Service.ObjectTable.SearchById(peeper.CurrentTargetId);
                         if (tObj is IPlayerCharacter pc)
                         {
-                            VisibilityBridge.UnhidePlayer(pc, allowVoided: true, isEmote: false);
+                            _peeper.Visibility.Unhide(pc);
                         }
                         if (tObj != null) Service.TargetManager.Target = tObj;
                     }
@@ -252,7 +252,7 @@ public class CordiPeepPanel
                         var tObj = Service.ObjectTable.SearchById(peeper.CurrentTargetId);
                         if (tObj is IPlayerCharacter pc)
                         {
-                            VisibilityBridge.UnhidePlayer(pc, allowVoided: true, isEmote: false);
+                            _peeper.Visibility.Unhide(pc);
                         }
                         if (tObj != null) Service.TargetManager.FocusTarget = tObj;
                     }
@@ -261,7 +261,7 @@ public class CordiPeepPanel
                         var tObj = Service.ObjectTable.SearchById(peeper.CurrentTargetId);
                         if (tObj is IPlayerCharacter pc)
                         {
-                            VisibilityBridge.UnhidePlayer(pc, allowVoided: true, isEmote: false);
+                            _peeper.Visibility.Unhide(pc);
                         }
                         if (tObj != null) Examine(tObj.GameObjectId);
                     }
@@ -270,7 +270,7 @@ public class CordiPeepPanel
                         var tObj = Service.ObjectTable.SearchById(peeper.CurrentTargetId);
                         if (tObj is IPlayerCharacter pc)
                         {
-                            VisibilityBridge.UnhidePlayer(pc, allowVoided: true, isEmote: false);
+                            _peeper.Visibility.Unhide(pc);
                         }
                         if (tObj != null) OpenAdventurePlate(tObj.GameObjectId);
                     }

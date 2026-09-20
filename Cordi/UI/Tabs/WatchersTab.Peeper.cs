@@ -21,6 +21,7 @@ public partial class WatchersTab
             innerWidth => DrawPeeperStatusRow(config, innerWidth));
 
         DrawPeeperDetectionPanel(config);
+        DrawPeeperVisibilityPanel(config);
         DrawPeeperDiscordPanel(config);
         DrawPeeperAudioPanel(config);
         DrawPeeperOverlayPanel(config);
@@ -108,6 +109,37 @@ public partial class WatchersTab
                 anchor,
                 "Peeper watches the object table for players whose target is you.\n" +
                 "Filters decide which of those are worth reporting."));
+    }
+
+    private void DrawPeeperVisibilityPanel(CordiPeepConfig config)
+    {
+        var detected = plugin.Visibility.IsPluginAvailable;
+
+        Card.Draw(
+            "peep-visibility",
+            innerWidth =>
+            {
+                DrawToggleRow(
+                    "peep-unhide",
+                    FontAwesomeIcon.UserSecret,
+                    detected ? theme.Accent : theme.MutedText,
+                    "Unhide players hidden by Visibility",
+                    detected
+                        ? "Temporarily whitelists a peeper so you can see who is watching"
+                        : "The Visibility plugin is not installed, so this does nothing",
+                    innerWidth,
+                    () => config.UnhideFromVisibility,
+                    value => config.UnhideFromVisibility = value);
+            },
+            label: "Visibility plugin",
+            drawTrailing: anchor => theme.HelpPill(
+                "peep-visibility-help",
+                anchor,
+                "Cordi asks the Visibility plugin to show a player while it needs them on screen,\n" +
+                "then takes that entry back out of your whitelist and hides them again\n" +
+                "a few seconds later.\n" +
+                "Players you voided by hand are left alone.\n" +
+                "With the Visibility plugin missing or switched off, Cordi skips all of this."));
     }
 
     private void DrawPeeperDiscordPanel(CordiPeepConfig config)

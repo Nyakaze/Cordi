@@ -65,12 +65,6 @@ public class CordiPeepConfig : IWindowChromeConfig
     public int RepeatedNotificationsCooldown { get; set; } = 60;
 
     public bool UnhideFromVisibility { get; set; } = false;
-    public bool UnhideVoidedPlayers { get; set; } = false;
-
-    public const bool UnhideFromVisibilityFeatureEnabled = false;
-
-    [JsonIgnore]
-    public bool UnhideFromVisibilityEffective => UnhideFromVisibilityFeatureEnabled && UnhideFromVisibility;
 
     public List<CordiPeepBlacklistEntry> Blacklist { get; set; } = new();
 }

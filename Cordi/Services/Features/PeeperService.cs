@@ -28,6 +28,7 @@ public class CordiPeepService : IDisposable
     private readonly CordiLogService Log;
     private readonly DiscordEmbedFactory _embeds;
     private readonly AudioService _audio;
+    private readonly VisibilityService _visibility;
     private readonly Lazy<UI.Windows.CordiPeepWindow> _window;
 
     private readonly PeeperRegistry _registry = new();
@@ -53,12 +54,14 @@ public class CordiPeepService : IDisposable
         DiscordEmbedFactory embeds,
         LodestoneService lodestone,
         AudioService audio,
+        VisibilityService visibility,
         Lazy<UI.Windows.CordiPeepWindow> window)
     {
         _config = config;
         Log = log;
         _embeds = embeds;
         _audio = audio;
+        _visibility = visibility;
         _window = window;
 
         _notifier = new WatcherNotifier<PeeperState>(
@@ -74,6 +77,8 @@ public class CordiPeepService : IDisposable
     }
 
     public PeeperSnapshot Snapshot => _registry.Snapshot;
+
+    public VisibilityService Visibility => _visibility;
 
     public void AddSimulatedPeeper(string name, string world)
     {
@@ -173,10 +178,7 @@ public class CordiPeepService : IDisposable
 
     private void UpdatePeeperState(IPlayerCharacter player)
     {
-        if (_config.CordiPeep.UnhideFromVisibilityEffective)
-        {
-            VisibilityBridge.UnhidePlayer(player, _config.CordiPeep.UnhideVoidedPlayers, isEmote: false);
-        }
+        _visibility.Unhide(player);
 
         if (_registry.TryGetActive(player.GameObjectId, out var state))
         {
@@ -414,7 +416,7 @@ public class CordiPeepService : IDisposable
 
             if (target is IPlayerCharacter pc)
             {
-                VisibilityBridge.UnhidePlayer(pc, allowVoided: true, isEmote: false);
+                _visibility.Unhide(pc);
             }
 
             Service.TargetManager.Target = target;
@@ -499,7 +501,7 @@ public class CordiPeepService : IDisposable
                     return false;
                 }
 
-                VisibilityBridge.UnhidePlayer(target, allowVoided: true, isEmote: false);
+                _visibility.Unhide(target);
                 Service.TargetManager.Target = target;
                 Log.Info(LogSource, $"Targeted: {target.Name}");
                 return true;

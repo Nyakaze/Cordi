@@ -67,6 +67,21 @@ public partial class WatchersTab
                     50f,
                     () => config.MaxEntries,
                     value => config.MaxEntries = (int)value);
+
+                theme.SpacerY(0.4f);
+
+                DrawSliderRow(
+                    "emote-back-hold",
+                    FontAwesomeIcon.Stopwatch,
+                    theme.Accent,
+                    "Emote back hold",
+                    "Seconds Cordi keeps the target before releasing it again",
+                    innerWidth,
+                    1f,
+                    60f,
+                    1f,
+                    () => config.EmoteBackHoldSeconds,
+                    value => config.EmoteBackHoldSeconds = (int)value);
             },
             label: "Behavior");
     }
