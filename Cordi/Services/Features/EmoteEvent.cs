@@ -2,7 +2,9 @@ using System;
 using Cordi.Domain;
 using Cordi.Services.Watchers;
 
-namespace Cordi.Services;
+using Cordi.Services;
+
+namespace Cordi.Services.Features;
 
 public sealed class EmoteEvent : IWatcherAlert
 {

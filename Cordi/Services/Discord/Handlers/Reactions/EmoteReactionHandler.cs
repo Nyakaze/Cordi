@@ -4,6 +4,8 @@ using Cordi.Core;
 using Cordi.Services.Discord.Dispatch;
 using Crovus.Events;
 
+using Cordi.Services.Features;
+
 namespace Cordi.Services.Discord.Handlers.Reactions;
 
 [DiscordHandler]

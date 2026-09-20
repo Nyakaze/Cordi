@@ -14,7 +14,7 @@ public class EmoteLogWindow : ThemedWindow, IDisposable
     private readonly Configuration.Configuration _config;
     private readonly EmoteLogPanel _panel;
 
-    public EmoteLogWindow(Configuration.Configuration config, Services.EmoteLogService emoteLog)
+    public EmoteLogWindow(Configuration.Configuration config, Services.Features.EmoteLogService emoteLog)
         : base("Emote Log##CordiEmoteLog", ImGuiWindowFlags.None)
     {
         _config = config;

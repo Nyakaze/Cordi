@@ -1,14 +1,16 @@
 using Cordi.Services;
 using Dalamud.Plugin.Services;
 
+using Cordi.Services.Features;
+
 namespace Cordi.Core.Scheduling.Handlers;
 
-[FrameworkTick(IntervalSeconds = CordiPeepService.TickIntervalSeconds, RequiresLogin = true)]
+[FrameworkTick(IntervalSeconds = PeeperService.TickIntervalSeconds, RequiresLogin = true)]
 public class PeeperServiceTickHandler : IFrameworkTickHandler
 {
-    private readonly CordiPeepService _peeper;
+    private readonly PeeperService _peeper;
 
-    public PeeperServiceTickHandler(CordiPeepService peeper)
+    public PeeperServiceTickHandler(PeeperService peeper)
     {
         _peeper = peeper;
     }

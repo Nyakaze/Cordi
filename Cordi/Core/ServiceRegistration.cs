@@ -50,7 +50,7 @@ internal static class ServiceRegistration
         services.AddSingleton<LocalPlayerProvider>();
         services.AddSingleton<NotificationManager>();
         services.AddSingleton<ScreenshotService>();
-        services.AddSingleton(_ => new HonorificBridge(pluginInterface));
+        services.AddSingleton(sp => new HonorificBridge(pluginInterface, sp.GetRequiredService<CordiLogService>()));
 
         services.AddSingleton(_ => new ChatMessenger(chatGui, framework, clientState, commandManager)
         {
@@ -81,7 +81,7 @@ internal static class ServiceRegistration
         services.AddSingleton<EmoteBackAction>();
         services.AddSingleton<EmoteDiscordNotifier>();
         services.AddSingleton<EmoteLogService>();
-        services.AddSingleton<CordiPeepService>();
+        services.AddSingleton<PeeperService>();
         services.AddSingleton<PartyDiscordNotifier>();
         services.AddSingleton<PartyService>();
 
@@ -94,12 +94,12 @@ internal static class ServiceRegistration
         services.AddSingleton(sp => new Lazy<ChatboxService>(sp.GetRequiredService<ChatboxService>));
         services.AddSingleton(sp => new Lazy<ChatboxWindow>(sp.GetRequiredService<ChatboxWindow>));
         services.AddSingleton(sp => new Lazy<ConversationWindowManager>(sp.GetRequiredService<ConversationWindowManager>));
-        services.AddSingleton(sp => new Lazy<CordiPeepWindow>(sp.GetRequiredService<CordiPeepWindow>));
+        services.AddSingleton(sp => new Lazy<PeeperWindow>(sp.GetRequiredService<PeeperWindow>));
         services.AddSingleton(sp => new Lazy<EmoteLogWindow>(sp.GetRequiredService<EmoteLogWindow>));
 
         services.AddSingleton<ConfigWindow>();
         services.AddSingleton<DiscordWindow>();
-        services.AddSingleton<CordiPeepWindow>();
+        services.AddSingleton<PeeperWindow>();
         services.AddSingleton<EmoteLogWindow>();
         services.AddSingleton<CombinedWindow>();
         services.AddSingleton<ChatboxWindow>();

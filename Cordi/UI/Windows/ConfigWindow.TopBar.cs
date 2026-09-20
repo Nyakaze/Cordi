@@ -58,7 +58,7 @@ public sealed partial class ConfigWindow
             });
         }
 
-        if (config.CordiPeep.Enabled)
+        if (config.Peeper.Enabled)
         {
             chips.Add(new StatChip
             {

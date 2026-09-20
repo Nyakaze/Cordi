@@ -9,7 +9,9 @@ using System.Threading;
 using Cordi.Services.Features;
 using Cordi.UI.Windows;
 
-namespace Cordi.Services;
+using Cordi.Services;
+
+namespace Cordi.Services.Features;
 
 public class EmoteLogService : IDisposable
 {

@@ -4,14 +4,16 @@ using Cordi.Core;
 using Cordi.Services.Discord.Dispatch;
 using Crovus.Events;
 
+using Cordi.Services.Features;
+
 namespace Cordi.Services.Discord.Handlers.Reactions;
 
 [DiscordHandler]
 public class PeeperReactionHandler : IDiscordReactionHandler
 {
-    private readonly CordiPeepService _peeper;
+    private readonly PeeperService _peeper;
 
-    public PeeperReactionHandler(CordiPeepService peeper)
+    public PeeperReactionHandler(PeeperService peeper)
     {
         _peeper = peeper;
     }

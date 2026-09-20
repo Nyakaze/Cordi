@@ -7,6 +7,8 @@ using Cordi.Core;
 using Cordi.Services.Chatbox;
 using Dalamud.Game.ClientState.Objects.SubKinds;
 
+using Cordi.Services.Features;
+
 namespace Cordi.Services.Activity;
 
 public sealed class EmoteTitleService : IDisposable

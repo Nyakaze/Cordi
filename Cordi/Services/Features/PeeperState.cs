@@ -3,7 +3,9 @@ using Cordi.Domain;
 using Cordi.Services.Watchers;
 using Dalamud.Game.ClientState.Objects.Types;
 
-namespace Cordi.Services;
+using Cordi.Services;
+
+namespace Cordi.Services.Features;
 
 public sealed class PeeperState : IWatcherAlert
 {

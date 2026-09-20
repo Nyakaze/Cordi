@@ -51,7 +51,7 @@ public sealed class VisibilityService : IDisposable
         Service.ClientState.TerritoryChanged += OnTerritoryChanged;
     }
 
-    public bool FeatureEnabled => !_disposed && (_config.CordiPeep.UnhideFromVisibility || _config.EmoteLog.UnhideFromVisibility);
+    public bool FeatureEnabled => !_disposed && (_config.Peeper.UnhideFromVisibility || _config.EmoteLog.UnhideFromVisibility);
 
     public bool IsPluginAvailable => ResolveAvailability();
 
@@ -60,8 +60,8 @@ public sealed class VisibilityService : IDisposable
     public void Unhide(IPlayerCharacter? player) =>
         Unhide(
             player,
-            TimeSpan.FromSeconds(Math.Clamp(_config.CordiPeep.UnhideHoldSeconds, MinHoldSeconds, MaxHoldSeconds)),
-            _config.CordiPeep.UnhideFromVisibility);
+            TimeSpan.FromSeconds(Math.Clamp(_config.Peeper.UnhideHoldSeconds, MinHoldSeconds, MaxHoldSeconds)),
+            _config.Peeper.UnhideFromVisibility);
 
     public void UnhideForEmoteBack(IPlayerCharacter? player, TimeSpan hold) =>
         Unhide(player, hold, _config.EmoteLog.UnhideFromVisibility);

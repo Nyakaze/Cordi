@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
 
-namespace Cordi.Services;
+using Cordi.Services;
+
+namespace Cordi.Services.Features;
 
 public sealed class PeeperSnapshot
 {

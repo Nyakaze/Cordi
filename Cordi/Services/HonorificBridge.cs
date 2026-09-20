@@ -7,18 +7,20 @@ namespace Cordi.Services
 {
     public class HonorificBridge : IDisposable
     {
-        private readonly IDalamudPluginInterface _pluginInterface;
+        private const string LogSource = "Honorific";
 
+        private readonly IDalamudPluginInterface _pluginInterface;
+        private readonly CordiLogService _log;
 
         private readonly ICallGateSubscriber<int, string, object> _setCharacterTitle;
         private readonly ICallGateSubscriber<int, object> _clearCharacterTitle;
 
         public bool IsAvailable { get; private set; } = false;
 
-        public HonorificBridge(IDalamudPluginInterface pi)
+        public HonorificBridge(IDalamudPluginInterface pi, CordiLogService log)
         {
             _pluginInterface = pi;
-
+            _log = log;
 
             _setCharacterTitle = _pluginInterface.GetIpcSubscriber<int, string, object>("Honorific.SetCharacterTitle");
             _clearCharacterTitle = _pluginInterface.GetIpcSubscriber<int, object>("Honorific.ClearCharacterTitle");
@@ -49,7 +51,7 @@ namespace Cordi.Services
             }
             catch (Exception ex)
             {
-                Service.Log.Error($"Honorific IPC SetTitle failed: {ex.Message}");
+                _log.Error(LogSource, "Honorific could not set the title", ex);
             }
         }
 
@@ -63,7 +65,7 @@ namespace Cordi.Services
             }
             catch (Exception ex)
             {
-                Service.Log.Info($"Honorific IPC ClearTitle failed: {ex.Message}");
+                _log.Info(LogSource, $"Honorific could not clear the title: {ex.Message}");
             }
         }
 

@@ -13,7 +13,7 @@ public partial class WatchersTab
 {
     private void DrawPeeperPage()
     {
-        var config = plugin.Config.CordiPeep;
+        var config = plugin.Config.Peeper;
 
         Layout.Draw(
             "Peeper",
@@ -31,7 +31,7 @@ public partial class WatchersTab
         DrawPeeperBlacklistPanel(config);
     }
 
-    private void DrawPeeperStatusRow(CordiPeepConfig config, float rowWidth)
+    private void DrawPeeperStatusRow(PeeperConfig config, float rowWidth)
     {
         DrawToggleRow(
             "peep-enabled",
@@ -44,7 +44,7 @@ public partial class WatchersTab
             value => config.Enabled = value);
     }
 
-    private void DrawPeeperDetectionPanel(CordiPeepConfig config)
+    private void DrawPeeperDetectionPanel(PeeperConfig config)
     {
         Card.Draw(
             "peep-detection",
@@ -111,7 +111,7 @@ public partial class WatchersTab
                 "Filters decide which of those are worth reporting."));
     }
 
-    private void DrawPeeperVisibilityPanel(CordiPeepConfig config)
+    private void DrawPeeperVisibilityPanel(PeeperConfig config)
     {
         var detected = plugin.Visibility.IsPluginAvailable;
 
@@ -157,7 +157,7 @@ public partial class WatchersTab
                 "With the Visibility plugin missing or switched off, Cordi skips all of this."));
     }
 
-    private void DrawPeeperDiscordPanel(CordiPeepConfig config)
+    private void DrawPeeperDiscordPanel(PeeperConfig config)
     {
         Card.Draw(
             "peep-discord",
@@ -195,7 +195,7 @@ public partial class WatchersTab
             label: "Discord Notifications");
     }
 
-    private void DrawPeeperAudioPanel(CordiPeepConfig config)
+    private void DrawPeeperAudioPanel(PeeperConfig config)
     {
         Card.Draw(
             "peep-audio",
@@ -282,11 +282,11 @@ public partial class WatchersTab
                 "lives under Settings > Audio."));
     }
 
-    private void DrawPeeperOverlayPanel(CordiPeepConfig config) =>
+    private void DrawPeeperOverlayPanel(PeeperConfig config) =>
         DrawOverlayPanel(
             "peep",
             "Peeper",
-            () => plugin.CordiPeepWindow,
+            () => plugin.PeeperWindow,
             () => config.WindowEnabled,
             value => config.WindowEnabled = value,
             () => new[]
@@ -303,7 +303,7 @@ public partial class WatchersTab
             () => config.BackgroundOpacity,
             value => config.BackgroundOpacity = value);
 
-    private void DrawPeeperDisplayPanel(CordiPeepConfig config)
+    private void DrawPeeperDisplayPanel(PeeperConfig config)
     {
         Card.Draw(
             "peep-display",
@@ -318,7 +318,7 @@ public partial class WatchersTab
             label: "Overlay Display");
     }
 
-    private void DrawPeeperHighlightPanel(CordiPeepConfig config)
+    private void DrawPeeperHighlightPanel(PeeperConfig config)
     {
         Card.Draw(
             "peep-highlight",
@@ -369,7 +369,7 @@ public partial class WatchersTab
             label: "Highlight & Glow");
     }
 
-    private void DrawPeeperDotPanel(CordiPeepConfig config)
+    private void DrawPeeperDotPanel(PeeperConfig config)
     {
         Card.Draw(
             "peep-dot",
@@ -424,17 +424,17 @@ public partial class WatchersTab
             label: "Targeting Dot");
     }
 
-    private void DrawPeeperBlacklistPanel(CordiPeepConfig config)
+    private void DrawPeeperBlacklistPanel(PeeperConfig config)
     {
         DrawBlacklistPanel(
             id: "peep-blacklist",
             label: "Blacklist",
             emptyHint: "Blacklisted characters never trigger Peeper alerts.",
             list: config.Blacklist,
-            createEntry: (name, world) => new CordiPeepBlacklistEntry { Name = name, World = world },
+            createEntry: (name, world) => new PeeperBlacklistEntry { Name = name, World = world },
             extraColumns: new[]
             {
-                new BlacklistFlagColumn<CordiPeepBlacklistEntry>
+                new BlacklistFlagColumn<PeeperBlacklistEntry>
                 {
                     Id = "no-sound",
                     Tooltip = "No sound alert",

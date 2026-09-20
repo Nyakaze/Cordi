@@ -123,8 +123,8 @@ public class CordiPlugin : IDalamudPlugin
     public ChatMessenger _chat = null!;
     public AudioService Audio { get; private set; }
     public VisibilityService Visibility { get; private set; }
-    public CordiPeepService CordiPeep { get; private set; }
-    public CordiPeepWindow CordiPeepWindow { get; private set; }
+    public PeeperService Peeper { get; private set; }
+    public PeeperWindow PeeperWindow { get; private set; }
     public EmoteLogService EmoteLog { get; private set; }
     public EmoteLogWindow EmoteLogWindow { get; private set; }
     public CombinedWindow CombinedWindow { get; private set; }
@@ -167,7 +167,7 @@ public class CordiPlugin : IDalamudPlugin
 
         Visibility = _provider.GetRequiredService<VisibilityService>();
         EmoteLog = _provider.GetRequiredService<EmoteLogService>();
-        CordiPeep = _provider.GetRequiredService<CordiPeepService>();
+        Peeper = _provider.GetRequiredService<PeeperService>();
         HonorificBridge = _provider.GetRequiredService<HonorificBridge>();
         PartyService = _provider.GetRequiredService<PartyService>();
         RememberMe = _provider.GetRequiredService<RememberMeService>();
@@ -195,14 +195,14 @@ public class CordiPlugin : IDalamudPlugin
 
         configWindow = _provider.GetRequiredService<ConfigWindow>();
         discordWindow = _provider.GetRequiredService<DiscordWindow>();
-        CordiPeepWindow = _provider.GetRequiredService<CordiPeepWindow>();
+        PeeperWindow = _provider.GetRequiredService<PeeperWindow>();
         this.EmoteLogWindow = _provider.GetRequiredService<EmoteLogWindow>();
         CombinedWindow = _provider.GetRequiredService<CombinedWindow>();
         ChatboxWindow = _provider.GetRequiredService<ChatboxWindow>();
 
         windowSystem.AddWindow(discordWindow);
         windowSystem.AddWindow(configWindow);
-        windowSystem.AddWindow(CordiPeepWindow);
+        windowSystem.AddWindow(PeeperWindow);
         windowSystem.AddWindow(this.EmoteLogWindow);
         windowSystem.AddWindow(CombinedWindow);
         windowSystem.AddWindow(ChatboxWindow);
@@ -405,14 +405,14 @@ public class CordiPlugin : IDalamudPlugin
         }
 
         const string PeepCmd = "/cordipeeper";
-        bool peepEnabled = Config.CordiPeep.WindowEnabled;
+        bool peepEnabled = Config.Peeper.WindowEnabled;
         bool peepRegistered = CommandManager.Commands.ContainsKey(PeepCmd);
 
         if (peepEnabled && !peepRegistered)
         {
             CommandManager.AddHandler(PeepCmd, new CommandInfo((cmd, args) =>
             {
-                CordiPeepWindow.IsOpen = !CordiPeepWindow.IsOpen;
+                PeeperWindow.IsOpen = !PeeperWindow.IsOpen;
             })
             {
                 HelpMessage = "Toggles the Cordi Peeper Window"
@@ -463,7 +463,7 @@ public class CordiPlugin : IDalamudPlugin
     {
         if (Config == null) return;
 
-        if (Config.CordiPeep.OpenOnLogin) CordiPeepWindow.IsOpen = true;
+        if (Config.Peeper.OpenOnLogin) PeeperWindow.IsOpen = true;
         if (Config.EmoteLog.WindowOpenOnLogin) EmoteLogWindow.IsOpen = true;
         if (Config.CombinedWindow.OpenOnLogin) CombinedWindow.IsOpen = true;
         if (Config.Chatbox.Enabled && Config.Chatbox.OpenOnLogin) ChatboxWindow.IsOpen = true;

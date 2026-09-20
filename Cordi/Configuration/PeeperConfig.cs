@@ -6,7 +6,7 @@ using Newtonsoft.Json;
 namespace Cordi.Configuration;
 
 [Serializable]
-public class CordiPeepConfig : IWindowChromeConfig
+public class PeeperConfig : IWindowChromeConfig
 {
     bool IWindowChromeConfig.LockPosition => WindowLocked;
     bool IWindowChromeConfig.LockSize => WindowNoResize;
@@ -67,5 +67,5 @@ public class CordiPeepConfig : IWindowChromeConfig
     public bool UnhideFromVisibility { get; set; } = true;
     public int UnhideHoldSeconds { get; set; } = 2;
 
-    public List<CordiPeepBlacklistEntry> Blacklist { get; set; } = new();
+    public List<PeeperBlacklistEntry> Blacklist { get; set; } = new();
 }

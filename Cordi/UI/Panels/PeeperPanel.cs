@@ -14,10 +14,10 @@ using Cordi.UI.Themes;
 
 namespace Cordi.UI.Panels;
 
-public class CordiPeepPanel
+public class PeeperPanel
 {
     private readonly Configuration.Configuration _config;
-    private readonly CordiPeepService _peeper;
+    private readonly PeeperService _peeper;
 
     private ulong? _hoveredPeeperId;
     private string? _hoveredPeeperName;
@@ -31,7 +31,7 @@ public class CordiPeepPanel
 
     private readonly UiTheme _theme;
 
-    public CordiPeepPanel(Configuration.Configuration config, CordiPeepService peeper, UiTheme theme)
+    public PeeperPanel(Configuration.Configuration config, PeeperService peeper, UiTheme theme)
     {
         _config = config;
         _peeper = peeper;
@@ -71,9 +71,8 @@ public class CordiPeepPanel
             }
         }
 
-        if (_config.CordiPeep.FocusOnHover)
+        if (_config.Peeper.FocusOnHover)
         {
-            // Determine which ID and name to focus: prefer hoveredTarget, fallback to peeper itself
             var focusId = _hoveredTargetId ?? _hoveredPeeperId;
             var focusName = _hoveredTargetId.HasValue ? _hoveredTargetName : _hoveredPeeperName;
             var focusWorld = _hoveredTargetId.HasValue ? null : _hoveredPeeperWorld;
@@ -117,9 +116,8 @@ public class CordiPeepPanel
     {
         var avail = ImGui.GetContentRegionAvail().X;
         var style = ImGui.GetStyle();
-        var config = _config.CordiPeep;
+        var config = _config.Peeper;
 
-        // Build distance text and direction
         bool showArrow = (isActive && config.ShowDirection) || (!isActive && config.ShowDirectionInHistory && peeper.IsPresent);
 
         bool showDist = (isActive && config.ShowDistance) || (!isActive && config.ShowDistanceInHistory && peeper.IsPresent);
@@ -128,7 +126,6 @@ public class CordiPeepPanel
         var localPlayer = Service.ObjectTable.LocalPlayer;
         bool isTargetLocalPlayer = peeper.CurrentTargetId != 0 && localPlayer != null && peeper.CurrentTargetId == localPlayer.GameObjectId;
 
-        // Show current target for both active and history peepers
         bool showTarget = config.ShowCurrentTarget && !string.IsNullOrEmpty(peeper.CurrentTargetName) && !isTargetLocalPlayer;
         float rowHeight = ImGui.GetTextLineHeight() + style.FramePadding.Y * 2;
 
@@ -152,7 +149,6 @@ public class CordiPeepPanel
         var peeperItemMin = ImGui.GetItemRectMin();
         var peeperItemMax = ImGui.GetItemRectMax();
 
-        // Context menu
         using (var popup = ImRaii.ContextPopupItem($"ctx_{peeper.GameObjectId}_{peeper.StartTime.Ticks}"))
         {
             if (popup)
@@ -198,7 +194,7 @@ public class CordiPeepPanel
                 var isBlacklisted = config.Blacklist.Exists(x => x.Name == peeper.Name && x.World == peeper.World);
                 if (!isBlacklisted && MenuItem("Blacklist"))
                 {
-                    config.Blacklist.Add(new Configuration.CordiPeepBlacklistEntry
+                    config.Blacklist.Add(new Configuration.PeeperBlacklistEntry
                     {
                         Name = peeper.Name,
                         World = peeper.World,
@@ -300,7 +296,7 @@ public class CordiPeepPanel
         uint textColor;
         if (isActive)
         {
-            textColor = ImGui.GetColorU32(_config.CordiPeep.TargetingHighlightColor);
+            textColor = ImGui.GetColorU32(_config.Peeper.TargetingHighlightColor);
         }
         else
         {

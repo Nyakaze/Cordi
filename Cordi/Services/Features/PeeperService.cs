@@ -18,9 +18,11 @@ using FFXIVClientStructs.FFXIV.Client.Game.Control;
 using Cordi.Services.Features;
 using Cordi.Services.Watchers;
 
-namespace Cordi.Services;
+using Cordi.Services;
 
-public class CordiPeepService : IDisposable
+namespace Cordi.Services.Features;
+
+public class PeeperService : IDisposable
 {
     private const string Reaction = "👀";
 
@@ -29,7 +31,7 @@ public class CordiPeepService : IDisposable
     private readonly DiscordEmbedFactory _embeds;
     private readonly AudioService _audio;
     private readonly VisibilityService _visibility;
-    private readonly Lazy<UI.Windows.CordiPeepWindow> _window;
+    private readonly Lazy<UI.Windows.PeeperWindow> _window;
 
     private readonly PeeperRegistry _registry = new();
     private readonly WatcherNotifier<PeeperState> _notifier;
@@ -46,7 +48,7 @@ public class CordiPeepService : IDisposable
     private DateTime _lastSaveTime = DateTime.MinValue;
     private DateTime _lastSoundPlayTime = DateTime.MinValue;
 
-    public CordiPeepService(
+    public PeeperService(
         Configuration.Configuration config,
         CordiLogService log,
         ICacheRegistry caches,
@@ -55,7 +57,7 @@ public class CordiPeepService : IDisposable
         LodestoneService lodestone,
         AudioService audio,
         VisibilityService visibility,
-        Lazy<UI.Windows.CordiPeepWindow> window)
+        Lazy<UI.Windows.PeeperWindow> window)
     {
         _config = config;
         Log = log;
@@ -67,7 +69,7 @@ public class CordiPeepService : IDisposable
         _notifier = new WatcherNotifier<PeeperState>(
             "peeper.messages",
             Reaction,
-            () => _config.CordiPeep.DiscordChannelId,
+            () => _config.Peeper.DiscordChannelId,
             BuildPeeperEmbed,
             caches,
             discord,
@@ -104,10 +106,10 @@ public class CordiPeepService : IDisposable
 
     public unsafe void OnFrameworkUpdate(IFramework framework)
     {
-        if (!_config.CordiPeep.Enabled) return;
+        if (!_config.Peeper.Enabled) return;
 
         var window = _window.Value;
-        if (!window.IsOpen && !_config.CordiPeep.DetectWhenClosed) return;
+        if (!window.IsOpen && !_config.Peeper.DetectWhenClosed) return;
 
         var localPlayer = Service.ObjectTable.LocalPlayer;
         if (localPlayer == null) return;
@@ -121,7 +123,7 @@ public class CordiPeepService : IDisposable
 
             if (player.GameObjectId == localPlayer.GameObjectId)
             {
-                if (!_config.CordiPeep.IncludeSelf) continue;
+                if (!_config.Peeper.IncludeSelf) continue;
 
                 var target = Service.TargetManager.Target;
                 if (target != null && target.GameObjectId == localPlayer.GameObjectId)
@@ -136,13 +138,13 @@ public class CordiPeepService : IDisposable
             UpdatePeeperData(player, localPlayer);
 
             bool inCombat = (player.StatusFlags & Dalamud.Game.ClientState.Objects.Enums.StatusFlags.InCombat) != 0;
-            if (!_config.CordiPeep.LogCombat && inCombat) continue;
+            if (!_config.Peeper.LogCombat && inCombat) continue;
 
             bool isParty = (player.StatusFlags & Dalamud.Game.ClientState.Objects.Enums.StatusFlags.PartyMember) != 0;
             bool isAlliance = (player.StatusFlags & Dalamud.Game.ClientState.Objects.Enums.StatusFlags.AllianceMember) != 0;
 
-            if (!_config.CordiPeep.LogParty && isParty) continue;
-            if (!_config.CordiPeep.LogAlliance && isAlliance) continue;
+            if (!_config.Peeper.LogParty && isParty) continue;
+            if (!_config.Peeper.LogAlliance && isAlliance) continue;
 
             var character = (FFXIVClientStructs.FFXIV.Client.Game.Character.Character*)player.Address;
             var targetId = character != null ? (ulong)character->TargetId : player.TargetObjectId;
@@ -227,13 +229,13 @@ public class CordiPeepService : IDisposable
         var previous = _registry.TakeFromHistory(id, player.Name, player.World);
 
         var skipNotifications = false;
-        if (previous != null && _config.CordiPeep.SkipRepeatedNotifications)
+        if (previous != null && _config.Peeper.SkipRepeatedNotifications)
         {
             var timeSinceLost = now - (previous.EndTime ?? DateTime.MinValue);
-            if (timeSinceLost.TotalSeconds < _config.CordiPeep.RepeatedNotificationsCooldown)
+            if (timeSinceLost.TotalSeconds < _config.Peeper.RepeatedNotificationsCooldown)
             {
                 skipNotifications = true;
-                Log.Info(LogSource, $"Skipping notifications for {player.FullName} (cooldown: {timeSinceLost.TotalSeconds:F1}s < {_config.CordiPeep.RepeatedNotificationsCooldown}s)");
+                Log.Info(LogSource, $"Skipping notifications for {player.FullName} (cooldown: {timeSinceLost.TotalSeconds:F1}s < {_config.Peeper.RepeatedNotificationsCooldown}s)");
             }
         }
 
@@ -335,14 +337,14 @@ public class CordiPeepService : IDisposable
 
     private async Task SendAlert(PeeperState state, bool skipNotifications = false)
     {
-        var blacklistEntry = _config.CordiPeep.Blacklist.FirstOrDefault(x => x.Name == state.Name && x.World == state.World);
+        var blacklistEntry = _config.Peeper.Blacklist.FirstOrDefault(x => x.Name == state.Name && x.World == state.World);
 
-        if (_config.CordiPeep.SoundEnabled && !skipNotifications && (blacklistEntry == null || !blacklistEntry.DisableSound))
+        if (_config.Peeper.SoundEnabled && !skipNotifications && (blacklistEntry == null || !blacklistEntry.DisableSound))
         {
             PlaySound();
         }
 
-        if (!_config.CordiPeep.DiscordEnabled) return;
+        if (!_config.Peeper.DiscordEnabled) return;
         if (blacklistEntry?.DisableDiscord == true) return;
 
         if (skipNotifications)
@@ -351,11 +353,11 @@ public class CordiPeepService : IDisposable
             return;
         }
 
-        if (_config.CordiPeep.DisableDiscordInCombat &&
+        if (_config.Peeper.DisableDiscordInCombat &&
             Service.ObjectTable.LocalPlayer != null &&
             (Service.ObjectTable.LocalPlayer.StatusFlags & Dalamud.Game.ClientState.Objects.Enums.StatusFlags.InCombat) != 0)
             return;
-        if (_config.CordiPeep.DisableDiscordInPvP && Service.ClientState.IsPvP)
+        if (_config.Peeper.DisableDiscordInPvP && Service.ClientState.IsPvP)
             return;
 
         var hadMessage = state.MessageId != 0;
@@ -374,17 +376,17 @@ public class CordiPeepService : IDisposable
 
     private void PlaySound()
     {
-        if (!_config.CordiPeep.SoundEnabled) return;
+        if (!_config.Peeper.SoundEnabled) return;
 
-        if (_config.CordiPeep.DisableSoundInCombat &&
+        if (_config.Peeper.DisableSoundInCombat &&
             Service.ObjectTable.LocalPlayer != null &&
             (Service.ObjectTable.LocalPlayer.StatusFlags & Dalamud.Game.ClientState.Objects.Enums.StatusFlags.InCombat) != 0)
             return;
-        if (_config.CordiPeep.DisableSoundInPvP && Service.ClientState.IsPvP)
+        if (_config.Peeper.DisableSoundInPvP && Service.ClientState.IsPvP)
             return;
         if ((DateTime.Now - _lastSoundPlayTime) < _minAlertInterval) return;
 
-        _audio.Play(_config.CordiPeep.SoundPath, _config.CordiPeep.SoundVolume);
+        _audio.Play(_config.Peeper.SoundPath, _config.Peeper.SoundVolume);
         _lastSoundPlayTime = DateTime.Now;
     }
 
@@ -515,7 +517,7 @@ public class CordiPeepService : IDisposable
 
     private unsafe void DrawTargetingDots()
     {
-        var config = _config.CordiPeep;
+        var config = _config.Peeper;
         if (!config.ShowTargetingDot || !config.Enabled) return;
 
         var active = _registry.Snapshot.Active;

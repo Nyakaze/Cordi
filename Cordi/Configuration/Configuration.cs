@@ -16,7 +16,7 @@ public class Configuration : IPluginConfiguration
     public int Version { get; set; } = 1;
 
 
-    public CordiPeepConfig CordiPeep { get; set; } = new();
+    public PeeperConfig Peeper { get; set; } = new();
     public EmoteLogConfig EmoteLog { get; set; } = new();
     public DiscordConfig Discord { get; set; } = new();
     public ChatConfig Chat { get; set; } = new();
@@ -41,9 +41,9 @@ public class Configuration : IPluginConfiguration
     private const int SaveRetryDelayMs = 25;
 
     [JsonIgnore] private static readonly object SaveGate = new();
-    [JsonIgnore] private IDalamudPluginInterface pluginInterface;
+    [JsonIgnore] private IDalamudPluginInterface pluginInterface = null!;
     [JsonIgnore] public string ConfigFilePath => Path.Combine(pluginInterface.ConfigDirectory.FullName, "Config.json");
-    [JsonExtensionData] private IDictionary<string, JToken> _additionalData;
+    [JsonExtensionData] private IDictionary<string, JToken>? _additionalData;
 
     [JsonIgnore] public Dictionary<XivChatType, string> MappingCache { get; private set; } = new();
 
@@ -69,7 +69,7 @@ public class Configuration : IPluginConfiguration
 
         if (_additionalData.TryGetValue("BotToken", out var botToken))
         {
-            Discord.BotToken = botToken.ToObject<string>();
+            Discord.BotToken = botToken.ToObject<string>() ?? string.Empty;
             needsSave = true;
         }
         if (_additionalData.TryGetValue("BotStarted", out var botStarted))
@@ -79,24 +79,24 @@ public class Configuration : IPluginConfiguration
         }
         if (_additionalData.TryGetValue("DefaultDiscordChannelId", out var defaultChan))
         {
-            Discord.DefaultChannelId = defaultChan.ToObject<string>();
+            Discord.DefaultChannelId = defaultChan.ToObject<string>() ?? string.Empty;
             needsSave = true;
         }
 
 
         if (_additionalData.TryGetValue("Mappings", out var mappings))
         {
-            Chat.Mappings = mappings.ToObject<List<ChannelMapping>>();
+            Chat.Mappings = mappings.ToObject<List<ChannelMapping>>() ?? new();
             needsSave = true;
         }
         if (_additionalData.TryGetValue("TellThreadMappings", out var tellMappings))
         {
-            Chat.TellThreadMappings = tellMappings.ToObject<Dictionary<string, string>>();
+            Chat.TellThreadMappings = tellMappings.ToObject<Dictionary<string, string>>() ?? new();
             needsSave = true;
         }
         if (_additionalData.TryGetValue("CustomAvatars", out var avatars))
         {
-            Chat.CustomAvatars = avatars.ToObject<Dictionary<string, string>>();
+            Chat.CustomAvatars = avatars.ToObject<Dictionary<string, string>>() ?? new();
             needsSave = true;
         }
 
@@ -108,7 +108,7 @@ public class Configuration : IPluginConfiguration
         }
         if (_additionalData.TryGetValue("EmoteLogChannelId", out var elChan))
         {
-            EmoteLog.ChannelId = elChan.ToObject<string>();
+            EmoteLog.ChannelId = elChan.ToObject<string>() ?? string.Empty;
             needsSave = true;
         }
         if (_additionalData.TryGetValue("EmoteLogEnabled", out var elEnabled))
@@ -163,104 +163,111 @@ public class Configuration : IPluginConfiguration
         }
         if (_additionalData.TryGetValue("EmoteLogBlacklist", out var elBlacklist))
         {
-            EmoteLog.Blacklist = elBlacklist.ToObject<List<EmoteLogBlacklistEntry>>();
+            EmoteLog.Blacklist = elBlacklist.ToObject<List<EmoteLogBlacklistEntry>>() ?? new();
             needsSave = true;
         }
 
 
         if (_additionalData.TryGetValue("CordiPeepEnabled", out var cpEnabled))
         {
-            CordiPeep.Enabled = cpEnabled.ToObject<bool>();
+            Peeper.Enabled = cpEnabled.ToObject<bool>();
             needsSave = true;
         }
         if (_additionalData.TryGetValue("CordiPeepDiscordEnabled", out var cpDiscord))
         {
-            CordiPeep.DiscordEnabled = cpDiscord.ToObject<bool>();
+            Peeper.DiscordEnabled = cpDiscord.ToObject<bool>();
             needsSave = true;
         }
         if (_additionalData.TryGetValue("CordiPeepDetectWhenClosed", out var cpDetect))
         {
-            CordiPeep.DetectWhenClosed = cpDetect.ToObject<bool>();
+            Peeper.DetectWhenClosed = cpDetect.ToObject<bool>();
             needsSave = true;
         }
         if (_additionalData.TryGetValue("CordiPeepSoundPath", out var cpSoundPath))
         {
-            CordiPeep.SoundPath = cpSoundPath.ToObject<string>();
+            Peeper.SoundPath = cpSoundPath.ToObject<string>() ?? string.Empty;
             needsSave = true;
         }
         if (_additionalData.TryGetValue("CordiPeepDiscordChannelId", out var cpChan))
         {
-            CordiPeep.DiscordChannelId = cpChan.ToObject<string>();
+            Peeper.DiscordChannelId = cpChan.ToObject<string>() ?? string.Empty;
             needsSave = true;
         }
         if (_additionalData.TryGetValue("CordiPeepWindowEnabled", out var cpWinEnabled))
         {
-            CordiPeep.WindowEnabled = cpWinEnabled.ToObject<bool>();
+            Peeper.WindowEnabled = cpWinEnabled.ToObject<bool>();
             needsSave = true;
         }
         if (_additionalData.TryGetValue("OpenCordiPeepOnLogin", out var cpOpenLogin))
         {
-            CordiPeep.OpenOnLogin = cpOpenLogin.ToObject<bool>();
+            Peeper.OpenOnLogin = cpOpenLogin.ToObject<bool>();
             needsSave = true;
         }
         if (_additionalData.TryGetValue("CordiPeepWindowLocked", out var cpWinLocked))
         {
-            CordiPeep.WindowLocked = cpWinLocked.ToObject<bool>();
+            Peeper.WindowLocked = cpWinLocked.ToObject<bool>();
             needsSave = true;
         }
         if (_additionalData.TryGetValue("CordiPeepWindowNoResize", out var cpNoResize))
         {
-            CordiPeep.WindowNoResize = cpNoResize.ToObject<bool>();
+            Peeper.WindowNoResize = cpNoResize.ToObject<bool>();
             needsSave = true;
         }
         if (_additionalData.TryGetValue("CordiPeepFocusOnHover", out var cpFocus))
         {
-            CordiPeep.FocusOnHover = cpFocus.ToObject<bool>();
+            Peeper.FocusOnHover = cpFocus.ToObject<bool>();
             needsSave = true;
         }
         if (_additionalData.TryGetValue("CordiPeepAltClickExamine", out var cpAlt))
         {
-            CordiPeep.AltClickExamine = cpAlt.ToObject<bool>();
+            Peeper.AltClickExamine = cpAlt.ToObject<bool>();
             needsSave = true;
         }
         if (_additionalData.TryGetValue("CordiPeepIncludeSelf", out var cpSelf))
         {
-            CordiPeep.IncludeSelf = cpSelf.ToObject<bool>();
+            Peeper.IncludeSelf = cpSelf.ToObject<bool>();
             needsSave = true;
         }
         if (_additionalData.TryGetValue("CordiPeepLogParty", out var cpParty))
         {
-            CordiPeep.LogParty = cpParty.ToObject<bool>();
+            Peeper.LogParty = cpParty.ToObject<bool>();
             needsSave = true;
         }
         if (_additionalData.TryGetValue("CordiPeepLogAlliance", out var cpAli))
         {
-            CordiPeep.LogAlliance = cpAli.ToObject<bool>();
+            Peeper.LogAlliance = cpAli.ToObject<bool>();
             needsSave = true;
         }
         if (_additionalData.TryGetValue("CordiPeepLogCombat", out var cpCombat))
         {
-            CordiPeep.LogCombat = cpCombat.ToObject<bool>();
+            Peeper.LogCombat = cpCombat.ToObject<bool>();
             needsSave = true;
         }
         if (_additionalData.TryGetValue("CordiPeepSoundEnabled", out var cpSoundEnabled))
         {
-            CordiPeep.SoundEnabled = cpSoundEnabled.ToObject<bool>();
+            Peeper.SoundEnabled = cpSoundEnabled.ToObject<bool>();
             needsSave = true;
         }
         if (_additionalData.TryGetValue("CordiPeepSoundVolume", out var cpVol))
         {
-            CordiPeep.SoundVolume = cpVol.ToObject<float>();
+            Peeper.SoundVolume = cpVol.ToObject<float>();
             needsSave = true;
         }
         if (_additionalData.TryGetValue("CordiPeepSoundDevice", out var cpDevice))
         {
-            CordiPeep.LegacySoundDevice = cpDevice.ToObject<Guid>();
+            Peeper.LegacySoundDevice = cpDevice.ToObject<Guid>();
             needsSave = true;
         }
         if (_additionalData.TryGetValue("CordiPeepBlacklist", out var cpBlacklist))
         {
-            CordiPeep.Blacklist = cpBlacklist.ToObject<List<CordiPeepBlacklistEntry>>();
+            Peeper.Blacklist = cpBlacklist.ToObject<List<PeeperBlacklistEntry>>() ?? new();
+            needsSave = true;
+        }
+
+        if (_additionalData.TryGetValue("CordiPeep", out var cpSection))
+        {
+            var legacy = cpSection.ToObject<PeeperConfig>();
+            if (legacy != null) Peeper = legacy;
             needsSave = true;
         }
 
@@ -273,13 +280,13 @@ public class Configuration : IPluginConfiguration
 
     private void MigrateAudioDevice()
     {
-        if (CordiPeep.LegacySoundDevice == Guid.Empty)
+        if (Peeper.LegacySoundDevice == Guid.Empty)
             return;
 
         if (Audio.OutputDevice == Guid.Empty)
-            Audio.OutputDevice = CordiPeep.LegacySoundDevice;
+            Audio.OutputDevice = Peeper.LegacySoundDevice;
 
-        CordiPeep.LegacySoundDevice = Guid.Empty;
+        Peeper.LegacySoundDevice = Guid.Empty;
         Save();
     }
 

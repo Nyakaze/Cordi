@@ -78,7 +78,7 @@ public class DebugTab : ConfigTabBase
         DrawMessageSimulator();
         theme.SpacerY();
 
-        DrawCordiPeepDebug();
+        DrawPeeperDebug();
         theme.SpacerY();
 
         DrawEmoteLogDebug();
@@ -323,7 +323,7 @@ public class DebugTab : ConfigTabBase
     private string _debugName = "Test Player";
     private string _debugWorld = "Test World";
 
-    private void DrawCordiPeepDebug()
+    private void DrawPeeperDebug()
     {
         bool unused = true;
         theme.DrawPluginCardAuto(
@@ -351,7 +351,7 @@ public class DebugTab : ConfigTabBase
 
                 if (ImGui.Button("Add Test Peeper"))
                 {
-                    plugin.CordiPeep?.AddSimulatedPeeper(_debugName, _debugWorld);
+                    plugin.Peeper?.AddSimulatedPeeper(_debugName, _debugWorld);
                 }
                 theme.HoverHandIfItem();
 
@@ -359,7 +359,7 @@ public class DebugTab : ConfigTabBase
 
                 if (ImGui.Button("Remove Test Peeper"))
                 {
-                    plugin.CordiPeep?.RemoveSimulatedPeeper(_debugName);
+                    plugin.Peeper?.RemoveSimulatedPeeper(_debugName);
                 }
                 theme.HoverHandIfItem();
 

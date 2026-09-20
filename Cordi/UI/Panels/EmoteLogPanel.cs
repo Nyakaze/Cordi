@@ -9,6 +9,8 @@ using Cordi.Core;
 using Cordi.Extensions;
 using Cordi.UI.Themes;
 
+using Cordi.Services.Features;
+
 namespace Cordi.UI.Panels;
 
 public class EmoteLogPanel

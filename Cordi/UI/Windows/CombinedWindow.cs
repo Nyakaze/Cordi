@@ -13,18 +13,18 @@ public class CombinedWindow : ThemedWindow
 {
     private readonly Configuration.Configuration _config;
     private readonly EmoteLogPanel _emoteLogPanel;
-    private readonly CordiPeepPanel _peepPanel;
+    private readonly PeeperPanel _peepPanel;
 
     public CombinedWindow(
         Configuration.Configuration config,
-        Services.EmoteLogService emoteLog,
-        Services.CordiPeepService peeper) : base(
+        Services.Features.EmoteLogService emoteLog,
+        Services.Features.PeeperService peeper) : base(
         "Emote Log & Peeper###CordiCombo",
         ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse)
     {
         _config = config;
         _emoteLogPanel = new EmoteLogPanel(config, emoteLog, _theme);
-        _peepPanel = new CordiPeepPanel(config, peeper, _theme);
+        _peepPanel = new PeeperPanel(config, peeper, _theme);
 
         this.SizeConstraints = new WindowSizeConstraints
         {
