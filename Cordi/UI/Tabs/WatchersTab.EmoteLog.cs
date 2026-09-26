@@ -25,8 +25,24 @@ public partial class WatchersTab
 
         DrawEmoteLogBehaviorPanel(config);
         DrawEmoteLogDiscordPanel(config);
+        DrawEmoteLogDisplayPanel(config);
         DrawEmoteLogOverlayPanel(config);
         DrawEmoteLogBlacklistPanel(config);
+    }
+
+    private void DrawEmoteLogDisplayPanel(EmoteLogConfig config)
+    {
+        Card.Draw(
+            "emote-display",
+            innerWidth => DrawRowLayout(
+                "emote-row",
+                innerWidth,
+                config.RowLayout,
+                RowFieldCatalog.EmoteLogFields,
+                RowFieldCatalog.EmoteLogDefaults(),
+                showHistory: false),
+            label: "Overlay Display",
+            drawTrailing: anchor => theme.HelpPill("emote-row-help", anchor, RowLayoutHelp));
     }
 
     private void DrawEmoteLogBehaviorPanel(EmoteLogConfig config)
@@ -143,7 +159,6 @@ public partial class WatchersTab
                 Flag("emote-lock-position", "Lock position", () => config.WindowLockPosition, v => config.WindowLockPosition = v),
                 Flag("emote-lock-size", "Lock size", () => config.WindowLockSize, v => config.WindowLockSize = v),
                 Flag("emote-ignore-esc", "Ignore ESC", () => config.IgnoreEsc, v => config.IgnoreEsc = v),
-                Flag("emote-reply-button", "Show reply button", () => config.ShowReplyButton, v => config.ShowReplyButton = v),
                 Flag("emote-hide-title", "Hide title bar", () => config.HideTitleBar, v => config.HideTitleBar = v),
                 Flag("emote-text-shadow", "Text shadow", () => config.TextShadow, v => config.TextShadow = v),
             },

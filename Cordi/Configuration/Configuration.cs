@@ -53,6 +53,7 @@ public class Configuration : IPluginConfiguration
         MigrateConfig();
         MigrateAudioDevice();
         MigrateCombinedLayout();
+        MigrateRowLayouts();
         MigrateChannelSendTypes();
         MigrateVersion();
         Translation.Normalize();
@@ -129,7 +130,7 @@ public class Configuration : IPluginConfiguration
         }
         if (_additionalData.TryGetValue("EmoteLogShowReplyButton", out var elReply))
         {
-            EmoteLog.ShowReplyButton = elReply.ToObject<bool>();
+            EmoteLog.LegacyShowReplyButton = elReply.ToObject<bool>();
             needsSave = true;
         }
         if (_additionalData.TryGetValue("EmoteLogDiscordEnabled", out var elDiscord))
@@ -300,6 +301,41 @@ public class Configuration : IPluginConfiguration
         CombinedWindow.Enabled = true;
         CombinedWindow.LegacySwapPanels = null;
         Save();
+    }
+
+    private void MigrateRowLayouts()
+    {
+        bool changed = Peeper.RowLayout.Fields.Count == 0 || EmoteLog.RowLayout.Fields.Count == 0;
+
+        Peeper.RowLayout.Normalize(RowFieldCatalog.PeeperDefaults());
+        EmoteLog.RowLayout.Normalize(RowFieldCatalog.EmoteLogDefaults());
+
+        changed |= Apply(Peeper.RowLayout, RowFieldCatalog.Direction, Peeper.LegacyShowDirection, Peeper.LegacyShowDirectionInHistory);
+        changed |= Apply(Peeper.RowLayout, RowFieldCatalog.Distance, Peeper.LegacyShowDistance, Peeper.LegacyShowDistanceInHistory);
+        changed |= Apply(Peeper.RowLayout, RowFieldCatalog.Target, Peeper.LegacyShowCurrentTarget, null);
+        changed |= Apply(EmoteLog.RowLayout, RowFieldCatalog.Reply, EmoteLog.LegacyShowReplyButton, null);
+
+        Peeper.LegacyShowDirection = null;
+        Peeper.LegacyShowDistance = null;
+        Peeper.LegacyShowDirectionInHistory = null;
+        Peeper.LegacyShowDistanceInHistory = null;
+        Peeper.LegacyShowCurrentTarget = null;
+        EmoteLog.LegacyShowReplyButton = null;
+
+        if (changed) Save();
+
+        static bool Apply(RowLayoutConfig layout, string key, bool? enabled, bool? inHistory)
+        {
+            if (enabled == null && inHistory == null) return false;
+
+            var field = layout.Find(key);
+            if (field == null) return false;
+
+            if (enabled is { } on) field.Enabled = on;
+            if (inHistory is { } history) field.InHistory = history;
+
+            return true;
+        }
     }
 
     private void MigrateVersion()

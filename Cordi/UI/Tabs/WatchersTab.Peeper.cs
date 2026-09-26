@@ -307,15 +307,15 @@ public partial class WatchersTab
     {
         Card.Draw(
             "peep-display",
-            innerWidth => Toggles.Draw("peep-display-flags", new[]
-            {
-                Flag("show-direction", "Show direction arrow", () => config.ShowDirection, v => config.ShowDirection = v),
-                Flag("show-distance", "Show distance", () => config.ShowDistance, v => config.ShowDistance = v),
-                Flag("show-target", "Show peeper's target", () => config.ShowCurrentTarget, v => config.ShowCurrentTarget = v),
-                Flag("history-direction", "Direction in history", () => config.ShowDirectionInHistory, v => config.ShowDirectionInHistory = v),
-                Flag("history-distance", "Distance in history", () => config.ShowDistanceInHistory, v => config.ShowDistanceInHistory = v),
-            }, innerWidth),
-            label: "Overlay Display");
+            innerWidth => DrawRowLayout(
+                "peep-row",
+                innerWidth,
+                config.RowLayout,
+                RowFieldCatalog.PeeperFields,
+                RowFieldCatalog.PeeperDefaults(),
+                showHistory: true),
+            label: "Overlay Display",
+            drawTrailing: anchor => theme.HelpPill("peep-row-help", anchor, RowLayoutHelp));
     }
 
     private void DrawPeeperHighlightPanel(PeeperConfig config)

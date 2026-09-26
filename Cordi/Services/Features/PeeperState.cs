@@ -39,6 +39,7 @@ public sealed class PeeperState : IWatcherAlert
     public float Distance;
     public float DirectionAngle;
     public string? CurrentTargetName;
+    public string? CurrentTargetWorld;
     public ulong CurrentTargetId;
     public bool IsPresent;
     public bool TargetedBack;

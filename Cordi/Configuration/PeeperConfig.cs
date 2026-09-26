@@ -40,11 +40,22 @@ public class PeeperConfig : IWindowChromeConfig
     [JsonProperty("SoundDevice")]
     public Guid LegacySoundDevice { get; set; } = Guid.Empty;
 
-    public bool ShowDirection { get; set; } = true;
-    public bool ShowDistance { get; set; } = true;
-    public bool ShowDirectionInHistory { get; set; } = true;
-    public bool ShowDistanceInHistory { get; set; } = true;
-    public bool ShowCurrentTarget { get; set; } = true;
+    public RowLayoutConfig RowLayout { get; set; } = new();
+
+    [JsonProperty("ShowDirection", NullValueHandling = NullValueHandling.Ignore)]
+    public bool? LegacyShowDirection { get; set; }
+
+    [JsonProperty("ShowDistance", NullValueHandling = NullValueHandling.Ignore)]
+    public bool? LegacyShowDistance { get; set; }
+
+    [JsonProperty("ShowDirectionInHistory", NullValueHandling = NullValueHandling.Ignore)]
+    public bool? LegacyShowDirectionInHistory { get; set; }
+
+    [JsonProperty("ShowDistanceInHistory", NullValueHandling = NullValueHandling.Ignore)]
+    public bool? LegacyShowDistanceInHistory { get; set; }
+
+    [JsonProperty("ShowCurrentTarget", NullValueHandling = NullValueHandling.Ignore)]
+    public bool? LegacyShowCurrentTarget { get; set; }
 
     public Vector4 TargetingHighlightColor { get; set; } = new Vector4(1f, 0.5f, 0.5f, 1f);
 

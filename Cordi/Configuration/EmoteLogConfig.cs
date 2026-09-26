@@ -14,7 +14,10 @@ public class EmoteLogConfig : IWindowChromeConfig
     public bool IncludeSelf { get; set; } = true;
     public bool CollapseDuplicates { get; set; } = false;
     public int MaxEntries { get; set; } = 200;
-    public bool ShowReplyButton { get; set; } = true;
+    [Newtonsoft.Json.JsonProperty("ShowReplyButton", NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+    public bool? LegacyShowReplyButton { get; set; }
+
+    public RowLayoutConfig RowLayout { get; set; } = new();
     public int EmoteBackHoldSeconds { get; set; } = 8;
     public bool UnhideFromVisibility { get; set; } = true;
     public bool DiscordEnabled { get; set; } = true;

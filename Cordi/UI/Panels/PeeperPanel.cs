@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Numerics;
 using Cordi.Services;
 using Dalamud.Bindings.ImGui;
@@ -54,20 +55,16 @@ public class PeeperPanel
         }
         else
         {
+            float rightEdge = ImGui.GetCursorScreenPos().X + ImGui.GetContentRegionAvail().X;
+
             foreach (var peeper in snapshot.Active)
             {
-                string label = $"{peeper.Name}";
-                string time = peeper.LastSeen.ToString("HH:mm");
-
-                DrawEntry(peeper, label, time, true, textShadow);
+                DrawEntry(peeper, true, rightEdge, textShadow);
             }
 
             foreach (var peeper in snapshot.History)
             {
-                string label = $"{peeper.Name}";
-                string time = peeper.EndTime.HasValue ? peeper.EndTime.Value.ToString("HH:mm") : "Unknown";
-
-                DrawEntry(peeper, label, time, false, textShadow);
+                DrawEntry(peeper, false, rightEdge, textShadow);
             }
         }
 
@@ -112,21 +109,17 @@ public class PeeperPanel
         }
     }
 
-    private void DrawEntry(PeeperState peeper, string label, string rightText, bool isActive, bool textShadow)
+    private void DrawEntry(PeeperState peeper, bool isActive, float rightEdge, bool textShadow)
     {
-        var avail = ImGui.GetContentRegionAvail().X;
         var style = ImGui.GetStyle();
         var config = _config.Peeper;
 
-        bool showArrow = (isActive && config.ShowDirection) || (!isActive && config.ShowDirectionInHistory && peeper.IsPresent);
+        var left = new List<RowSegment>();
+        var right = new List<RowSegment>();
+        var second = new List<RowSegment>();
 
-        bool showDist = (isActive && config.ShowDistance) || (!isActive && config.ShowDistanceInHistory && peeper.IsPresent);
-        string distText = showDist ? $"{peeper.Distance:F1}y  " : "";
+        bool showTarget = BuildSegments(peeper, isActive, textShadow, left, right, second);
 
-        var localPlayer = Service.ObjectTable.LocalPlayer;
-        bool isTargetLocalPlayer = peeper.CurrentTargetId != 0 && localPlayer != null && peeper.CurrentTargetId == localPlayer.GameObjectId;
-
-        bool showTarget = config.ShowCurrentTarget && !string.IsNullOrEmpty(peeper.CurrentTargetName) && !isTargetLocalPlayer;
         float rowHeight = ImGui.GetTextLineHeight() + style.FramePadding.Y * 2;
 
         using var headerHoveredRaii = ImRaii.PushColor(ImGuiCol.HeaderHovered, new Vector4(0f, 0f, 0f, 0f));
@@ -147,7 +140,6 @@ public class PeeperPanel
         var peeperHovered = ImGui.IsItemHovered();
         if (peeperHovered) ImGui.SetMouseCursor(ImGuiMouseCursor.Hand);
         var peeperItemMin = ImGui.GetItemRectMin();
-        var peeperItemMax = ImGui.GetItemRectMax();
 
         using (var popup = ImRaii.ContextPopupItem($"ctx_{peeper.GameObjectId}_{peeper.StartTime.Ticks}"))
         {
@@ -207,9 +199,10 @@ public class PeeperPanel
         }
 
         bool targetHovered = false;
+        bool secondLineDrawn = second.Count > 0;
         Vector2 targetItemMin = Vector2.Zero;
 
-        if (showTarget)
+        if (secondLineDrawn)
         {
             float targetRowHeight = ImGui.GetTextLineHeight();
 
@@ -225,12 +218,14 @@ public class PeeperPanel
                 }
             }
 
-            targetHovered = ImGui.IsItemHovered();
+            targetHovered = showTarget && ImGui.IsItemHovered();
             if (targetHovered) ImGui.SetMouseCursor(ImGuiMouseCursor.Hand);
             targetItemMin = ImGui.GetItemRectMin();
 
-            using (var popup = ImRaii.ContextPopupItem($"ctx_target_{peeper.GameObjectId}_{peeper.StartTime.Ticks}"))
+            if (showTarget)
             {
+                using var popup = ImRaii.ContextPopupItem($"ctx_target_{peeper.GameObjectId}_{peeper.StartTime.Ticks}");
+
                 if (popup)
                 {
                     var targetName = peeper.CurrentTargetName ?? "Target";
@@ -289,67 +284,170 @@ public class PeeperPanel
             }
         }
 
-        var pMin = peeperItemMin;
-        var pMax = peeperItemMax;
         var drawList = ImGui.GetWindowDrawList();
+        float gap = style.ItemSpacing.X;
+        float margin = MathF.Max(gap, _theme.Gap(0.5f));
+        float textY = peeperItemMin.Y + style.FramePadding.Y;
 
-        uint textColor;
-        if (isActive)
+        RowRenderer.DrawLeft(drawList, new Vector2(peeperItemMin.X + gap, textY), left, gap, textShadow, _theme);
+        RowRenderer.DrawRight(drawList, new Vector2(rightEdge - margin, textY), right, gap, textShadow, _theme);
+
+        if (second.Count > 0)
         {
-            textColor = ImGui.GetColorU32(_config.Peeper.TargetingHighlightColor);
+            var secondOrigin = secondLineDrawn
+                ? new Vector2(targetItemMin.X + gap, targetItemMin.Y)
+                : new Vector2(peeperItemMin.X + gap, textY + ImGui.GetTextLineHeight());
+
+            RowRenderer.DrawLeft(drawList, secondOrigin, second, gap, textShadow, _theme);
         }
-        else
+    }
+
+    private bool BuildSegments(
+        PeeperState peeper,
+        bool isActive,
+        bool textShadow,
+        List<RowSegment> left,
+        List<RowSegment> right,
+        List<RowSegment> second)
+    {
+        var config = _config.Peeper;
+        var localPlayer = Service.ObjectTable.LocalPlayer;
+
+        bool isTargetLocalPlayer = peeper.CurrentTargetId != 0 && localPlayer != null && peeper.CurrentTargetId == localPlayer.GameObjectId;
+        bool hasTarget = !string.IsNullOrEmpty(peeper.CurrentTargetName) && !isTargetLocalPlayer;
+        bool showTarget = false;
+
+        uint normal = isActive
+            ? ImGui.GetColorU32(config.TargetingHighlightColor)
+            : ImGui.GetColorU32(ImGuiCol.TextDisabled);
+        uint muted = ImGui.GetColorU32(ImGuiCol.TextDisabled);
+
+        float lineHeight = ImGui.GetTextLineHeight();
+
+        foreach (var field in config.RowLayout.Fields)
         {
-            textColor = ImGui.GetColorU32(ImGuiCol.TextDisabled);
+            if (!field.Enabled) continue;
+            if (!isActive && (!field.InHistory || !peeper.IsPresent) && IsPresenceField(field.Key)) continue;
+
+            var bucket = field.Side switch
+            {
+                RowSide.Right => right,
+                RowSide.Second => second,
+                _ => left,
+            };
+
+            uint color = field.Style switch
+            {
+                RowFieldStyle.Muted => muted,
+                RowFieldStyle.Accent => ImGui.GetColorU32(config.TargetingHighlightColor),
+                RowFieldStyle.Custom => ImGui.GetColorU32(field.Color),
+                _ => normal,
+            };
+
+            if (field.Key == RowFieldCatalog.Direction)
+            {
+                float arrowSize = lineHeight * 0.45f;
+                float angle = peeper.DirectionAngle;
+
+                bucket.Add(new RowSegment
+                {
+                    Width = arrowSize * 2f,
+                    Draw = pos =>
+                    {
+                        var center = new Vector2(pos.X + arrowSize, pos.Y + lineHeight * 0.5f);
+                        var list = ImGui.GetWindowDrawList();
+
+                        if (textShadow)
+                            _theme.DirectionArrow(list, center + UiTheme.TextShadowOffset, arrowSize, angle, ImGui.GetColorU32(new Vector4(0f, 0f, 0f, 0.8f)));
+
+                        _theme.DirectionArrow(list, center, arrowSize, angle, color);
+                    },
+                });
+
+                continue;
+            }
+
+            var text = FieldText(peeper, field, isActive, hasTarget);
+            if (string.IsNullOrEmpty(text)) continue;
+
+            if (field.Key == RowFieldCatalog.Target) showTarget = true;
+
+            if (field.Key == RowFieldCatalog.Name && isActive && config.TargetingGlowEnabled && config.TargetingGlowThickness > 0f)
+            {
+                var label = text;
+
+                bucket.Add(new RowSegment
+                {
+                    Width = ImGui.CalcTextSize(label).X,
+                    Draw = pos =>
+                    {
+                        var list = ImGui.GetWindowDrawList();
+
+                        if (textShadow) _theme.TextShadowAt(list, pos, label);
+
+                        _theme.TextGlow(list, pos, label, config.TargetingGlowColor, config.TargetingGlowThickness);
+                        _theme.ShadowedTextAt(list, pos, label, color, false);
+                    },
+                });
+
+                continue;
+            }
+
+            bucket.Add(new RowSegment
+            {
+                Text = text,
+                Color = color,
+                Width = ImGui.CalcTextSize(text).X,
+            });
         }
 
-        float textX = pMin.X + style.ItemSpacing.X;
-        float textY = pMin.Y + style.FramePadding.Y;
-        float lineH = ImGui.GetTextLineHeight();
+        return showTarget;
+    }
 
-        var mutedColor = ImGui.GetColorU32(ImGuiCol.TextDisabled);
+    private static bool IsPresenceField(string key) =>
+        key is RowFieldCatalog.Direction or RowFieldCatalog.Distance or RowFieldCatalog.Target;
 
-        if (showArrow)
+    private static string? FieldText(PeeperState peeper, RowFieldConfig field, bool isActive, bool hasTarget)
+    {
+        switch (field.Key)
         {
-            float arrowSize = lineH * 0.45f;
-            var arrowCenter = new Vector2(textX + arrowSize + 1f, textY + lineH * 0.5f);
+            case RowFieldCatalog.Name:
+                return RowFieldCatalog.Format(field.Format, token => RowFieldCatalog.NamePart(peeper.Name, token));
 
-            if (textShadow)
-                _theme.DirectionArrow(
-                    drawList,
-                    arrowCenter + UiTheme.TextShadowOffset,
-                    arrowSize,
-                    peeper.DirectionAngle,
-                    ImGui.GetColorU32(new Vector4(0f, 0f, 0f, 0.8f)));
+            case RowFieldCatalog.World:
+                return RowFieldCatalog.Format(field.Format, token => token == "world" ? peeper.World : null);
 
-            _theme.DirectionArrow(drawList, arrowCenter, arrowSize, peeper.DirectionAngle, mutedColor);
-            textX += arrowSize * 2f + 6f;
-        }
+            case RowFieldCatalog.Distance:
+                return RowFieldCatalog.Format(field.Format, token => token switch
+                {
+                    "y" => peeper.Distance.ToString("F1"),
+                    "yint" => ((int)MathF.Round(peeper.Distance)).ToString(),
+                    _ => null,
+                });
 
-        if (distText.Length > 0)
-        {
-            _theme.ShadowedTextAt(drawList, new Vector2(textX, textY), distText, mutedColor, textShadow);
-            textX += ImGui.CalcTextSize(distText).X;
-        }
+            case RowFieldCatalog.Time:
+            {
+                DateTime? when = isActive ? peeper.LastSeen : peeper.EndTime;
+                return when == null
+                    ? "Unknown"
+                    : RowFieldCatalog.Format(field.Format, token => RowFieldCatalog.TimePart(when.Value, token));
+            }
 
-        var labelPos = new Vector2(textX, textY);
+            case RowFieldCatalog.Duration:
+            {
+                var span = (isActive ? peeper.LastSeen : peeper.EndTime ?? peeper.LastSeen) - peeper.StartTime;
+                return RowFieldCatalog.Format(field.Format, token => RowFieldCatalog.DurationPart(span, token));
+            }
 
-        if (textShadow) _theme.TextShadowAt(drawList, labelPos, label);
+            case RowFieldCatalog.Target:
+                return hasTarget
+                    ? RowFieldCatalog.Format(field.Format, token => token == "world"
+                        ? peeper.CurrentTargetWorld
+                        : RowFieldCatalog.NamePart(peeper.CurrentTargetName, token))
+                    : null;
 
-        if (isActive && config.TargetingGlowEnabled && config.TargetingGlowThickness > 0f)
-            _theme.TextGlow(drawList, labelPos, label, config.TargetingGlowColor, config.TargetingGlowThickness);
-
-        _theme.ShadowedTextAt(drawList, labelPos, label, textColor, false);
-
-        var timeSize = ImGui.CalcTextSize(rightText);
-        var timePos = new Vector2(pMax.X - timeSize.X - style.ItemSpacing.X, textY);
-        _theme.ShadowedTextAt(drawList, timePos, rightText, mutedColor, textShadow);
-
-        if (showTarget)
-        {
-            var targetText = $"  \u2192 {peeper.CurrentTargetName}";
-            var targetPos = new Vector2(targetItemMin.X + style.ItemSpacing.X, targetItemMin.Y);
-            _theme.ShadowedTextAt(drawList, targetPos, targetText, mutedColor, textShadow);
+            default:
+                return null;
         }
     }
 

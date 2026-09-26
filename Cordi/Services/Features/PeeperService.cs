@@ -464,13 +464,19 @@ public class PeeperService : IDisposable
 
         if (targetId != 0)
         {
+            var targetObject = Service.ObjectTable.SearchById(targetId);
+
             state.CurrentTargetId = targetId;
-            state.CurrentTargetName = Service.ObjectTable.SearchById(targetId)?.Name.TextValue;
+            state.CurrentTargetName = targetObject?.Name.TextValue;
+            state.CurrentTargetWorld = targetObject is IPlayerCharacter targetPlayer
+                ? targetPlayer.HomeWorld.Value.Name.ExtractText()
+                : null;
         }
         else
         {
             state.CurrentTargetId = 0;
             state.CurrentTargetName = null;
+            state.CurrentTargetWorld = null;
         }
     }
 
