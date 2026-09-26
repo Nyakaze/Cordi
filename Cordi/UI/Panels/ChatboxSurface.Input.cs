@@ -87,6 +87,7 @@ public sealed partial class ChatboxSurface
         if (translateVisible) reserved += spacing + IconButtonWidth(FontAwesomeIcon.Language);
         if (cinematicButton) reserved += spacing + IconButtonWidth(FontAwesomeIcon.EyeSlash);
         if (Config.ShowEmojiPicker) reserved += spacing + IconButtonWidth(FontAwesomeIcon.Smile);
+        if (Config.ShowGifPicker) reserved += spacing + IconButtonWidth(FontAwesomeIcon.Film);
 
         ImGui.SetCursorPosY(ImGui.GetCursorPosY() + _theme.PickerCaptionHeight());
 
@@ -178,6 +179,15 @@ public sealed partial class ChatboxSurface
                 "Hide the chatbox again. Your chat keybind brings it back.");
 
             if (hidden) Chatbox.HideDuringCinematic();
+        }
+
+        if (Config.ShowGifPicker)
+        {
+            ImGui.SameLine(0, spacing);
+            if (_theme.IconButton("##chatbox-gif", FontAwesomeIcon.Film, "GIFs")) _gifPicker.Open();
+
+            _gifPicker.Draw(link => SendGif(channel.Id, link));
+            pickerOpen |= _gifPicker.InputActive;
         }
 
         if (Config.ShowEmojiPicker)
@@ -372,6 +382,12 @@ public sealed partial class ChatboxSurface
         }
 
         Dispatch(channel.Id, text, _replyTarget);
+    }
+
+    private void SendGif(string channelId, string link)
+    {
+        Chatbox.Send(channelId, link, _replyTarget);
+        _replyTarget = null;
     }
 
     private void Dispatch(string channelId, string text, ChatboxReplyRef? reply)

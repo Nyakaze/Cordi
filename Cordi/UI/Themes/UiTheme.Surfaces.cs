@@ -136,6 +136,16 @@ public sealed partial class UiTheme
 
         var imageMin = min + new Vector2(inset, inset);
         var imageMax = max - new Vector2(inset, inset);
+        var box = imageMax - imageMin;
+        var source = image.Size;
+
+        if (source.X > 0f && source.Y > 0f && box.X > 0f && box.Y > 0f)
+        {
+            var scale = MathF.Min(box.X / source.X, box.Y / source.Y);
+            var fitted = source * scale;
+            imageMin += (box - fitted) * 0.5f;
+            imageMax = imageMin + fitted;
+        }
 
         onImage?.Invoke(image, imageMin, imageMax);
         draw.AddImage(image.Handle, imageMin, imageMax);

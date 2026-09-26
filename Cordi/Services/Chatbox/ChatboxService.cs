@@ -79,6 +79,7 @@ public sealed partial class ChatboxService : IDisposable
         };
         EmbedCache = new ChatboxEmbedCache(Database, () => config.Chatbox.EmbedCacheDays);
         Emotes = new ChatboxEmoteLibrary(Database, () => config.Chatbox.SeenEmoteLimit);
+        Giphy = new GiphyClient(configDirectory, () => config.Chatbox.GiphyApiKey, log);
         _sequence = Store.HighestSeq();
         Translator = new TranslationService(configDirectory, () => config.Translation, log);
         XivimLogs = new XivimLogImporter(config, log);
@@ -141,6 +142,8 @@ public sealed partial class ChatboxService : IDisposable
     public ChatboxEmbedCache EmbedCache { get; }
 
     public ChatboxEmoteLibrary Emotes { get; }
+
+    public GiphyClient Giphy { get; }
 
     public TranslationService Translator { get; }
 
@@ -429,6 +432,7 @@ public sealed partial class ChatboxService : IDisposable
         RestoreGameSounds();
         PersistAllState();
         Translator.Dispose();
+        Giphy.Dispose();
         EmbedCache.Dispose();
         ImageCache.Dispose();
         Store.Dispose();

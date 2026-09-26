@@ -3,6 +3,7 @@ using System.Numerics;
 using Cordi.Configuration;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Interface;
+using Dalamud.Interface.Textures.TextureWraps;
 using Dalamud.Interface.Utility;
 using Dalamud.Interface.Utility.Raii;
 
@@ -114,6 +115,55 @@ public sealed partial class UiTheme
             color.Dispose();
             style.Dispose();
         });
+    }
+
+    public int PickerMediaColumns(float width, float spacing) =>
+        Math.Max(2, (int)((width + spacing) / (Scaled(GifPickerCellWidth) + spacing)));
+
+    public void PickerMediaTile(
+        Vector2 min,
+        Vector2 max,
+        bool hovered,
+        bool favorite,
+        IDalamudTextureWrap? image,
+        Action<IDalamudTextureWrap?, Vector2, Vector2>? onImage = null)
+    {
+        var draw = ImGui.GetWindowDrawList();
+        var rounding = Radius(0.6f);
+
+        if (image == null)
+        {
+            draw.AddRectFilled(min, max, ImGui.GetColorU32(FrameBg), rounding);
+        }
+        else
+        {
+            onImage?.Invoke(image, min, max);
+            draw.AddImageRounded(image.Handle, min, max, Vector2.Zero, Vector2.One, 0xFFFFFFFF, rounding);
+        }
+
+        if (hovered)
+        {
+            ImGui.SetMouseCursor(ImGuiMouseCursor.Hand);
+            draw.AddRect(min, max, ImGui.GetColorU32(AccentHover), rounding, ImDrawFlags.None, 2f * ImGuiHelpers.GlobalScale);
+        }
+
+        if (!favorite && !hovered) return;
+
+        var glyph = FontAwesomeIcon.Star.ToIconString();
+
+        using (ImRaii.PushFont(UiBuilder.IconFont))
+        {
+            var size = ImGui.CalcTextSize(glyph);
+            var pad = Gap(0.3f);
+            var center = new Vector2(max.X - pad - size.X * 0.5f - 2f, min.Y + pad + size.Y * 0.5f + 2f);
+            var radius = MathF.Max(size.X, size.Y) * 0.5f + Scaled(3f);
+
+            draw.AddCircleFilled(center, radius, ImGui.GetColorU32(new Vector4(0f, 0f, 0f, 0.55f)));
+            draw.AddText(
+                center - size * 0.5f,
+                ImGui.GetColorU32(favorite ? TileAmber : new Vector4(1f, 1f, 1f, 0.55f)),
+                glyph);
+        }
     }
 
     public float PickerSearchHeight() => Scaled(30f);

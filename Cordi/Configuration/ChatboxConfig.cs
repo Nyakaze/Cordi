@@ -56,6 +56,16 @@ public enum ChatboxNameStyle
 }
 
 [Serializable]
+public class GiphyGif
+{
+    public string Id { get; set; } = string.Empty;
+    public string Title { get; set; } = string.Empty;
+    public string PreviewUrl { get; set; } = string.Empty;
+    public float Aspect { get; set; } = 1f;
+
+    public string Link() => $"https://media.giphy.com/media/{Id}/giphy.gif";
+}
+
 public class ChatboxChannelConfig
 {
     public string Id { get; set; } = Guid.NewGuid().ToString("N");
@@ -214,6 +224,11 @@ public class ChatboxConfig : IWindowChromeConfig
     public bool UseEmoticonsInGameChat { get; set; } = true;
     public List<string> FavoriteEmojis { get; set; } = new();
     public List<string> RecentEmojis { get; set; } = new();
+
+    public bool ShowGifPicker { get; set; } = true;
+    public string GiphyApiKey { get; set; } = string.Empty;
+    public Vector2 GifPickerSize { get; set; } = Vector2.Zero;
+    public List<GiphyGif> FavoriteGifs { get; set; } = new();
 
     public string ActiveChannelId { get; set; } = string.Empty;
     public List<ChatboxChannelConfig> Channels { get; set; } = new();

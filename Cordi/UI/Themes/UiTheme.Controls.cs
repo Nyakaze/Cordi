@@ -4,12 +4,81 @@ using System.Globalization;
 using System.Numerics;
 using Cordi.UI.Components;
 using Dalamud.Bindings.ImGui;
+using Dalamud.Interface;
 using Dalamud.Interface.Utility.Raii;
 
 namespace Cordi.UI.Themes;
 
 public sealed partial class UiTheme
 {
+    public void StepStrip(IReadOnlyList<string> steps, float width)
+    {
+        var draw = ImGui.GetWindowDrawList();
+        var origin = ImGui.GetCursorScreenPos();
+        var height = Scaled(26f);
+        var badge = Scaled(18f);
+        var gap = Gap(0.4f);
+        var rounding = Radius(0.6f);
+        var chevron = FontAwesomeIcon.ChevronRight.ToIconString();
+        var x = origin.X;
+        var y = origin.Y;
+
+        ApplyFontScale(0.86f);
+
+        for (var i = 0; i < steps.Count; i++)
+        {
+            var label = steps[i];
+            var textSize = ImGui.CalcTextSize(label);
+            var itemWidth = badge + gap + textSize.X + PadX(0.9f);
+
+            if (x > origin.X && x + itemWidth > origin.X + width)
+            {
+                x = origin.X;
+                y += height + gap;
+            }
+
+            var min = new Vector2(x, y);
+            var max = min + new Vector2(itemWidth, height);
+
+            draw.AddRectFilled(min, max, ImGui.GetColorU32(CardBg), rounding);
+            draw.AddRect(min, max, ImGui.GetColorU32(Border), rounding);
+
+            var center = new Vector2(min.X + PadX(0.3f) + badge * 0.5f, min.Y + height * 0.5f);
+            draw.AddCircleFilled(center, badge * 0.5f, ImGui.GetColorU32(new Vector4(Accent.X, Accent.Y, Accent.Z, 0.22f)));
+
+            var number = (i + 1).ToString();
+            var numberSize = ImGui.CalcTextSize(number);
+            draw.AddText(center - numberSize * 0.5f, ImGui.GetColorU32(Accent), number);
+
+            var textPos = new Vector2(center.X + badge * 0.5f + gap, min.Y + (height - textSize.Y) * 0.5f);
+            draw.AddText(textPos, ImGui.GetColorU32(MutedText), label);
+
+            x = max.X + gap;
+
+            if (i == steps.Count - 1) continue;
+
+            using (ImRaii.PushFont(UiBuilder.IconFont))
+            {
+                var size = ImGui.CalcTextSize(chevron) * 0.7f;
+                if (x + size.X + gap <= origin.X + width)
+                {
+                    draw.AddText(
+                        UiBuilder.IconFont,
+                        ImGui.GetFontSize() * 0.7f,
+                        new Vector2(x, y + (height - size.Y) * 0.5f),
+                        ImGui.GetColorU32(FaintText),
+                        chevron);
+                    x += size.X + gap;
+                }
+            }
+        }
+
+        ApplyFontScale();
+
+        ImGui.SetCursorScreenPos(origin);
+        ImGui.Dummy(new Vector2(width, y + height - origin.Y));
+    }
+
     public void MultiPicker(
         string id,
         string preview,

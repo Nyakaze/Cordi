@@ -1,6 +1,7 @@
 using System.Numerics;
 using Cordi.Configuration;
 using Cordi.UI.Themes;
+using Dalamud.Bindings.ImGui;
 using Dalamud.Interface;
 
 namespace Cordi.UI.Tabs;
@@ -11,7 +12,7 @@ public partial class ChatboxTab
     {
         ConsumeScroll();
 
-        Layout.Draw("Content", "Emotes, the emoji picker and link previews.");
+        Layout.Draw("Content", "Emotes, the emoji and GIF pickers and link previews.");
 
         Card.Draw("chatbox-emotes", innerWidth =>
         {
@@ -163,6 +164,12 @@ public partial class ChatboxTab
                 () => plugin.Chatbox.Emotes.Clear());
         }, "Emoji Picker");
 
+        Card.Draw(
+            "chatbox-gif-picker",
+            DrawGifPicker,
+            "GIF Picker",
+            anchor => theme.HelpPill("chatbox-giphy-help", anchor, GiphyHelp, "Getting a key"));
+
         Card.Draw("chatbox-embeds", innerWidth =>
         {
             DrawToggleRow(
@@ -217,4 +224,86 @@ public partial class ChatboxTab
                 () => plugin.Chatbox.EmbedCache.Clear());
         }, "Link Embeds");
     }
+
+    private bool giphyKeyActive;
+
+    private void DrawGifPicker(float innerWidth)
+    {
+        DrawToggleRow(
+            "chatbox-show-gif-picker", FontAwesomeIcon.Film,
+            "Show GIF Button", "Click a GIF to send it, right-click to favourite it.",
+            innerWidth, () => Cfg.ShowGifPicker, v => Cfg.ShowGifPicker = v);
+
+        var key = Cfg.GiphyApiKey;
+
+        Row.Draw(
+            id: "chatbox-giphy-key",
+            icon: FontAwesomeIcon.Key,
+            iconColor: string.IsNullOrWhiteSpace(key) ? theme.MutedText : theme.Accent,
+            title: "Giphy API Key",
+            subtitle: string.IsNullOrWhiteSpace(key) ? "Free, takes a minute. Follow the steps below." : "Stays on this PC and is only sent to Giphy.",
+            controlWidth: 380f,
+            drawControl: (pos, width) =>
+            {
+                var value = key;
+                var flags = giphyKeyActive ? ImGuiInputTextFlags.None : ImGuiInputTextFlags.Password;
+                var buttonWidth = theme.Scaled(100f);
+                var gap = theme.Gap(0.5f);
+
+                theme.PushInputScope();
+                if (theme.TextInput("##chatbox-giphy-key-input", pos, width - buttonWidth - gap, ref value, 128, "Paste your API key", flags))
+                {
+                    Cfg.GiphyApiKey = value.Trim();
+                    Save();
+                }
+                giphyKeyActive = ImGui.IsItemActive();
+                theme.PopInputScope();
+
+                ImGui.SetCursorScreenPos(new Vector2(pos.X + width - buttonWidth, pos.Y));
+                var size = new Vector2(buttonWidth, theme.Scaled(UiTheme.ControlHeight));
+                var open = string.IsNullOrWhiteSpace(key)
+                    ? theme.PrimaryButton("Get a key##chatbox-giphy-open", size)
+                    : theme.SecondaryButton("Dashboard##chatbox-giphy-open", size);
+
+                if (open) Dalamud.Utility.Util.OpenLink(Services.Chatbox.GiphyClient.DashboardUrl);
+                if (ImGui.IsItemHovered()) theme.Tooltip("Opens developers.giphy.com in your browser.");
+            },
+            rowWidth: innerWidth);
+
+        if (string.IsNullOrWhiteSpace(key))
+        {
+            theme.SpacerY(0.3f);
+
+            theme.StepStrip(GiphySteps, innerWidth);
+
+            theme.SpacerY(0.5f);
+            return;
+        }
+
+        var giphy = plugin.Chatbox.Giphy;
+
+        DrawActionRow(
+            "chatbox-giphy-usage", FontAwesomeIcon.Stopwatch, theme.Accent,
+            "Usage",
+            $"{giphy.RequestsLastHour}/{Services.Chatbox.GiphyClient.HourlyLimit} requests this hour, {giphy.CachedQueries} searches cached.",
+            "Clear Cache", innerWidth,
+            giphy.ClearCache);
+    }
+
+    private static readonly string[] GiphySteps =
+    [
+        "Sign up",
+        "Create an app",
+        "Choose API",
+        "Paste the key",
+    ];
+
+    private const string GiphyHelp =
+        "1. Open developers.giphy.com and sign up or log in, it is free.\n" +
+        "2. Click \"Create an App\" and choose \"API\", not SDK.\n" +
+        "3. Give it any name and description, e.g. \"Cordi\", and accept the terms.\n" +
+        "4. Copy the API key of the new app into the field.\n\n" +
+        "Free keys allow 100 requests per hour. Only new searches, trending and \"Load more\" count.\n" +
+        "Searches are cached for 7 days and trending for 2 hours, also across restarts.\n" +
+        "The key stays on this PC and is only sent to Giphy.";
 }
