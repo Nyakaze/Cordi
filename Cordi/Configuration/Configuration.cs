@@ -52,6 +52,7 @@ public class Configuration : IPluginConfiguration
         this.pluginInterface = pluginInterface;
         MigrateConfig();
         MigrateAudioDevice();
+        MigrateCombinedLayout();
         MigrateChannelSendTypes();
         MigrateVersion();
         Translation.Normalize();
@@ -287,6 +288,17 @@ public class Configuration : IPluginConfiguration
             Audio.OutputDevice = Peeper.LegacySoundDevice;
 
         Peeper.LegacySoundDevice = Guid.Empty;
+        Save();
+    }
+
+    private void MigrateCombinedLayout()
+    {
+        if (CombinedWindow.LegacySwapPanels is not { } swapped) return;
+
+        CombinedWindow.EmoteLogSlot = swapped ? OverlaySlot.TopRight : OverlaySlot.TopLeft;
+        CombinedWindow.PeeperSlot = swapped ? OverlaySlot.TopLeft : OverlaySlot.TopRight;
+        CombinedWindow.Enabled = true;
+        CombinedWindow.LegacySwapPanels = null;
         Save();
     }
 

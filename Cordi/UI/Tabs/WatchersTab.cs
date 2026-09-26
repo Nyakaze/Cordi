@@ -16,6 +16,10 @@ public partial class WatchersTab : ConfigTabBase
 
     private ToggleGrid Toggles => toggleGridRenderer ??= new ToggleGrid(theme);
 
+    private SlotPicker? slotPickerRenderer;
+
+    private SlotPicker Slots => slotPickerRenderer ??= new SlotPicker(theme);
+
     public override string Label => "Watchers";
 
     public WatchersTab(CordiPlugin plugin, UiTheme theme) : base(plugin, theme)

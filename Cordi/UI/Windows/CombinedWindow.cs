@@ -1,3 +1,4 @@
+using System;
 using System.Numerics;
 using Dalamud.Interface.Windowing;
 using Dalamud.Bindings.ImGui;
@@ -38,43 +39,105 @@ public class CombinedWindow : ThemedWindow
     {
         _theme.ApplyFontScale();
         var cfg = _config.CombinedWindow;
-        var swap = cfg.SwapPanels;
 
-        var tableBorder = _theme.WindowBorder;
-        tableBorder.W *= cfg.BackgroundOpacity;
-        using var tableBorderScope = ImRaii.PushColor(ImGuiCol.TableBorderStrong, tableBorder)
-            .Push(ImGuiCol.TableBorderLight, tableBorder);
+        if (!cfg.Enabled)
+        {
+            IsOpen = false;
+            return;
+        }
 
-        using (var table = ImRaii.Table("##CombinedTable", 2,
+        var emoteSlot = cfg.EmoteLogSlot;
+        var peeperSlot = cfg.PeeperSlot;
+
+        if (emoteSlot == peeperSlot)
+            peeperSlot = emoteSlot == OverlaySlot.TopLeft ? OverlaySlot.TopRight : OverlaySlot.TopLeft;
+
+        int emoteRow = CombinedWindowConfig.RowOf(emoteSlot);
+        int emoteColumn = CombinedWindowConfig.ColumnOf(emoteSlot);
+        int peeperRow = CombinedWindowConfig.RowOf(peeperSlot);
+        int peeperColumn = CombinedWindowConfig.ColumnOf(peeperSlot);
+
+        bool splitRows = emoteRow != peeperRow;
+        int columns = emoteColumn == peeperColumn ? 1 : 2;
+
+        var border = _theme.WindowBorder;
+        border.W *= cfg.BackgroundOpacity;
+
+        using var borderScope = ImRaii.PushColor(ImGuiCol.TableBorderStrong, border)
+            .Push(ImGuiCol.TableBorderLight, border);
+
+        using (var table = ImRaii.Table("##CombinedTable", columns,
                 ImGuiTableFlags.Resizable | ImGuiTableFlags.BordersInnerV | ImGuiTableFlags.SizingStretchSame,
                 ImGui.GetContentRegionAvail()))
         {
-            if (table)
+            if (!table) return;
+
+            for (int column = 0; column < columns; column++)
             {
-                ImGui.TableSetupColumn("LeftCol", ImGuiTableColumnFlags.None);
-                ImGui.TableSetupColumn("RightCol", ImGuiTableColumnFlags.None);
-
-                ImGui.TableNextRow();
-
-                ImGui.TableSetColumnIndex(0);
-                var shadow = cfg.TextShadow;
-                using (ImRaii.Child("##LeftPanel", new Vector2(0, 0), false))
-                {
-                    if (swap)
-                        _peepPanel.Draw(shadow);
-                    else
-                        _emoteLogPanel.Draw(shadow);
-                }
-
-                ImGui.TableSetColumnIndex(1);
-                using (ImRaii.Child("##RightPanel", new Vector2(0, 0), false))
-                {
-                    if (swap)
-                        _emoteLogPanel.Draw(shadow);
-                    else
-                        _peepPanel.Draw(shadow);
-                }
+                ImGui.TableSetupColumn($"Col{column}", ImGuiTableColumnFlags.None);
             }
+
+            ImGui.TableNextRow();
+
+            int cell = 0;
+
+            for (int column = 0; column < 2; column++)
+            {
+                if (columns == 1 && column != emoteColumn) continue;
+
+                ImGui.TableSetColumnIndex(cell);
+
+                Action<bool>? top = null;
+                Action<bool>? bottom = null;
+
+                if (emoteColumn == column) AssignPanel(emoteRow, _emoteLogPanel.Draw, ref top, ref bottom);
+                if (peeperColumn == column) AssignPanel(peeperRow, _peepPanel.Draw, ref top, ref bottom);
+
+                DrawColumn(column, top, bottom, splitRows, cfg.TextShadow, border);
+                cell++;
+            }
+        }
+    }
+
+    private static void AssignPanel(int row, Action<bool> panel, ref Action<bool>? top, ref Action<bool>? bottom)
+    {
+        if (row == 0)
+            top = panel;
+        else
+            bottom = panel;
+    }
+
+    private void DrawColumn(int column, Action<bool>? top, Action<bool>? bottom, bool splitRows, bool shadow, Vector4 border)
+    {
+        if (!splitRows)
+        {
+            using (ImRaii.Child($"##Cell{column}", Vector2.Zero, false))
+            {
+                (top ?? bottom)?.Invoke(shadow);
+            }
+
+            return;
+        }
+
+        float spacing = ImGui.GetStyle().ItemSpacing.Y;
+        float height = MathF.Max((ImGui.GetContentRegionAvail().Y - spacing) * 0.5f, 1f);
+
+        using (ImRaii.Child($"##Cell{column}Top", new Vector2(0, height), false))
+        {
+            top?.Invoke(shadow);
+        }
+
+        var divider = ImGui.GetCursorScreenPos();
+        float width = ImGui.GetContentRegionAvail().X;
+
+        ImGui.GetWindowDrawList().AddLine(
+            new Vector2(divider.X, divider.Y + spacing * 0.5f),
+            new Vector2(divider.X + width, divider.Y + spacing * 0.5f),
+            ImGui.GetColorU32(border));
+
+        using (ImRaii.Child($"##Cell{column}Bottom", Vector2.Zero, false))
+        {
+            bottom?.Invoke(shadow);
         }
     }
 }

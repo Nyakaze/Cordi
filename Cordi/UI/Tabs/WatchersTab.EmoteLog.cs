@@ -75,7 +75,7 @@ public partial class WatchersTab
                     FontAwesomeIcon.Stopwatch,
                     theme.Accent,
                     "Emote back hold",
-                    "Seconds Cordi keeps the target before releasing it again",
+                    "Seconds of quiet before Cordi drops the target and turns you back",
                     innerWidth,
                     1f,
                     60f,

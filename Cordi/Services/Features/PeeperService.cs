@@ -32,6 +32,7 @@ public class PeeperService : IDisposable
     private readonly AudioService _audio;
     private readonly VisibilityService _visibility;
     private readonly Lazy<UI.Windows.PeeperWindow> _window;
+    private readonly Lazy<UI.Windows.CombinedWindow> _combined;
 
     private readonly PeeperRegistry _registry = new();
     private readonly WatcherNotifier<PeeperState> _notifier;
@@ -57,7 +58,8 @@ public class PeeperService : IDisposable
         LodestoneService lodestone,
         AudioService audio,
         VisibilityService visibility,
-        Lazy<UI.Windows.PeeperWindow> window)
+        Lazy<UI.Windows.PeeperWindow> window,
+        Lazy<UI.Windows.CombinedWindow> combined)
     {
         _config = config;
         Log = log;
@@ -65,6 +67,7 @@ public class PeeperService : IDisposable
         _audio = audio;
         _visibility = visibility;
         _window = window;
+        _combined = combined;
 
         _notifier = new WatcherNotifier<PeeperState>(
             "peeper.messages",
@@ -104,12 +107,14 @@ public class PeeperService : IDisposable
         }
     }
 
+    private bool IsSurfaceOpen()
+        => _window.Value.IsOpen || (_config.CombinedWindow.Enabled && _combined.Value.IsOpen);
+
     public unsafe void OnFrameworkUpdate(IFramework framework)
     {
         if (!_config.Peeper.Enabled) return;
 
-        var window = _window.Value;
-        if (!window.IsOpen && !_config.Peeper.DetectWhenClosed) return;
+        if (!IsSurfaceOpen() && !_config.Peeper.DetectWhenClosed) return;
 
         var localPlayer = Service.ObjectTable.LocalPlayer;
         if (localPlayer == null) return;

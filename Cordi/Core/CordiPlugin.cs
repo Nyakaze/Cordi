@@ -424,9 +424,10 @@ public class CordiPlugin : IDalamudPlugin
         }
 
         const string ComboCmd = "/cordicombo";
+        bool comboEnabled = Config.CombinedWindow.Enabled;
         bool comboRegistered = CommandManager.Commands.ContainsKey(ComboCmd);
 
-        if (!comboRegistered)
+        if (comboEnabled && !comboRegistered)
         {
             CommandManager.AddHandler(ComboCmd, new CommandInfo((cmd, args) =>
             {
@@ -435,6 +436,11 @@ public class CordiPlugin : IDalamudPlugin
             {
                 HelpMessage = "Toggles the Combined Emote Log & Peeper Window"
             });
+        }
+        else if (!comboEnabled && comboRegistered)
+        {
+            CommandManager.RemoveHandler(ComboCmd);
+            CombinedWindow.IsOpen = false;
         }
     }
 
@@ -465,7 +471,7 @@ public class CordiPlugin : IDalamudPlugin
 
         if (Config.Peeper.OpenOnLogin) PeeperWindow.IsOpen = true;
         if (Config.EmoteLog.WindowOpenOnLogin) EmoteLogWindow.IsOpen = true;
-        if (Config.CombinedWindow.OpenOnLogin) CombinedWindow.IsOpen = true;
+        if (Config.CombinedWindow.Enabled && Config.CombinedWindow.OpenOnLogin) CombinedWindow.IsOpen = true;
         if (Config.Chatbox.Enabled && Config.Chatbox.OpenOnLogin) ChatboxWindow.IsOpen = true;
     }
 

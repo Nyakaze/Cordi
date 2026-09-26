@@ -22,6 +22,7 @@ public class EmoteLogService : IDisposable
     private readonly EmoteBackAction _emoteBackAction;
     private readonly EmoteDiscordNotifier _discordNotifier;
     private readonly Lazy<EmoteLogWindow> _window;
+    private readonly Lazy<CombinedWindow> _combined;
 
     private readonly List<EmoteEvent> _logs = new();
 
@@ -37,13 +38,15 @@ public class EmoteLogService : IDisposable
         CordiLogService log,
         EmoteBackAction emoteBackAction,
         EmoteDiscordNotifier discordNotifier,
-        Lazy<EmoteLogWindow> window)
+        Lazy<EmoteLogWindow> window,
+        Lazy<CombinedWindow> combined)
     {
         _config = config;
         _log = log;
         _emoteBackAction = emoteBackAction;
         _discordNotifier = discordNotifier;
         _window = window;
+        _combined = combined;
 
         _hookEmote = Service.GameInteropProvider.HookFromSignature<OnEmoteFuncDelegate>("E8 ?? ?? ?? ?? 48 8D 8B ?? ?? ?? ?? 4C 89 74 24", OnEmoteDetour);
         _hookEmote.Enable();
@@ -76,10 +79,13 @@ public class EmoteLogService : IDisposable
         _hookEmote.Original(unk, instigatorAddr, emoteId, targetId, unk2);
     }
 
+    private bool IsSurfaceOpen()
+        => _window.Value.IsOpen || (_config.CombinedWindow.Enabled && _combined.Value.IsOpen);
+
     private void HandleEmote(ulong instigatorAddr, ushort emoteId, ulong targetId)
     {
         if (!_config.EmoteLog.Enabled) return;
-        if (!_window.Value.IsOpen && !_config.EmoteLog.DetectWhenClosed) return;
+        if (!IsSurfaceOpen() && !_config.EmoteLog.DetectWhenClosed) return;
 
         var localPlayer = Service.ObjectTable.LocalPlayer;
         if (localPlayer == null) return;

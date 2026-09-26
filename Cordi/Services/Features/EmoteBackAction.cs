@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Cordi.Core;
@@ -17,6 +19,13 @@ public class EmoteBackAction : IDisposable
     private readonly Configuration.Configuration _config;
     private readonly ChatMessenger _chat;
     private readonly VisibilityService _visibility;
+
+    private readonly object _gate = new();
+    private readonly HashSet<ulong> _sessionHeld = new();
+
+    private int _sequence;
+    private bool _sessionActive;
+    private float _sessionRotation;
 
     private CancellationTokenSource _logout = new();
     private bool _disposed;
@@ -37,16 +46,12 @@ public class EmoteBackAction : IDisposable
         var hold = TimeSpan.FromSeconds(Math.Clamp(_config.EmoteLog.EmoteBackHoldSeconds, MinHoldSeconds, MaxHoldSeconds));
         var token = _logout.Token;
 
-        float savedRotation = 0;
-        bool targetFound = false;
-        ulong unheldId = 0;
+        int ticket = 0;
 
         await Service.Framework.RunOnFrameworkThread(() =>
         {
             var localPlayer = Service.ObjectTable.LocalPlayer;
             if (localPlayer == null) return;
-
-            savedRotation = localPlayer.Rotation;
 
             IGameObject? target = null;
             if (targetId != 0)
@@ -55,21 +60,34 @@ public class EmoteBackAction : IDisposable
             }
 
             target ??= Service.ObjectTable.FindPlayerByName(targetName, targetWorld);
+            if (target == null) return;
 
-            if (target != null)
+            lock (_gate)
             {
-                if (target is IPlayerCharacter pc)
+                if (!_sessionActive)
                 {
-                    _visibility.UnhideForEmoteBack(pc, hold + TimeSpan.FromSeconds(2));
-                    unheldId = pc.GameObjectId;
+                    _sessionActive = true;
+                    _sessionRotation = localPlayer.Rotation;
                 }
-                Service.TargetManager.Target = target;
-                _chat.SendMessage(command);
-                targetFound = true;
+
+                ticket = ++_sequence;
             }
+
+            if (target is IPlayerCharacter pc)
+            {
+                _visibility.UnhideForEmoteBack(pc, hold + TimeSpan.FromSeconds(2));
+
+                lock (_gate)
+                {
+                    _sessionHeld.Add(pc.GameObjectId);
+                }
+            }
+
+            Service.TargetManager.Target = target;
+            _chat.SendMessage(command);
         });
 
-        if (!targetFound) return;
+        if (ticket == 0) return;
 
         try
         {
@@ -77,13 +95,13 @@ public class EmoteBackAction : IDisposable
         }
         catch (OperationCanceledException)
         {
-            if (unheldId != 0) _visibility.Release(unheldId);
+            ReleaseSession(ticket);
             return;
         }
 
         await Service.Framework.RunOnFrameworkThread(() =>
         {
-            if (unheldId != 0) _visibility.Release(unheldId);
+            if (!ReleaseSession(ticket)) return;
 
             var localPlayer = Service.ObjectTable.LocalPlayer;
             if (localPlayer == null) return;
@@ -105,10 +123,31 @@ public class EmoteBackAction : IDisposable
                 unsafe
                 {
                     var go = (FFXIVClientStructs.FFXIV.Client.Game.Object.GameObject*)localPlayer.Address;
-                    go->Rotation = savedRotation;
+                    go->Rotation = _sessionRotation;
                 }
             }
         });
+    }
+
+    private bool ReleaseSession(int ticket)
+    {
+        ulong[] held;
+
+        lock (_gate)
+        {
+            if (!_sessionActive || ticket != _sequence) return false;
+
+            held = _sessionHeld.ToArray();
+            _sessionHeld.Clear();
+            _sessionActive = false;
+        }
+
+        foreach (var id in held)
+        {
+            _visibility.Release(id);
+        }
+
+        return true;
     }
 
     public void Dispose()

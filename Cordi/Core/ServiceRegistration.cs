@@ -96,6 +96,7 @@ internal static class ServiceRegistration
         services.AddSingleton(sp => new Lazy<ConversationWindowManager>(sp.GetRequiredService<ConversationWindowManager>));
         services.AddSingleton(sp => new Lazy<PeeperWindow>(sp.GetRequiredService<PeeperWindow>));
         services.AddSingleton(sp => new Lazy<EmoteLogWindow>(sp.GetRequiredService<EmoteLogWindow>));
+        services.AddSingleton(sp => new Lazy<CombinedWindow>(sp.GetRequiredService<CombinedWindow>));
 
         services.AddSingleton<ConfigWindow>();
         services.AddSingleton<DiscordWindow>();
