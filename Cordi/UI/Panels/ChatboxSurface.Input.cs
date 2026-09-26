@@ -87,7 +87,7 @@ public sealed partial class ChatboxSurface
         if (translateVisible) reserved += spacing + IconButtonWidth(FontAwesomeIcon.Language);
         if (cinematicButton) reserved += spacing + IconButtonWidth(FontAwesomeIcon.EyeSlash);
         if (Config.ShowEmojiPicker) reserved += spacing + IconButtonWidth(FontAwesomeIcon.Smile);
-        if (Config.ShowGifPicker) reserved += spacing + IconButtonWidth(FontAwesomeIcon.Film);
+        if (Config.ShowGifPicker) reserved += spacing + buttonWidth;
 
         ImGui.SetCursorPosY(ImGui.GetCursorPosY() + _theme.PickerCaptionHeight());
 
@@ -113,6 +113,8 @@ public sealed partial class ChatboxSurface
 
         using var emoteFont = _emoteFont.Push();
 
+        var typed = _input;
+
         _theme.PushInputScope();
         var submitted = ImGui.InputTextWithHint(
             "##chatbox-input",
@@ -130,6 +132,9 @@ public sealed partial class ChatboxSurface
         var inputMax = ImGui.GetItemRectMax();
         var inputActive = ImGui.IsItemActive();
         var pickerOpen = false;
+
+        if (_inputWasActive && !inputActive && ImGui.IsKeyPressed(ImGuiKey.Escape, false))
+            _input = Config.EscapeClearsInput && !escapeConsumed ? string.Empty : typed;
 
         _inputMin = inputMin;
         _inputWidth = ImGui.GetItemRectSize().X;
@@ -184,7 +189,7 @@ public sealed partial class ChatboxSurface
         if (Config.ShowGifPicker)
         {
             ImGui.SameLine(0, spacing);
-            if (_theme.IconButton("##chatbox-gif", FontAwesomeIcon.Film, "GIFs")) _gifPicker.Open();
+            if (_theme.GifIconButton("##chatbox-gif", "GIFs")) _gifPicker.Open();
 
             _gifPicker.Draw(link => SendGif(channel.Id, link));
             pickerOpen |= _gifPicker.InputActive;

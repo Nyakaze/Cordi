@@ -128,6 +128,9 @@ public sealed partial class UiTheme
     public const float EmojiPickerMinHeight = 200f;
     public const float EmojiPickerGripSize = 14f;
     public const float GifPickerCellWidth = 120f;
+    public const string GifIconResource = "Cordi.Resources.gif-icon.png";
+    public const int GifIconMinSize = 12;
+    public const int GifIconMaxSize = 32;
     public const float ConfirmDialogWidth = 380f;
 
     public float Radius(float mul = 1f) => RadiusBase * ImGuiHelpers.GlobalScale * mul;

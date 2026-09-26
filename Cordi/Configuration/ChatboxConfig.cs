@@ -112,6 +112,7 @@ public class ChatboxConfig : IWindowChromeConfig
     public bool WindowLockPosition { get; set; }
     public bool WindowLockSize { get; set; }
     public bool IgnoreEsc { get; set; }
+    public bool EscapeClearsInput { get; set; }
     public bool ClickThroughWhenUnfocused { get; set; }
     public float BackgroundOpacity { get; set; } = 1.0f;
     public bool HideWhenNotLoggedIn { get; set; } = true;

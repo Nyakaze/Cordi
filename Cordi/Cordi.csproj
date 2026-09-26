@@ -29,6 +29,7 @@
   <ItemGroup>
     <EmbeddedResource Include="Resources\chatbox-emoji.txt" />
     <EmbeddedResource Include="Resources\phrases.json" />
+    <EmbeddedResource Include="Resources\gif-icon.png" />
   </ItemGroup>
 
   <ItemGroup>

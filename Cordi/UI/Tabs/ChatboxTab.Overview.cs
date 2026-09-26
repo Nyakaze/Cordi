@@ -39,6 +39,11 @@ public partial class ChatboxTab
                 innerWidth, () => Cfg.IgnoreEsc, v => Cfg.IgnoreEsc = v);
 
             DrawToggleRow(
+                "chatbox-esc-clears-input", FontAwesomeIcon.Eraser,
+                "ESC clears the input", "Off keeps what you typed when Escape leaves the input.",
+                innerWidth, () => Cfg.EscapeClearsInput, v => Cfg.EscapeClearsInput = v);
+
+            DrawToggleRow(
                 "chatbox-clickthrough", FontAwesomeIcon.MousePointer,
                 "Click Through when unfocused", "Clicks pass to the game while the window is not focused.",
                 innerWidth, () => Cfg.ClickThroughWhenUnfocused, v => Cfg.ClickThroughWhenUnfocused = v);

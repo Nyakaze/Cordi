@@ -1,5 +1,6 @@
 using System;
 using System.Numerics;
+using System.Reflection;
 using Cordi.Extensions;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Interface.Utility;
@@ -213,6 +214,36 @@ public sealed partial class UiTheme
         {
             Tooltip(tooltip);
         }
+        HoverHandIfItem();
+
+        return clicked;
+    }
+
+    public bool GifIconButton(string id, string tooltip = "")
+    {
+        var height = ImGui.GetFrameHeight();
+        var clicked = ImGui.Button(id, new Vector2(height, height));
+        var min = ImGui.GetItemRectMin();
+        var max = ImGui.GetItemRectMax();
+
+        var image = Service.TextureProvider
+            .GetFromManifestResource(Assembly.GetExecutingAssembly(), GifIconResource)
+            .GetWrapOrEmpty();
+
+        var size = Math.Clamp((int)MathF.Round(ImGui.GetFontSize()), GifIconMinSize, GifIconMaxSize);
+        var offset = (size - GifIconMinSize) * (size + GifIconMinSize - 1) / 2f;
+        var atlasWidth = (GifIconMaxSize - GifIconMinSize + 1) * (GifIconMaxSize + GifIconMinSize) / 2f;
+        var imageMin = new Vector2(MathF.Round((min.X + max.X - size) * 0.5f), MathF.Round((min.Y + max.Y - size) * 0.5f));
+
+        ImGui.GetWindowDrawList().AddImage(
+            image.Handle,
+            imageMin,
+            imageMin + new Vector2(size, size),
+            new Vector2(offset / atlasWidth, 0f),
+            new Vector2((offset + size) / atlasWidth, size / (float)GifIconMaxSize),
+            ImGui.GetColorU32(ImGuiCol.Text));
+
+        if (!string.IsNullOrEmpty(tooltip) && ImGui.IsItemHovered()) Tooltip(tooltip);
         HoverHandIfItem();
 
         return clicked;
