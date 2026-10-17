@@ -1,3 +1,34 @@
+## [test-version-v1](https://github.com/Nyakaze/Cordi/compare/test-chatbox-v5...test-version-v1) (17-10-2026)
+
+### General
+ - **Fixed:** Known characters were capped at 1000 and then re-looked-up on the Lodestone; all are kept now.
+ - **Changed:** Known characters moved to their own file, keeping settings lean.
+ - **Changed:** Player avatar/Lodestone lookups are now shared across Chatbox, Peeper, Emote Log, Party and Discord.
+ - **Fixed:** Failed Discord deliveries from Peeper/Emote Log are now logged in the Log tab.
+
+### Emote Log
+ - **Added:** Configurable overlay entry limit, emote-back hold duration, and its own unhide-on-emote-back switch.
+ - **Added:** Fully customizable overlay line with per-piece formatting and colour. -> Watchers -> Emote Log -> Overlay Display
+ - **Fixed:** Broken test-button target id, Discord reaction freeze, overlay stutter, and wrong turn direction/dropped hold when emoting back repeatedly.
+
+### Peeper
+ - **Fixed:** Visibility plugin integration could freeze/crash the game; now uses the proper API.
+ - **Added:** "Unhide players hidden by Visibility" setting with configurable stay-visible duration.
+ - **Added:** Fully customizable overlay line, same as Emote Log. -> Watchers -> Peeper -> Overlay Display
+ - **Fixed:** Manually hidden players stay hidden, unhidden players revert on their own, and the Visibility whitelist no longer gets polluted.
+ - **Changed:** Renamed consistently to "Peeper" throughout settings (migrates automatically).
+
+### Combined Overlay
+ - **Added:** Own on/off switch, drag-to-corner layout (replacing left/right swap), in-page watcher status and toggles.
+ - **Fixed:** Combined window alone no longer leaves both halves empty when "detect while closed" is off.
+
+### ChatBox
+ - **Added:** GIF picker (GIPHY search/trending, favourites, remembered searches), recent-DMs button with search, per-channel Server Rail colour, and ESC-clears-input toggle.
+ - **Fixed:** Chat keybind focus after logout, and a duplicate scrollbar in Server Rail/Channel List.
+
+### Activity
+ - **Added:** Emote titles with custom rules and display duration, self-targeting for testing, and PatMe/PatMeHonorific import.
+
 ## [test-chatbox-v5](https://github.com/Nyakaze/Cordi/compare/test-chatbox-v4.2...test-chatbox-v5) (16-09-2026)
 
 ### ChatBox
