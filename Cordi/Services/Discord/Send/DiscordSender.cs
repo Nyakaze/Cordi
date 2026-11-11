@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.Linq;
 using System.Net;
 using System.Threading.Tasks;
@@ -56,10 +58,102 @@ public sealed class DiscordSender
         XivChatType chatType = XivChatType.None, string? correspondentName = null) =>
         SendMessage(channelId, message.TextValue, sender, chatType, correspondentName);
 
+    private static readonly TimeSpan EchoWindow = TimeSpan.FromMinutes(2);
+
+    private readonly ConcurrentDictionary<string, DateTime> _postedLinks = new(StringComparer.Ordinal);
+
+    private static string LinkKey(string url) => url.Split('?')[0];
+
+    private bool ConsumePostedLinks(string content)
+    {
+        var now = DateTime.UtcNow;
+        var matched = false;
+
+        foreach (var entry in _postedLinks)
+        {
+            if (now - entry.Value > EchoWindow)
+            {
+                _postedLinks.TryRemove(entry.Key, out _);
+                continue;
+            }
+
+            if (!content.Contains(entry.Key, StringComparison.Ordinal)) continue;
+
+            _postedLinks.TryRemove(entry.Key, out _);
+            matched = true;
+        }
+
+        return matched;
+    }
+
+    public bool CanSendFiles(ulong? channelId, XivChatType chatType) =>
+        IsConnected && (channelId ?? StrictMappedChannel(chatType)) is not null;
+
+    private ulong? StrictMappedChannel(XivChatType chatType) =>
+        _config.MappingCache.TryGetValue(chatType, out var mapped) && ulong.TryParse(mapped, out var id) ? id : null;
+
+    public async Task<IReadOnlyList<string>> SendFiles(ulong? channelId, string content, Player sender,
+        IReadOnlyList<DiscordFile> files, XivChatType chatType = XivChatType.None, string? correspondentName = null)
+    {
+        if (_connection.Context is not { } context || files.Count == 0) return Array.Empty<string>();
+        if ((channelId ?? StrictMappedChannel(chatType)) is not { } targetId) return Array.Empty<string>();
+
+        try
+        {
+            var channel = await FindChannelAsync(context, targetId);
+
+            if (channel?.Type is ChannelType.GuildForum)
+            {
+                if (string.IsNullOrEmpty(correspondentName)) return Array.Empty<string>();
+                targetId = await ResolveTellThreadAsync(context, targetId, correspondentName);
+            }
+
+            var sanitized = DiscordTextSanitizer.Sanitize(_emoji.ToDiscord(content));
+            var avatarUrl = NormalizeAvatar(await _lodestone.GetAvatarUrlAsync(sender));
+
+            var message = await _webhooks.SendAsync(targetId, factory =>
+            {
+                if (!string.IsNullOrWhiteSpace(sanitized)) factory.WithContent(sanitized);
+                factory.AddFiles(files).As(sender.FullName, avatarUrl);
+            });
+
+            var links = message?.Attachments.Select(attachment => attachment.Url)
+                .Where(url => !string.IsNullOrWhiteSpace(url))
+                .ToList() ?? new List<string>();
+
+            foreach (var link in links)
+                _postedLinks[LinkKey(link)] = DateTime.UtcNow;
+
+            if (links.Count == 0)
+            {
+                Log.Warning(LogSource, $"Upload of {files.Count} file(s) to channel {targetId} returned no attachments");
+                return links;
+            }
+
+            Log.Debug(LogSource, $"Uploaded {links.Count} file(s) as {sender.FullName} to channel {targetId}");
+
+            _config.Stats.IncrementTotal();
+            if (chatType != XivChatType.None) _config.Stats.IncrementChatType(chatType);
+
+            return links;
+        }
+        catch (Exception ex)
+        {
+            Log.Error(LogSource, $"Failed to upload files to channel {targetId}", ex);
+            return Array.Empty<string>();
+        }
+    }
+
     public async Task SendMessage(ulong? channelId, string content, Player sender,
         XivChatType chatType = XivChatType.None, string? correspondentName = null, string? avatarUrl = null)
     {
         if (_connection.Context is not { } context) return;
+
+        if (ConsumePostedLinks(content))
+        {
+            Log.Debug(LogSource, $"Skipped [{chatType}] echo, its files are already on Discord");
+            return;
+        }
 
         if ((channelId ?? ResolveMappedChannel(chatType)) is not { } targetId)
         {

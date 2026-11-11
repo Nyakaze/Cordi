@@ -391,6 +391,16 @@ public sealed class ChatboxImageCache : IDisposable
         command.ExecuteNonQuery();
     }
 
+    public void Seed(string url, byte[] bytes)
+    {
+        if (_disposed || bytes.Length == 0 || bytes.Length > MaxImageBytes) return;
+
+        StoreBlob(url, bytes);
+    }
+
+    public Task<IDalamudTextureWrap?> CreatePreviewAsync(byte[] bytes) =>
+        CreateTextureWrapAsync(bytes, _fetch.Token);
+
     private void StoreBlob(string url, byte[] bytes)
     {
         var hash = Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();

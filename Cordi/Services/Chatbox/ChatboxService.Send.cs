@@ -52,19 +52,20 @@ public sealed partial class ChatboxService
     private static bool IsTellChannel(ChatboxChannelState channel) =>
         channel.Config.GameChatTypes.Any(ChatTypes.IsTell);
 
-    public void Send(string channelId, string text, ChatboxReplyRef? reply)
+    public void Send(string channelId, string text, ChatboxReplyRef? reply, IReadOnlyList<ChatboxUpload>? uploads = null)
     {
         if (_disposed) return;
 
         text = text?.Trim() ?? string.Empty;
-        if (text.Length == 0) return;
+        var hasUploads = uploads is { Count: > 0 };
+        if (text.Length == 0 && !hasUploads) return;
 
         Emotes.RecordOwnTokens(text);
 
         var channel = GetChannel(channelId);
         if (channel == null) return;
 
-        if (text[0] == '/')
+        if (text.Length > 0 && text[0] == '/')
         {
             SendGameCommand(text);
             return;
@@ -74,7 +75,13 @@ public sealed partial class ChatboxService
 
         var useReply = reply != null && Config.EnableReplies;
 
-        foreach (var part in SplitForSending(text))
+        if (hasUploads)
+        {
+            _ = SendUploadsAsync(channel, text, useReply ? reply : null, uploads!);
+            return;
+        }
+
+        foreach (var part in SplitForSending(_emoji.ToGame(text, Config.RelayEmotesAsUrls)))
         {
             SendToGame(channel, part, useReply ? reply : null);
             useReply = false;

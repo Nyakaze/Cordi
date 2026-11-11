@@ -25,6 +25,7 @@ public sealed partial class ChatboxService : IDisposable
     private readonly AudioService _audio;
     private readonly NotificationManager _notifications;
     private readonly Packets.Handler.Chat.ChatMessenger _chat;
+    private readonly Discord.Send.DiscordSender _sender;
     private readonly LocalPlayerProvider _localPlayer;
     private readonly Lazy<UI.Windows.ChatboxWindow> _window;
     private readonly Lazy<UI.Windows.ConversationWindowManager> _conversationWindows;
@@ -45,6 +46,7 @@ public sealed partial class ChatboxService : IDisposable
         AudioService audio,
         NotificationManager notifications,
         Packets.Handler.Chat.ChatMessenger chat,
+        Discord.Send.DiscordSender sender,
         LocalPlayerProvider localPlayer,
         Lazy<UI.Windows.ChatboxWindow> window,
         Lazy<UI.Windows.ConversationWindowManager> conversationWindows)
@@ -59,6 +61,7 @@ public sealed partial class ChatboxService : IDisposable
         _audio = audio;
         _notifications = notifications;
         _chat = chat;
+        _sender = sender;
         _localPlayer = localPlayer;
         _window = window;
         _conversationWindows = conversationWindows;

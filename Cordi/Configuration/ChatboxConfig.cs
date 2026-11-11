@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Numerics;
 using Cordi.Domain;
@@ -199,7 +199,7 @@ public class ChatboxConfig : IWindowChromeConfig
     public int ReplyExcerptLength { get; set; } = 64;
     public string GameReplyFormat { get; set; } = "@{name} {message}";
 
-    public const int MaxMessageLength = 480;
+    public const int MaxMessageLength = 450;
     public const int InputBufferLength = 2048;
 
     public bool KeepFocusAfterSend { get; set; } = true;
@@ -228,6 +228,7 @@ public class ChatboxConfig : IWindowChromeConfig
     public List<string> RecentEmojis { get; set; } = new();
 
     public bool ShowGifPicker { get; set; } = true;
+    public bool ShowUploadButton { get; set; } = false;
     public string GiphyApiKey { get; set; } = string.Empty;
     public Vector2 GifPickerSize { get; set; } = Vector2.Zero;
     public List<GiphyGif> FavoriteGifs { get; set; } = new();

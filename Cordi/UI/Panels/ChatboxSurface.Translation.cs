@@ -34,7 +34,8 @@ public sealed partial class ChatboxSurface
     private Vector2 _languageMenuMax;
     private bool _openLanguageMenu;
 
-    private readonly record struct OutgoingSend(string ChannelId, string Text, ChatboxReplyRef? Reply);
+    private readonly record struct OutgoingSend(
+        string ChannelId, string Text, ChatboxReplyRef? Reply, IReadOnlyList<ChatboxUpload>? Uploads);
 
     private TranslationConfig Translation => _plugin.Config.Translation;
 
@@ -109,7 +110,8 @@ public sealed partial class ChatboxSurface
         return trimmed.Length > 0 && !trimmed.StartsWith('/');
     }
 
-    private void QueueOutgoingTranslation(string channelId, string text, ChatboxReplyRef? reply)
+    private void QueueOutgoingTranslation(
+        string channelId, string text, ChatboxReplyRef? reply, IReadOnlyList<ChatboxUpload>? uploads)
     {
         var target = OutgoingTarget;
 
@@ -118,12 +120,13 @@ public sealed partial class ChatboxSurface
         lock (_outgoingGate)
         {
             _outgoingChain = _outgoingChain
-                .ContinueWith(_ => TranslateOutgoingAsync(channelId, text, reply, target), TaskScheduler.Default)
+                .ContinueWith(_ => TranslateOutgoingAsync(channelId, text, reply, uploads, target), TaskScheduler.Default)
                 .Unwrap();
         }
     }
 
-    private async Task TranslateOutgoingAsync(string channelId, string text, ChatboxReplyRef? reply, string target)
+    private async Task TranslateOutgoingAsync(
+        string channelId, string text, ChatboxReplyRef? reply, IReadOnlyList<ChatboxUpload>? uploads, string target)
     {
         var final = text;
 
@@ -139,14 +142,14 @@ public sealed partial class ChatboxSurface
         finally
         {
             Interlocked.Decrement(ref _outgoingPending);
-            _outgoingSends.Enqueue(new OutgoingSend(channelId, final, reply));
+            _outgoingSends.Enqueue(new OutgoingSend(channelId, final, reply, uploads));
         }
     }
 
     private void DrainOutgoingSends()
     {
         while (_outgoingSends.TryDequeue(out var pending))
-            Chatbox.Send(pending.ChannelId, pending.Text, pending.Reply);
+            Chatbox.Send(pending.ChannelId, pending.Text, pending.Reply, pending.Uploads);
     }
 
     private void DrawOutgoingMarker(Vector2 inputMin, Vector2 inputMax)

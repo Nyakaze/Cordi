@@ -31,27 +31,29 @@ public sealed class DiscordWebhookService
     }
 
     public async Task<ulong> ExecuteAsync(ulong channelId, Action<WebhookMessageFactory> configure,
+        CancellationToken cancellationToken = default) =>
+        (await SendAsync(channelId, configure, cancellationToken))?.Id.Value ?? 0UL;
+
+    public async Task<DiscordMessage?> SendAsync(ulong channelId, Action<WebhookMessageFactory> configure,
         CancellationToken cancellationToken = default)
     {
         try
         {
             return await RetryHelper.WithRetryAsync(async () =>
             {
-                if (await ResolveAsync(channelId, cancellationToken) is not { } target) return 0UL;
+                if (await ResolveAsync(channelId, cancellationToken) is not { } target) return null;
 
                 var factory = WebhookMessageFactory.Create();
                 configure(factory);
 
-                var message = await target.Context.Services.Webhooks.SendAsync(
+                return await target.Context.Services.Webhooks.SendAsync(
                     target.Webhook, factory.Build(), target.ThreadId, wait: true, cancellationToken);
-
-                return message?.Id.Value ?? 0UL;
             });
         }
         catch (Exception ex)
         {
             Log.Error(LogSource, $"Failed to execute webhook in channel {channelId}", ex);
-            return 0UL;
+            return null;
         }
     }
 

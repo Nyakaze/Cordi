@@ -25,4 +25,5 @@ internal class Service
     [PluginService] internal static ICondition Condition { get; private set; } = null!;
     [PluginService] internal static IKeyState KeyState { get; private set; } = null!;
     [PluginService] internal static IContextMenu ContextMenu { get; private set; } = null!;
+    [PluginService] internal static Dalamud.Interface.DragDrop.IDragDropManager DragDrop { get; private set; } = null!;
 }

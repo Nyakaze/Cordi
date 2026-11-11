@@ -237,6 +237,51 @@ public sealed partial class UiTheme
         draw.AddText(min + (max - min - textSize) * 0.5f, 0xFFFFFFFF, initials);
     }
 
+    public void Thumbnail(Vector2 min, Vector2 max, IDalamudTextureWrap? image)
+    {
+        var draw = ImGui.GetWindowDrawList();
+        var rounding = Radius(0.5f);
+
+        draw.AddRectFilled(min, max, ImGui.GetColorU32(FrameBg), rounding);
+
+        if (image != null)
+        {
+            var aspect = image.Width / (float)Math.Max(1, image.Height);
+            var uv0 = Vector2.Zero;
+            var uv1 = Vector2.One;
+
+            if (aspect > 1f)
+            {
+                var inset = (1f - 1f / aspect) * 0.5f;
+                uv0.X = inset;
+                uv1.X = 1f - inset;
+            }
+            else
+            {
+                var inset = (1f - aspect) * 0.5f;
+                uv0.Y = inset;
+                uv1.Y = 1f - inset;
+            }
+
+            draw.AddImageRounded(image.Handle, min, max, uv0, uv1, 0xFFFFFFFF, rounding);
+        }
+
+        draw.AddRect(min, max, ImGui.GetColorU32(Border), rounding);
+    }
+
+    public void Meter(Vector2 min, Vector2 max, float fraction, Vector4 color)
+    {
+        var draw = ImGui.GetWindowDrawList();
+        var rounding = (max.Y - min.Y) * 0.5f;
+
+        draw.AddRectFilled(min, max, ImGui.GetColorU32(FrameBg), rounding);
+
+        if (fraction <= 0f) return;
+
+        var fill = new Vector2(min.X + (max.X - min.X) * Math.Clamp(fraction, 0f, 1f), max.Y);
+        draw.AddRectFilled(min, fill, ImGui.GetColorU32(color), rounding);
+    }
+
     public void DirectionArrow(ImDrawListPtr draw, Vector2 center, float size, float angle, uint color)
     {
         var screenAngle = angle - MathF.PI / 2f;

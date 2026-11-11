@@ -1,9 +1,11 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net.Http;
 using System.Text;
 using System.Threading.Tasks;
 using Cordi.Core;
+using Cordi.Domain;
 using Crovus.Models;
 
 namespace Cordi.Services.Discord;
@@ -12,25 +14,34 @@ public class DiscordMessageRouter
 {
     private const string LogSource = "Relay";
     private const int MaxRelayLength = 400;
+    private const int MaxRehostBytes = 10 * 1024 * 1024;
+
+    private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(30) };
 
     private readonly Configuration.Configuration _config;
     private readonly CordiLogService Log;
     private readonly Emojis.EmojiTranslator _emoji;
     private readonly Packets.Handler.Chat.ChatMessenger _chat;
     private readonly Lazy<Chatbox.ChatboxService> _chatbox;
+    private readonly Send.DiscordSender _sender;
+    private readonly LocalPlayerProvider _localPlayer;
 
     public DiscordMessageRouter(
         Configuration.Configuration config,
         CordiLogService log,
         Emojis.EmojiTranslator emoji,
         Packets.Handler.Chat.ChatMessenger chat,
-        Lazy<Chatbox.ChatboxService> chatbox)
+        Lazy<Chatbox.ChatboxService> chatbox,
+        Send.DiscordSender sender,
+        LocalPlayerProvider localPlayer)
     {
         _config = config;
         Log = log;
         _emoji = emoji;
         _chat = chat;
         _chatbox = chatbox;
+        _sender = sender;
+        _localPlayer = localPlayer;
     }
 
     private string ParseForGame(DiscordMessage message, bool translateEmoji)
@@ -38,22 +49,54 @@ public class DiscordMessageRouter
         var content = message.Content;
         _chatbox.Value.RegisterEmotes(content);
 
-        var parsed = translateEmoji
+        return translateEmoji
             ? _emoji.ToGame(content, _config.Chatbox.RelayEmotesAsUrls)
             : content ?? string.Empty;
-
-        return AppendAttachments(parsed, message.Attachments);
     }
 
-    private static string AppendAttachments(string content, IReadOnlyList<DiscordAttachment>? attachments)
+    private async Task<IReadOnlyList<string>?> RehostAsync(DiscordMessage message, ulong channelId, string content)
     {
-        if (attachments == null || attachments.Count == 0) return content;
+        var attachments = message.Attachments;
+        if (attachments == null || attachments.Count == 0) return null;
+        if (_localPlayer.Current is not { } sender) return null;
 
+        if (attachments.Sum(attachment => (long)attachment.Size) > MaxRehostBytes)
+        {
+            Log.Warning(LogSource, $"Attachments of message {message.Id} are too large to re-upload, relaying the original links.");
+            return null;
+        }
+
+        try
+        {
+            var files = new List<DiscordFile>(attachments.Count);
+
+            foreach (var attachment in attachments)
+            {
+                var bytes = await Http.GetByteArrayAsync(attachment.Url);
+                files.Add(DiscordFile.FromBytes(attachment.FileName, bytes, attachment.Description, attachment.ContentType));
+            }
+
+            var links = await _sender.SendFiles(channelId, content, sender, files);
+            if (links.Count != files.Count) return null;
+
+            for (var i = 0; i < links.Count; i++)
+                _chatbox.Value.ImageCache.Seed(links[i], files[i].Content.ToArray());
+
+            return links;
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(LogSource, $"Could not re-upload the attachments of message {message.Id}: {ex.Message}");
+            return null;
+        }
+    }
+
+    private static string AppendLinks(string content, IEnumerable<string> links)
+    {
         var builder = new StringBuilder(content.TrimEnd());
 
-        foreach (var attachment in attachments)
+        foreach (var url in links)
         {
-            var url = attachment.Url;
             if (string.IsNullOrWhiteSpace(url)) continue;
 
             var extra = builder.Length > 0 ? url.Length + 1 : url.Length;
@@ -82,7 +125,7 @@ public class DiscordMessageRouter
             return Task.FromResult(false);
         }
 
-        return RelayAsync(message, true,
+        return RelayAsync(message, channelId, true,
             content => Service.Framework.RunOnFrameworkThread(
                 () => _chat.SendMessage($"/ecl{connection.ExtraChatNumber} {content}")),
             content => $"Forwarded to ExtraChat {connection.ExtraChatNumber} ({label}): {content}",
@@ -94,7 +137,7 @@ public class DiscordMessageRouter
         var mapping = _config.Chat.Mappings.FirstOrDefault(m => m.DiscordChannelId == channelId.ToString());
         if (mapping == null) return Task.FromResult(false);
 
-        return RelayAsync(message, mapping.TranslateEmoji,
+        return RelayAsync(message, channelId, mapping.TranslateEmoji,
             content => _chat.SendAsync(mapping.GameChatType, content),
             content => $"Forwarded to {mapping.GameChatType}: {content}",
             () => $"Failed to forward message to {mapping.GameChatType}");
@@ -108,16 +151,23 @@ public class DiscordMessageRouter
         var mapping = _config.Chat.Mappings
             .FirstOrDefault(m => m.GameChatType == Dalamud.Game.Text.XivChatType.TellIncoming);
 
-        return RelayAsync(message, mapping?.TranslateEmoji ?? true,
+        return RelayAsync(message, channelId, mapping?.TranslateEmoji ?? true,
             content => _chat.SendTellAsync(tellTarget, content),
             content => $"Forwarded tell reply to {tellTarget}: {content}",
             () => $"Failed to forward tell reply to {tellTarget}");
     }
 
-    private async Task<bool> RelayAsync(DiscordMessage message, bool translateEmoji, Func<string, Task> send,
-        Func<string, string> succeeded, Func<string> failed)
+    private async Task<bool> RelayAsync(DiscordMessage message, ulong channelId, bool translateEmoji,
+        Func<string, Task> send, Func<string, string> succeeded, Func<string> failed)
     {
-        var content = ParseForGame(message, translateEmoji);
+        var text = ParseForGame(message, translateEmoji);
+        var hasAttachments = message.Attachments is { Count: > 0 };
+        var rehosted = await RehostAsync(message, channelId, text);
+
+        var content = !hasAttachments
+            ? text
+            : AppendLinks(text, rehosted ?? message.Attachments.Select(attachment => attachment.Url));
+
         if (string.IsNullOrWhiteSpace(content)) return false;
 
         try
@@ -132,7 +182,7 @@ public class DiscordMessageRouter
 
         Log.Info(LogSource, succeeded(content));
 
-        await DeleteAsync(message);
+        if (!hasAttachments || rehosted != null) await DeleteAsync(message);
         return true;
     }
 

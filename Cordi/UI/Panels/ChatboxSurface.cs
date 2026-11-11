@@ -361,6 +361,8 @@ public sealed partial class ChatboxSurface : IDisposable
             }
         }
 
+        AcceptUploadDrop(channel);
+
         DrawInputBar(channel);
     }
 
@@ -426,6 +428,7 @@ public sealed partial class ChatboxSurface : IDisposable
     {
         UnhookTranslation();
         DisposeSearch();
+        ClearUploads();
         _emoteFont.Dispose();
     }
 }

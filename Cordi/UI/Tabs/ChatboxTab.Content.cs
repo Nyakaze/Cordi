@@ -170,6 +170,14 @@ public partial class ChatboxTab
             "GIF Picker",
             anchor => theme.HelpPill("chatbox-giphy-help", anchor, GiphyHelp, "Getting a key"));
 
+        Card.Draw("chatbox-images", innerWidth =>
+        {
+            DrawToggleRow(
+                "chatbox-show-upload-button", FontAwesomeIcon.Paperclip,
+                "Show Attach Button", "Opens a file picker next to the input. Pasting and dropping images work either way.",
+                innerWidth, () => Cfg.ShowUploadButton, v => Cfg.ShowUploadButton = v);
+        }, "Images");
+
         Card.Draw("chatbox-embeds", innerWidth =>
         {
             DrawToggleRow(

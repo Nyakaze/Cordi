@@ -123,6 +123,8 @@ public sealed partial class UiTheme
     public const float TooltipCursorOffset = 24f;
     public const float ActionButtonSize = 34f;
     public const float HoverToolbarButtonSize = 22f;
+    public const float InputMeterHeight = 3f;
+    public const float UploadThumbSize = 48f;
     public const float EmojiPickerWidth = 420f;
     public const float EmojiPickerHeight = 470f;
     public const float EmojiPickerMinWidth = 260f;

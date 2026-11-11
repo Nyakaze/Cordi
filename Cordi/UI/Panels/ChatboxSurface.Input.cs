@@ -68,6 +68,8 @@ public sealed partial class ChatboxSurface
     {
         if (_replyTarget != null && Config.EnableReplies) DrawReplyStrip();
 
+        OfferUploadDrop();
+
         if (!Chatbox.CanSend(channel))
         {
             Chatbox.InputActive = false;
@@ -81,8 +83,12 @@ public sealed partial class ChatboxSurface
 
         var cinematicButton = !Detached && ChatboxService.CinematicActive;
         var dmButton = Chatbox.ConversationsEnabled && Config.Conversations.ShowQuickPicker;
+        var uploadButton = Config.ShowUploadButton && Chatbox.UploadsConnected;
+
+        if (_uploads.Count > 0) DrawUploadStrip();
 
         var reserved = 0f;
+        if (uploadButton) reserved += spacing + IconButtonWidth(FontAwesomeIcon.Paperclip);
         if (dmButton) reserved += spacing + IconButtonWidth(FontAwesomeIcon.Envelope);
         if (translateVisible) reserved += spacing + IconButtonWidth(FontAwesomeIcon.Language);
         if (cinematicButton) reserved += spacing + IconButtonWidth(FontAwesomeIcon.EyeSlash);
@@ -132,6 +138,11 @@ public sealed partial class ChatboxSurface
         var inputMax = ImGui.GetItemRectMax();
         var inputActive = ImGui.IsItemActive();
         var pickerOpen = false;
+
+        AcceptUploadDrop(channel);
+
+        if (inputActive && ImGui.GetIO().KeyCtrl && ImGui.IsKeyPressed(ImGuiKey.V, false))
+            PasteUploads(channel);
 
         if (_inputWasActive && !inputActive && ImGui.IsKeyPressed(ImGuiKey.Escape, false))
             _input = Config.EscapeClearsInput && !escapeConsumed ? string.Empty : typed;
@@ -186,6 +197,8 @@ public sealed partial class ChatboxSurface
             if (hidden) Chatbox.HideDuringCinematic();
         }
 
+        if (uploadButton) DrawUploadButton(channel, spacing);
+
         if (Config.ShowGifPicker)
         {
             ImGui.SameLine(0, spacing);
@@ -214,6 +227,8 @@ public sealed partial class ChatboxSurface
         if (inputActive && !_inputWasActive) OnInputFocused();
 
         _inputWasActive = inputActive;
+
+        DrawInputMeter(channel, inputMin, inputMax);
 
         if (submitted) Submit(channel);
     }
@@ -384,7 +399,7 @@ public sealed partial class ChatboxSurface
 
     private void Submit(ChatboxChannelState channel)
     {
-        if (string.IsNullOrWhiteSpace(_input)) return;
+        if (string.IsNullOrWhiteSpace(_input) && _uploads.Count == 0) return;
 
         var text = _emoteFont.Expand(_input);
 
@@ -415,8 +430,10 @@ public sealed partial class ChatboxSurface
 
     private void Dispatch(string channelId, string text, ChatboxReplyRef? reply)
     {
-        if (AutoTranslateReady(text)) QueueOutgoingTranslation(channelId, text, reply);
-        else Chatbox.Send(channelId, text, reply);
+        var uploads = text.TrimStart().StartsWith('/') ? null : TakeUploads();
+
+        if (AutoTranslateReady(text)) QueueOutgoingTranslation(channelId, text, reply, uploads);
+        else Chatbox.Send(channelId, text, reply, uploads);
 
         Chatbox.InputHistory.Add(text);
 
