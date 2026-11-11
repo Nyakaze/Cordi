@@ -1,4 +1,4 @@
-## [test-version-v2](https://github.com/Nyakaze/Cordi/compare/test-version-v1...test-version-v2) (11-11-2026)
+## [test-version-v2.2](https://github.com/Nyakaze/Cordi/compare/test-version-v1...test-version-v2.2) (11-11-2026)
 
 ### Activity
  - **Added:** Custom presets can be global or tied to a single character.
@@ -19,6 +19,10 @@
  - **Added:** Option to put the cursor in the GIF picker's search bar when it opens. -> ChatBox -> Content -> GIF Picker
  - **Fixed:** Messages between 450 and 480 characters, or made longer by emote links, were cut off instead of split.
  - **Removed:** "Click Through when unfocused", which never worked.
+
+
+## [test-version-v2](https://github.com/Nyakaze/Cordi/compare/test-version-v1...test-version-v2) (11-11-2026)
+
 
 ## [test-version-v1](https://github.com/Nyakaze/Cordi/compare/test-chatbox-v5...test-version-v1) (17-10-2026)
 
