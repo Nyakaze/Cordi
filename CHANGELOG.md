@@ -4,6 +4,22 @@
  - **Added:** Custom presets can be global or tied to a single character.
  - **Added:** Import titles from Honorific, choosing to keep them per character or make them global. -> Activity -> Custom
 
+### Emote Log
+ - **Fixed:** Custom `/em` emotes aimed at you now show in the Emote Log window and on Discord, without an emote-back button or reaction.
+
+### ChatBox
+ - **Added:** Channels can be bound to an ExtraChat channel; its messages land there and messages sent from it go out through ExtraChat. -> ChatBox -> Channels -> ExtraChat
+ - **Added:** Each Linkshell and Cross-world Linkshell has its own colour. -> ChatBox -> Appearance -> Chat Colours
+ - **Fixed:** Avatar Size now applies to every message instead of only those with jumbo emoji.
+ - **Fixed:** The hover toolbar on follow-up messages from the same person was squashed; it keeps its full size now.
+ - **Fixed:** Arabic and Hebrew text showed as boxes; letters now render, join up and read right to left.
+ - **Fixed:** Images posted in a mapped Discord channel showed as a dead link on Discord and sometimes in game; they are now re-posted as a real attachment before the original is removed.
+ - **Added:** Send images from the ChatBox by pasting, dropping a file or using the attach button (can be hidden). Needs the chat to be mapped to a Discord channel. -> ChatBox -> Content -> Images
+ - **Added:** A bar under the input shows how much of the message limit is used, counting emote and image links.
+ - **Added:** Option to put the cursor in the GIF picker's search bar when it opens. -> ChatBox -> Content -> GIF Picker
+ - **Fixed:** Messages between 450 and 480 characters, or made longer by emote links, were cut off instead of split.
+ - **Removed:** "Click Through when unfocused", which never worked.
+
 ## [test-version-v1](https://github.com/Nyakaze/Cordi/compare/test-chatbox-v5...test-version-v1) (17-10-2026)
 
 ### General
