@@ -8,9 +8,10 @@ namespace Cordi.Services.Features;
 
 public sealed class EmoteEvent : IWatcherAlert
 {
-    public EmoteEvent(Player player, string emoteName, string command)
+    public EmoteEvent(Player player, string emoteName, string command, bool isCustom = false)
     {
         Player = player;
+        IsCustom = isCustom;
         GameObjectId = player.GameObjectId ?? 0;
         EmoteName = emoteName;
         Command = command;
@@ -35,6 +36,16 @@ public sealed class EmoteEvent : IWatcherAlert
     public string EmoteName { get; }
 
     public string Command { get; set; }
+
+    public bool IsCustom { get; }
+
+    public bool AcceptsReaction => !IsCustom;
+
+    public string ReplyCommand => IsCustom
+        ? string.Empty
+        : !string.IsNullOrEmpty(Command)
+            ? Command
+            : "/" + EmoteName.ToLowerInvariant().Replace(" ", "");
 
     public ulong MessageId { get; set; }
 

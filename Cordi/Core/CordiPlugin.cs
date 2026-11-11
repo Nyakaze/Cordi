@@ -520,6 +520,7 @@ public class CordiPlugin : IDalamudPlugin
             LogService.Debug("ChatRouter", $"[{msg.ChatType}] {msg.SenderName}: {msg.Message.TextValue}");
         }
         if (Config.Chatbox.Enabled) Chatbox?.IngestGameMessage(msg);
+        EmoteLog?.HandleCustomEmote(msg);
 
         if (msg.ChatType == XivChatType.RetainerSale) return;
 

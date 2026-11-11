@@ -42,6 +42,7 @@ public class EmoteBackAction : IDisposable
     public async Task PerformAsync(string targetName, string targetWorld, string command, ulong targetId = 0, bool keepTarget = false, bool keepRotation = false)
     {
         if (_disposed) return;
+        if (string.IsNullOrWhiteSpace(command) || !command.StartsWith('/')) return;
 
         var hold = TimeSpan.FromSeconds(Math.Clamp(_config.EmoteLog.EmoteBackHoldSeconds, MinHoldSeconds, MaxHoldSeconds));
         var token = _logout.Token;

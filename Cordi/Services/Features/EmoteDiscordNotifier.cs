@@ -60,7 +60,7 @@ public class EmoteDiscordNotifier
 
     public Cache<string, EmoteEvent> Active => _active;
 
-    public Task ProcessDiscordEmote(Player player, string emoteName, string command)
+    public Task ProcessDiscordEmote(Player player, string emoteName, string command, bool isCustom = false)
     {
         if (!_config.EmoteLog.DiscordEnabled) return Task.CompletedTask;
         if (_connection.Context is null) return Task.CompletedTask;
@@ -75,7 +75,7 @@ public class EmoteDiscordNotifier
         }
         else
         {
-            state = new EmoteEvent(player, emoteName, command);
+            state = new EmoteEvent(player, emoteName, command, isCustom);
         }
 
         _active.Set(key, state);
@@ -90,8 +90,12 @@ public class EmoteDiscordNotifier
             : state.Player.FullName;
 
         var color = state.EmotedBack ? 0x2ECC71 : 0x5865F2;
-        var description = $"**{nameLink}** used **{state.EmoteName}** on you!";
-        var footerText = state.EmotedBack ? "Interaction Complete" : $"React with {Reaction} to emote back";
+        var description = state.IsCustom
+            ? $"**{nameLink}** *{state.EmoteName}*"
+            : $"**{nameLink}** used **{state.EmoteName}** on you!";
+        var footerText = state.IsCustom
+            ? "Custom emote"
+            : state.EmotedBack ? "Interaction Complete" : $"React with {Reaction} to emote back";
 
         var embedBuilder = _embeds.CreateEmbedBuilder(
             "Emote Detected",
@@ -122,10 +126,10 @@ public class EmoteDiscordNotifier
         if (!_notifier.Messages.TryGet(e.MessageId, out var state)) return;
         if (state.EmotedBack) return;
 
-        state.EmotedBack = true;
+        var cmd = state.ReplyCommand;
+        if (string.IsNullOrEmpty(cmd)) return;
 
-        var cmd = state.Command;
-        if (string.IsNullOrEmpty(cmd)) cmd = "/" + state.EmoteName.ToLower().Replace(" ", "");
+        state.EmotedBack = true;
 
         _log.FireAndForget(
             _emoteBackAction.PerformAsync(state.User, state.World, cmd, state.GameObjectId),

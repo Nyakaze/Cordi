@@ -16,6 +16,8 @@ public interface IWatcherAlert
     ulong MessageId { get; set; }
 
     string AvatarUrl { get; set; }
+
+    bool AcceptsReaction => true;
 }
 
 public sealed class WatcherNotifier<TState> where TState : class, IWatcherAlert
@@ -69,7 +71,7 @@ public sealed class WatcherNotifier<TState> where TState : class, IWatcherAlert
         if (state.MessageId == 0) return;
 
         _messages.Set(state.MessageId, state);
-        await _discord.AddReaction(channelId, state.MessageId, _reaction);
+        if (state.AcceptsReaction) await _discord.AddReaction(channelId, state.MessageId, _reaction);
     }
 
     public async Task EditAsync(TState state)

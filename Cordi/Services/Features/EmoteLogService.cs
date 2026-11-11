@@ -1,15 +1,16 @@
 using Cordi.Domain;
+using Cordi.Extensions;
+using Cordi.Packets.Handler.Chat;
 using Cordi.Services.Activity;
+using Cordi.Services.Chatbox;
 using Dalamud.Game.ClientState.Objects.SubKinds;
+using Dalamud.Game.Text;
 using Dalamud.Hooking;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
-using Cordi.Services.Features;
 using Cordi.UI.Windows;
-
-using Cordi.Services;
 
 namespace Cordi.Services.Features;
 
@@ -96,13 +97,54 @@ public class EmoteLogService : IDisposable
 
         if (player.GameObjectId == localPlayer.GameObjectId && !_config.EmoteLog.IncludeSelf) return;
 
-        LogEmote(player, emoteId);
+        LogEmote(player, EmoteCatalog.NameFor(emoteId), EmoteCatalog.CommandFor(emoteId));
     }
 
-    private void LogEmote(IPlayerCharacter player, ushort emoteId)
+    public void HandleCustomEmote(ChatMessage message)
     {
-        var emoteName = EmoteCatalog.NameFor(emoteId);
-        var emoteCommand = EmoteCatalog.CommandFor(emoteId);
+        if (message.ChatType != XivChatType.CustomEmote) return;
+
+        try
+        {
+            if (!_config.EmoteLog.Enabled) return;
+            if (!IsSurfaceOpen() && !_config.EmoteLog.DetectWhenClosed) return;
+
+            var localPlayer = Service.ObjectTable.LocalPlayer;
+            if (localPlayer == null) return;
+
+            var text = message.Message?.TextValue.Trim();
+            if (string.IsNullOrEmpty(text)) return;
+
+            var (name, world) = ChatboxService.SenderOf(message);
+            if (string.IsNullOrEmpty(name)) return;
+
+            var player = Service.ObjectTable.FindPlayerByName(name, world.Length > 0 ? world : null);
+            if (player == null) return;
+
+            var isSelf = player.GameObjectId == localPlayer.GameObjectId;
+            if (isSelf && !_config.EmoteLog.IncludeSelf) return;
+
+            if (!isSelf && !IsAimedAt(player, localPlayer, text)) return;
+
+            LogEmote(player, text, string.Empty, true);
+        }
+        catch (Exception ex)
+        {
+            _log.Error(LogSource, "Custom emote error", ex);
+        }
+    }
+
+    private static unsafe bool IsAimedAt(IPlayerCharacter player, IPlayerCharacter localPlayer, string text)
+    {
+        var character = (FFXIVClientStructs.FFXIV.Client.Game.Character.Character*)player.Address;
+        var targetId = character != null ? (ulong)character->TargetId : player.TargetObjectId;
+
+        return targetId == localPlayer.GameObjectId
+            || text.Contains(localPlayer.Name.TextValue, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private void LogEmote(IPlayerCharacter player, string emoteName, string emoteCommand, bool isCustom = false)
+    {
         var playerName = player.Name.ToString();
         var playerWorld = player.HomeWorld.Value.Name.ToString();
         var interned = Player.FromGameObject(player);
@@ -133,7 +175,7 @@ public class EmoteLogService : IDisposable
             }
             else
             {
-                entry = new EmoteEvent(interned, emoteName, emoteCommand);
+                entry = new EmoteEvent(interned, emoteName, emoteCommand, isCustom);
                 _logs.Add(entry);
 
                 var max = Math.Max(1, _config.EmoteLog.MaxEntries);
@@ -159,7 +201,7 @@ public class EmoteLogService : IDisposable
         }
 
         _log.FireAndForget(
-            _discordNotifier.ProcessDiscordEmote(entry.Player, emoteName, emoteCommand),
+            _discordNotifier.ProcessDiscordEmote(entry.Player, emoteName, emoteCommand, isCustom),
             LogSource,
             $"Failed to relay the {emoteName} emote from {entry.User}@{entry.World} to Discord");
     }

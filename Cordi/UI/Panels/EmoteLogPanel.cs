@@ -125,6 +125,8 @@ public class EmoteLogPanel
 
             if (field.Key == RowFieldCatalog.Reply)
             {
+                if (entry.IsCustom) continue;
+
                 bucket.Add(new RowSegment
                 {
                     Width = replySize.X,
@@ -160,21 +162,14 @@ public class EmoteLogPanel
 
             if (ImGui.Button($"{FontAwesomeIcon.Reply.ToIconString()}##reply{index}", size))
             {
-                var command = entry.Command;
-                if (string.IsNullOrEmpty(command))
-                {
-                    command = entry.EmoteName;
-                    if (!command.StartsWith("/")) command = "/" + command;
-                }
-
-                _emoteLog.PerformEmoteBack(entry.User, entry.World, command, entry.GameObjectId, keepTarget, keepRotation);
+                _emoteLog.PerformEmoteBack(entry.User, entry.World, entry.ReplyCommand, entry.GameObjectId, keepTarget, keepRotation);
             }
         }
 
         if (ImGui.IsItemHovered())
         {
             ImGui.SetMouseCursor(ImGuiMouseCursor.Hand);
-            ImGui.SetTooltip($"Emote Back ({(!string.IsNullOrEmpty(entry.Command) ? entry.Command : entry.EmoteName)})\n[Shift] Keep target\n[Alt] Keep rotation");
+            ImGui.SetTooltip($"Emote Back ({entry.ReplyCommand})\n[Shift] Keep target\n[Alt] Keep rotation");
         }
     }
 
@@ -183,7 +178,7 @@ public class EmoteLogPanel
         RowFieldCatalog.Time => RowFieldCatalog.Format(field.Format, token => RowFieldCatalog.TimePart(entry.LastUpdate, token)),
         RowFieldCatalog.Name => RowFieldCatalog.Format(field.Format, token => RowFieldCatalog.NamePart(entry.User, token)),
         RowFieldCatalog.World => RowFieldCatalog.Format(field.Format, token => token == "world" ? entry.World : null),
-        RowFieldCatalog.Verb => RowFieldCatalog.Format(field.Format, _ => null),
+        RowFieldCatalog.Verb => entry.IsCustom ? null : RowFieldCatalog.Format(field.Format, _ => null),
         RowFieldCatalog.Emote => RowFieldCatalog.Format(field.Format, token => token switch
         {
             "emote" => entry.EmoteName,
