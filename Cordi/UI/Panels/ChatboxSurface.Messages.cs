@@ -21,6 +21,8 @@ public sealed partial class ChatboxSurface
     private readonly record struct RowMetrics(float Height, bool Grouped, int Repeats, bool Collapsed);
 
     private int _rowRepeats = 1;
+    private (long Seq, Vector2 Min, Vector2 Max) _toolbarShown;
+    private (long Seq, Vector2 Min, Vector2 Max) _toolbarDrawn;
     private long _scrollToSeq;
     private float _scrollToAlign = 0.5f;
     private long _anchorSeq;
@@ -48,6 +50,8 @@ public sealed partial class ChatboxSurface
     private void DrawMessages(ChatboxChannelState channel)
     {
         _drawChannel = channel.Config;
+        _toolbarShown = _toolbarDrawn;
+        _toolbarDrawn = default;
 
         if (Config.AutoScroll && _stickToBottom && _scrollToSeq == 0 && _scrollToBottomFrames == 0)
             Chatbox.ReleaseOlderHistory(channel);
@@ -492,7 +496,8 @@ public sealed partial class ChatboxSurface
         var end = ImGui.GetCursorScreenPos().Y - lineSpacing;
         var rowMin = new Vector2(origin.X - _theme.PadX(0.3f), origin.Y);
         var rowMax = new Vector2(origin.X + width, MathF.Max(end, origin.Y + ImGui.GetTextLineHeight()));
-        var hovered = HoveringRect(rowMin, rowMax);
+        var overToolbar = _toolbarShown.Seq != 0 && HoveringRect(_toolbarShown.Min, _toolbarShown.Max);
+        var hovered = overToolbar ? _toolbarShown.Seq == message.Seq : HoveringRect(rowMin, rowMax);
 
         if (Chatbox.ImageCache.HasUnloaded && ImGui.IsRectVisible(rowMin, rowMax)) RequestRowMedia(message);
 
@@ -734,7 +739,7 @@ public sealed partial class ChatboxSurface
     private void DrawHoverToolbar(ChatboxMessage message, Vector2 rowMin, Vector2 rowMax)
     {
         var saved = ImGui.GetCursorScreenPos();
-        var size = HoverToolbarButtonSize(rowMin, rowMax);
+        var size = _theme.Scaled(UiTheme.HoverToolbarButtonSize);
         var spacing = _theme.Gap(0.2f);
         var pad = _theme.Gap(0.2f);
 
@@ -752,8 +757,11 @@ public sealed partial class ChatboxSurface
 
         var width = count * size + (count - 1) * spacing + 2f * pad;
 
-        var panelMin = new Vector2(rowMax.X - width, rowMin.Y);
-        var panelMax = new Vector2(rowMax.X, rowMin.Y + size + 2f * pad);
+        var height = size + 2f * pad;
+        var top = MathF.Max(MathF.Min(rowMin.Y, rowMax.Y - height), ImGui.GetWindowPos().Y);
+        var panelMin = new Vector2(rowMax.X - width, top);
+        var panelMax = new Vector2(rowMax.X, top + height);
+        _toolbarDrawn = (message.Seq, panelMin, panelMax);
 
         var draw = ImGui.GetWindowDrawList();
         draw.AddRectFilled(panelMin, panelMax, ImGui.GetColorU32(_theme.PanelBg), _theme.Radius(0.7f));
@@ -858,9 +866,6 @@ public sealed partial class ChatboxSurface
         _plugin.Config.Save();
         _focusInput = true;
     }
-
-    private float HoverToolbarButtonSize(Vector2 rowMin, Vector2 rowMax) =>
-        Math.Clamp(rowMax.Y - rowMin.Y - _theme.Gap(0.4f), _theme.Scaled(15f), _theme.Scaled(22f));
 
     private string DescribeMessage(ChatboxMessage message)
     {
