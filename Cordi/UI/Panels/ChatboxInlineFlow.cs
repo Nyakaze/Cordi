@@ -1,4 +1,5 @@
 using System;
+using System.Text;
 using System.Numerics;
 using Cordi.Services.Chatbox;
 using Cordi.UI.Themes;
@@ -105,6 +106,12 @@ public sealed class ChatboxInlineFlow
     {
         if (!_active || string.IsNullOrEmpty(text)) return;
 
+        if (ChatboxRtlText.HasRtl(text))
+        {
+            RtlText(text, color);
+            return;
+        }
+
         var span = text.AsSpan();
         if (_x <= _indent) span = span.TrimStart();
         if (span.IsEmpty) return;
@@ -123,6 +130,52 @@ public sealed class ChatboxInlineFlow
             DrawToken(span[start..end], color);
             start = end;
         }
+    }
+
+    private void RtlText(string text, Vector4 color)
+    {
+        var rtl = ChatboxRtlText.IsRtlParagraph(text);
+        var shaped = ChatboxRtlText.Shape(text);
+        var line = new StringBuilder();
+
+        var start = 0;
+        while (start < shaped.Length)
+        {
+            var end = TokenEnd(shaped, start);
+            var token = shaped[start..end];
+            start = end;
+
+            if (line.Length == 0)
+            {
+                if (_x <= _indent && string.IsNullOrWhiteSpace(token)) continue;
+                EnsureRoom(ImGui.CalcTextSize(token).X);
+                line.Append(token);
+                continue;
+            }
+
+            var candidate = string.Concat(line.ToString(), token).TrimEnd();
+            if (_x + ImGui.CalcTextSize(candidate).X <= _wrapWidth)
+            {
+                line.Append(token);
+                continue;
+            }
+
+            EmitRtlLine(line.ToString().TrimEnd(), color, rtl);
+            NewLine();
+            line.Clear();
+
+            if (!string.IsNullOrWhiteSpace(token)) line.Append(token);
+        }
+
+        if (line.Length > 0) EmitRtlLine(line.ToString(), color, rtl);
+    }
+
+    private void EmitRtlLine(string line, Vector4 color, bool rtl)
+    {
+        if (line.Length == 0) return;
+
+        var visual = ChatboxRtlText.Visual(line, rtl);
+        Emit(visual, color, ImGui.CalcTextSize(visual));
     }
 
     private static int TokenEnd(ReadOnlySpan<char> text, int start)

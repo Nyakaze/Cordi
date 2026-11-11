@@ -355,7 +355,8 @@ public sealed partial class ChatboxSurface : IDisposable
         {
             if (list)
             {
-                DrawMessages(channel);
+                using (_emoteFont.Push())
+                    DrawMessages(channel);
                 DrawAutocomplete();
             }
         }

@@ -1,5 +1,8 @@
 using System;
+using System.IO;
 using System.Numerics;
+using Cordi.Core;
+using Dalamud.Bindings.ImGui;
 using Dalamud.Interface.ManagedFontAtlas;
 
 namespace Cordi.Services.Chatbox;
@@ -26,6 +29,7 @@ public sealed class ChatboxEmoteFont : IDisposable
         _handle = _atlas.NewDelegateFontHandle(e => e.OnPreBuild(tk =>
         {
             var font = tk.AddDalamudDefaultFont(-1);
+            MergeRtlFont(tk, font);
             var box = (int)MathF.Ceiling(Service.PluginInterface.UiBuilder.FontDefaultSizePx * tk.Scale);
             if (box < 1) box = 1;
 
@@ -40,6 +44,34 @@ public sealed class ChatboxEmoteFont : IDisposable
                     new Vector2(0, box * 0.1f));
             }
         }));
+    }
+
+    private static readonly string[] RtlFontFiles = { "segoeui.ttf", "tahoma.ttf", "arial.ttf" };
+
+    private static void MergeRtlFont(IFontAtlasBuildToolkitPreBuild tk, ImFontPtr font)
+    {
+        var directory = Environment.GetFolderPath(Environment.SpecialFolder.Fonts);
+
+        foreach (var file in RtlFontFiles)
+        {
+            var path = Path.Combine(directory, file);
+            if (!File.Exists(path)) continue;
+
+            try
+            {
+                tk.AddFontFromFile(path, new SafeFontConfig
+                {
+                    SizePx = Service.PluginInterface.UiBuilder.FontDefaultSizePx,
+                    GlyphRanges = ChatboxRtlText.GlyphRanges,
+                    MergeFont = font,
+                });
+                return;
+            }
+            catch (Exception ex)
+            {
+                CordiPlugin.Plugin.LogService.Warning("Chatbox", $"Could not load {file} for Arabic and Hebrew text: {ex.Message}");
+            }
+        }
     }
 
     public bool Available => _handle.Available;

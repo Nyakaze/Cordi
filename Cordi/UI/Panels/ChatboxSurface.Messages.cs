@@ -268,6 +268,7 @@ public sealed partial class ChatboxSurface
                 Config.CollapseRepeats,
                 Config.CollapseWindowSeconds,
                 Config.EnableReplies,
+                _emoteFont.Available,
                 TranslationMetricsKey()));
 
         if (key != _rowMetricsKey || dividerSeq != _metricsDividerSeq)
