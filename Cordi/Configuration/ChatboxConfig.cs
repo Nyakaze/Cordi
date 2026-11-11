@@ -228,6 +228,7 @@ public class ChatboxConfig : IWindowChromeConfig
     public List<string> RecentEmojis { get; set; } = new();
 
     public bool ShowGifPicker { get; set; } = true;
+    public bool GifPickerAutoFocusSearch { get; set; } = true;
     public bool ShowUploadButton { get; set; } = false;
     public string GiphyApiKey { get; set; } = string.Empty;
     public Vector2 GifPickerSize { get; set; } = Vector2.Zero;

@@ -172,7 +172,7 @@ public sealed partial class UiTheme
 
     public float PickerChipWidth(ReadOnlySpan<char> label) => ChipPillWidth(label, 0.82f) + PadX(0.4f);
 
-    public void PickerSearch(string id, float width, ref string value, string hint, ref bool inputActive)
+    public void PickerSearch(string id, float width, ref string value, string hint, ref bool inputActive, bool focus = false)
     {
         var draw = ImGui.GetWindowDrawList();
         var height = PickerSearchHeight();
@@ -203,6 +203,7 @@ public sealed partial class UiTheme
                    .Push(ImGuiCol.FrameBgActive, new Vector4(0f, 0f, 0f, 0f)))
         using (ImRaii.PushStyle(ImGuiStyleVar.FrameBorderSize, 0f))
         {
+            if (focus) ImGui.SetKeyboardFocusHere();
             ImGui.InputTextWithHint(id, hint, ref value, 64);
         }
 

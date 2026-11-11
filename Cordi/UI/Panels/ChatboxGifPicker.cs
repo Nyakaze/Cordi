@@ -29,6 +29,7 @@ public sealed class ChatboxGifPicker
     private bool _showFavorites;
     private bool _searchActive;
     private bool _requestOpen;
+    private bool _focusSearch;
     private bool _popupOpen;
     private Vector2 _chatboxPosition;
     private Vector2 _chatboxSize;
@@ -58,6 +59,7 @@ public sealed class ChatboxGifPicker
         if (_requestOpen)
         {
             _requestOpen = false;
+            _focusSearch = Config.GifPickerAutoFocusSearch;
             ResolveSize();
             ImGui.OpenPopup(PopupId);
         }
@@ -115,7 +117,10 @@ public sealed class ChatboxGifPicker
             gripAtTop ? MathF.Max(_theme.Scaled(60f), width - grip) : width,
             ref _query,
             "Search GIPHY",
-            ref _searchActive);
+            ref _searchActive,
+            _focusSearch);
+
+        _focusSearch = false;
 
         UpdateSearch();
 

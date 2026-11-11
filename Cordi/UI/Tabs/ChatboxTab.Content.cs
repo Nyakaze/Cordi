@@ -242,6 +242,11 @@ public partial class ChatboxTab
             "Show GIF Button", "Click a GIF to send it, right-click to favourite it.",
             innerWidth, () => Cfg.ShowGifPicker, v => Cfg.ShowGifPicker = v);
 
+        DrawToggleRow(
+            "chatbox-gif-autofocus", FontAwesomeIcon.Keyboard,
+            "Focus Search on Open", "Opening the GIF picker puts the cursor in its search bar, so you can type right away.",
+            innerWidth, () => Cfg.GifPickerAutoFocusSearch, v => Cfg.GifPickerAutoFocusSearch = v);
+
         var key = Cfg.GiphyApiKey;
 
         Row.Draw(
