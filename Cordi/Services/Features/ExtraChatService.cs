@@ -24,11 +24,7 @@ namespace Cordi.Services.Features
 
         private string GetExtraChatConfigPath()
         {
-            // Assuming ExtraChat.json is in the same pluginConfigs folder as Cordi's config
-            // C:\Users\User\AppData\Roaming\XivLauncher\pluginConfigs\ExtraChat.json
             var configDir = CordiPlugin.PluginInterface.GetPluginConfigDirectory();
-            // Up one level to pluginConfigs if Cordi is in a subdir, or same dir?
-            // User moved config to pluginConfigs/Cordi, so up one level to pluginConfigs root.
             var parentDir = Directory.GetParent(configDir)?.FullName;
             if (parentDir != null)
             {
@@ -41,13 +37,15 @@ namespace Cordi.Services.Features
             return "";
         }
 
+        public static bool IsLoaded() =>
+            CordiPlugin.PluginInterface.InstalledPlugins.Any(p => p.InternalName == "ExtraChat" && p.IsLoaded);
+
         public bool IsExtraChatInstalled()
         {
 #if DEBUG
             var isLoaded = true;
 #else
-            var isLoaded = CordiPlugin.PluginInterface.InstalledPlugins
-                .Any(p => p.InternalName == "ExtraChat" && p.IsLoaded);
+            var isLoaded = IsLoaded();
 #endif
             return isLoaded && !string.IsNullOrEmpty(GetExtraChatConfigPath());
         }
@@ -75,8 +73,7 @@ namespace Cordi.Services.Features
                     var playerState = PlayerState.Instance();
                     contentId = playerState != null ? playerState->ContentId : 0UL;
                 }
-                if (contentId == 0) return 0; // Not logged in
-
+                if (contentId == 0) return 0;
                 if (!root.Configs.TryGetValue(contentId, out var charConfig))
                 {
                     return 0;
@@ -89,24 +86,19 @@ namespace Cordi.Services.Features
 
                 foreach (var kvp in charConfig.ChannelOrder)
                 {
-                    // key is index, value is GUID
                     int orderIndex = kvp.Key;
                     Guid channelGuid = kvp.Value;
 
-                    // Formula: (Key + 1) / 2
-                    // Example: 3 -> (3+1)/2 = 2. 5 -> (5+1)/2 = 3. 9 -> (9+1)/2 = 5.
                     int extraChatNum = orderIndex + 1;
                     Service.Log.Info($"ExtraChatNum: {extraChatNum}");
                     if (extraChatNum < 1) extraChatNum = 1;
 
-                    // Get Channel Info
                     string label = "";
                     if (charConfig.Channels != null && charConfig.Channels.TryGetValue(channelGuid, out var chInfo))
                     {
                         label = chInfo.Name ?? "";
                     }
 
-                    // Check for custom Marker (Label Override)
                     if (charConfig.ChannelMarkers != null && charConfig.ChannelMarkers.TryGetValue(channelGuid, out var marker))
                     {
                         if (!string.IsNullOrEmpty(marker)) label = marker;
@@ -114,16 +106,13 @@ namespace Cordi.Services.Features
 
                     if (string.IsNullOrEmpty(label)) continue;
 
-                    // Update or Add to Cordi Mappings
-                    // Strategy: Find by GUID first to handle renames
                     var guidStr = channelGuid.ToString();
                     var existingByGuid = currentMappings.FirstOrDefault(m => m.Value?.ExtraChatGuid == guidStr);
 
-                    if (existingByGuid.Value != null) // Check if a mapping with this GUID was found
+                    if (existingByGuid.Value != null)
                     {
                         var connection = existingByGuid.Value;
 
-                        // If label changed, we must rename the key
                         if (existingByGuid.Key != label)
                         {
                             currentMappings.Remove(existingByGuid.Key);
@@ -139,7 +128,6 @@ namespace Cordi.Services.Features
                     }
                     else if (currentMappings.TryGetValue(label, out var connectionByLabel))
                     {
-                        // Found by label but no GUID stored yet? Update GUID and Number
                         connectionByLabel.ExtraChatGuid = guidStr;
                         if (connectionByLabel.ExtraChatNumber != extraChatNum)
                         {
@@ -148,14 +136,11 @@ namespace Cordi.Services.Features
                         }
                         else
                         {
-                            // Just GUID update doesn't count as a "change" worth notifying user about usually,
-                            // but we'll count it to ensure Save() is called.
                             changes++;
                         }
                     }
                     else
                     {
-                        // Brand new mapping
                         currentMappings[label] = new Configuration.ExtraChatConnection
                         {
                             ExtraChatNumber = extraChatNum,

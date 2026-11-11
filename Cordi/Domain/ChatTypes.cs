@@ -45,7 +45,10 @@ public static class ChatTypes
         .Concat(CrossWorldLinkshells)
         .ToArray();
 
+    private const uint LinkshellColor = 0xD4FF7DFF;
+
     public static readonly (string Label, XivChatType Key, uint Default, XivChatType[] Applies)[] ColorGroups =
+    new (string, XivChatType, uint, XivChatType[])[]
     {
         ("Say", XivChatType.Say, 0xF7F7F7FF, new[] { XivChatType.Say, XivChatType.GmSay }),
         ("Shout", XivChatType.Shout, 0xFFA64DFF, new[] { XivChatType.Shout, XivChatType.GmShout }),
@@ -54,9 +57,14 @@ public static class ChatTypes
         ("Party", XivChatType.Party, 0x66CCFFFF, new[] { XivChatType.Party, XivChatType.CrossParty, XivChatType.GmParty }),
         ("Alliance", XivChatType.Alliance, 0xFF8C33FF, new[] { XivChatType.Alliance }),
         ("Free Company", XivChatType.FreeCompany, 0x8CE6F2FF, new[] { XivChatType.FreeCompany, XivChatType.FreeCompanyAnnouncement, XivChatType.FreeCompanyLoginLogout, XivChatType.GmFreeCompany }),
-        ("Linkshells", XivChatType.Ls1, 0xD4FF7DFF, Linkshells.Concat(GameMasterLinkshells).ToArray()),
-        ("Cross-world Linkshells", XivChatType.CrossLinkShell1, 0xD4FF7DFF, CrossWorldLinkshells),
-        ("Novice Network", XivChatType.NoviceNetwork, 0xD4FF7DFF, new[] { XivChatType.NoviceNetwork, XivChatType.NoviceNetworkSystem, XivChatType.GmNoviceNetwork }),
+    }
+    .Concat(Enumerable.Range(0, LinkshellSlotCount).Select(i =>
+        ($"Linkshell {i + 1}", Linkshells[i], LinkshellColor, new[] { Linkshells[i], GameMasterLinkshells[i] })))
+    .Concat(Enumerable.Range(0, LinkshellSlotCount).Select(i =>
+        ($"Cross-world Linkshell {i + 1}", CrossWorldLinkshells[i], LinkshellColor, new[] { CrossWorldLinkshells[i] })))
+    .Concat(new (string, XivChatType, uint, XivChatType[])[]
+    {
+        ("Novice Network", XivChatType.NoviceNetwork, LinkshellColor, new[] { XivChatType.NoviceNetwork, XivChatType.NoviceNetworkSystem, XivChatType.GmNoviceNetwork }),
         ("PvP Team", XivChatType.PvPTeam, 0xABDBE5FF, new[] { XivChatType.PvPTeam, XivChatType.PvpTeamAnnouncement, XivChatType.PvpTeamLoginLogout }),
         ("Emotes", XivChatType.CustomEmote, 0xBAFFF0FF, new[] { XivChatType.CustomEmote, XivChatType.StandardEmote }),
         ("NPC Dialogue", XivChatType.NPCDialogue, 0xABD647FF, new[] { XivChatType.NPCDialogue, XivChatType.NPCDialogueAnnouncements }),
@@ -79,7 +87,8 @@ public static class ChatTypes
         ("Progress", XivChatType.Progress, 0xFFDE73FF, new[] { XivChatType.Progress }),
         ("Loot Rolls", XivChatType.LootRoll, 0xC7BF9EFF, new[] { XivChatType.LootRoll, XivChatType.RandomNumber }),
         ("Crafting and Gathering", XivChatType.Crafting, 0xDEBFF7FF, new[] { XivChatType.Crafting, XivChatType.Gathering }),
-    };
+    })
+    .ToArray();
 
     public static readonly (string Group, bool Simple, XivChatType[] Types)[] SelectableGroups =
     {

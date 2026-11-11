@@ -34,7 +34,10 @@ public sealed partial class ChatboxSurface
         if (gutter > 0f) ImGui.Unindent(gutter);
         if (grouped || avatarSize <= 0f) return;
 
-        DrawAvatar(message, origin, MathF.Min(avatarSize, MathF.Max(blockHeight, ImGui.GetTextLineHeight())));
+        var padding = avatarSize - blockHeight - ImGui.GetStyle().ItemSpacing.Y;
+        if (padding > 0f) ImGui.Dummy(new Vector2(0f, padding));
+
+        DrawAvatar(message, origin, avatarSize);
     }
 
     private void DrawSystemLine(ChatboxMessage message, float width)

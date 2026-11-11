@@ -11,6 +11,7 @@ public sealed partial class ChatboxService
     public bool CanSend(ChatboxChannelState? channel) =>
         channel != null
         && (IsConversationId(channel.Id)
+            || HasExtraChat(channel.Config)
             || ResolveSendType(channel.Config) != XivChatType.None
             || IsTellChannel(channel));
 
@@ -134,6 +135,12 @@ public sealed partial class ChatboxService
             }
 
             _ = _chat.SendTellAsync(recipient, text);
+            return;
+        }
+
+        if (HasExtraChat(channel.Config))
+        {
+            SendToExtraChat(channel, body);
             return;
         }
 

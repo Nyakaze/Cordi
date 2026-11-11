@@ -1,4 +1,4 @@
-using Cordi.Configuration;
+﻿using Cordi.Configuration;
 using Cordi.Domain;
 using Cordi.UI.Themes;
 using Dalamud.Interface;
@@ -248,10 +248,11 @@ public partial class ChatboxTab
             {
                 var applies = group.Applies;
                 var fallback = ChatboxConfig.FromRgba(group.Default);
+                var label = Services.Features.LinkshellNameService.LabelFor(group.Key) ?? group.Label;
 
                 DrawColorRow(
                     $"chatbox-chat-colour-{group.Key}",
-                    group.Label, $"Colour of {group.Label} messages.",
+                    label, $"Colour of {label} messages.",
                     innerWidth,
                     () => Cfg.ChatTypeColor(group.Key) ?? fallback,
                     v => Cfg.SetChatTypeColor(applies, v));

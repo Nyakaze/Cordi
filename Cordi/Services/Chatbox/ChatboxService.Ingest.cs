@@ -37,9 +37,12 @@ public sealed partial class ChatboxService
 
         var gameMaster = ChatTypes.IsGameMaster(message.ChatType);
 
-        var (name, world) = ResolveGameSender(message);
+        var extraChat = ParseExtraChat(message);
+        if (extraChat != null) message = extraChat.Message;
 
-        var conversation = gameMaster
+        var (name, world) = extraChat != null ? (extraChat.Name, extraChat.World) : ResolveGameSender(message);
+
+        var conversation = gameMaster || extraChat != null
             ? null
             : ResolveConversationTarget(message.ChatType, name, world);
 
@@ -48,7 +51,9 @@ public sealed partial class ChatboxService
 
         var targets = Channels
             .Where(c => !IsConversationId(c.Id))
-            .Where(c => gameMaster || c.Config.GameChatTypes.Contains(message.ChatType))
+            .Where(c => gameMaster
+                        || c.Config.GameChatTypes.Contains(message.ChatType)
+                        || (extraChat != null && string.Equals(c.Config.ExtraChatChannel, extraChat.Label, StringComparison.Ordinal)))
             .ToList();
 
         if (conversation != null)

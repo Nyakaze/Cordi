@@ -89,6 +89,8 @@ public class ChatboxChannelConfig
 
     public XivChatType ActiveSendGameChatType { get; set; } = XivChatType.None;
 
+    public string ExtraChatChannel { get; set; } = string.Empty;
+
     public bool MuteNotifications { get; set; }
     public bool MuteGameSound { get; set; }
     public bool TreatAllAsMention { get; set; }
@@ -113,7 +115,6 @@ public class ChatboxConfig : IWindowChromeConfig
     public bool WindowLockSize { get; set; }
     public bool IgnoreEsc { get; set; }
     public bool EscapeClearsInput { get; set; }
-    public bool ClickThroughWhenUnfocused { get; set; }
     public float BackgroundOpacity { get; set; } = 1.0f;
     public bool HideWhenNotLoggedIn { get; set; } = true;
     public bool HideInGpose { get; set; } = true;

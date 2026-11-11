@@ -233,6 +233,22 @@ public sealed partial class ChatboxSurface
             return;
         }
 
+        if (ChatboxService.HasExtraChat(channel.Config))
+        {
+            _theme.IconPicker(
+                "chatbox-send-target",
+                new Vector2(size, size),
+                FontAwesomeIcon.ProjectDiagram,
+                $"ExtraChat: {channel.Config.ExtraChatChannel}",
+                MathF.Max(_theme.Scaled(120f), ImGui.GetContentRegionAvail().X * 0.5f),
+                Array.Empty<DropdownItem>(),
+                string.Empty,
+                _ => { },
+                _theme.Scaled(260f),
+                false);
+            return;
+        }
+
         var pinned = Chatbox.IsSendTypePinned(channel.Config);
         var active = Chatbox.ResolveSendType(channel.Config);
 
@@ -374,7 +390,9 @@ public sealed partial class ChatboxSurface
 
         var sendType = ChatboxService.IsConversationId(channel.Id)
             ? XivChatType.TellOutgoing
-            : Chatbox.ResolveSendType(channel.Config);
+            : ChatboxService.HasExtraChat(channel.Config)
+                ? XivChatType.None
+                : Chatbox.ResolveSendType(channel.Config);
 
         if (NeedsCommandConfirmation(sendType, text, out var command))
         {

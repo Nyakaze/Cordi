@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
@@ -295,7 +295,9 @@ public partial class ChatboxTab
     }
 
     private static List<string> ChannelChatLabels(ChatboxChannelConfig channel) =>
-        channel.GameChatTypes.Select(ChatboxService.LabelFor).Distinct().ToList();
+        channel.GameChatTypes.Select(ChatboxService.LabelFor)
+            .Concat(ChatboxService.HasExtraChat(channel) ? new[] { channel.ExtraChatChannel } : Array.Empty<string>())
+            .Distinct().ToList();
 
     private static string DescribeChannel(ChatboxChannelConfig channel)
     {
@@ -397,6 +399,7 @@ public partial class ChatboxTab
 
         DrawChannelIdentity(channel);
         DrawChannelSources(channel);
+        DrawChannelExtraChat(channel);
         DrawChannelSending(channel);
         DrawChannelBehaviour(channel);
         DrawChannelHistory(channel);
@@ -589,6 +592,51 @@ public partial class ChatboxTab
 
         Save();
         plugin.Chatbox.RebuildChannels();
+    }
+
+    private void DrawChannelExtraChat(ChatboxChannelConfig channel)
+    {
+        var mappings = plugin.Config.Chat.ExtraChatMappings;
+        var loaded = Services.Features.ExtraChatService.IsLoaded();
+
+        if (!loaded && mappings.Count == 0 && !ChatboxService.HasExtraChat(channel))
+            return;
+
+        Card.Draw($"chatbox-extrachat-{channel.Id}", innerWidth =>
+        {
+            var items = new List<DropdownItem> { new() { Key = string.Empty, Label = "None" } };
+            items.AddRange(mappings.Keys
+                .Append(channel.ExtraChatChannel)
+                .Where(label => label.Length > 0)
+                .Distinct(StringComparer.Ordinal)
+                .OrderBy(label => label, StringComparer.OrdinalIgnoreCase)
+                .Select(label => new DropdownItem { Key = label, Label = label }));
+
+            Row.Draw(
+                id: $"chatbox-extrachat-row-{channel.Id}",
+                icon: FontAwesomeIcon.ProjectDiagram,
+                iconColor: UiTheme.TilePurple,
+                title: "ExtraChat Channel",
+                subtitle: loaded
+                    ? "Messages from this ExtraChat channel land here, and everything sent from this channel goes out through ExtraChat. Channels are found under Chats, ExtraChat Mappings."
+                    : "ExtraChat isn't loaded. Nothing arrives or sends until it is.",
+                controlWidth: 240f,
+                drawControl: (pos, width) =>
+                {
+                    ImGui.SetCursorScreenPos(pos);
+                    theme.OptionPicker(
+                        $"chatbox-extrachat-picker-{channel.Id}",
+                        channel.ExtraChatChannel,
+                        items,
+                        key =>
+                        {
+                            channel.ExtraChatChannel = key;
+                            Save();
+                        },
+                        width);
+                },
+                rowWidth: innerWidth);
+        }, "ExtraChat");
     }
 
     private void DrawChannelSending(ChatboxChannelConfig channel) =>

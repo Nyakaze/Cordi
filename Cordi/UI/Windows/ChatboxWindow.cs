@@ -36,6 +36,7 @@ public sealed class ChatboxWindow : ThemedWindow, IDisposable
         };
         Size = new Vector2(720, 460);
         SizeCondition = ImGuiCond.FirstUseEver;
+        AllowClickthrough = false;
     }
 
     private ChatboxConfig Config => _config.Chatbox;
@@ -52,7 +53,6 @@ public sealed class ChatboxWindow : ThemedWindow, IDisposable
 
     protected override void OnPreDraw()
     {
-        AllowClickthrough = Config.ClickThroughWhenUnfocused;
         UpdateTitle();
     }
 

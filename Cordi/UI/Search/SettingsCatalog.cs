@@ -108,7 +108,6 @@ public static class SettingsCatalog
             ("", "Lock Position", "window move"),
             ("", "Lock Size", "window resize"),
             ("", "Ignore ESC", "escape key close"),
-            ("", "Click Through when unfocused", "mouse passthrough"),
             ("", "Hide in Gpose", "group pose camera visibility"),
             ("", "Hide in Cutscene", "cutscene scene visibility"),
             ("", "Background Opacity", "transparency alpha"),
