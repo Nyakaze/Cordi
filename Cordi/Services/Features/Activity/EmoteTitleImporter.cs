@@ -252,7 +252,7 @@ public sealed class EmoteTitleImporter
         return direction == EmoteDirection.Receiving ? $"Receiving {label}" : $"Giving {label}";
     }
 
-    private static string PluginConfigsDirectory() =>
+    internal static string PluginConfigsDirectory() =>
         Path.GetFullPath(Path.Combine(CordiPlugin.PluginInterface.ConfigDirectory.FullName, ".."));
 
     private bool Read<T>(string path, out T? parsed, out string error) where T : class

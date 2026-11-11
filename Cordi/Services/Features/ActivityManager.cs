@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Threading.Tasks;
 using Cordi.Configuration;
 using Cordi.Core;
@@ -49,6 +49,7 @@ namespace Cordi.Services
             Log = log;
             _localPlayer = localPlayer;
             _broadcaster = new ActivityTitleBroadcaster(honorific);
+            _localPlayer.OnLogin += HandleLogin;
 
             Log.Info(LogSource, "Initialized and listening for presence updates.");
         }
@@ -131,9 +132,23 @@ namespace Cordi.Services
         {
             Log.Info(LogSource, "Disposing — unsubscribing from events.");
 
+            _localPlayer.OnLogin -= HandleLogin;
             _disposed = true;
             _hasPendingPresenceUpdate = false;
             _isIdle = true;
+        }
+
+        private void HandleLogin(Domain.LocalPlayer player)
+        {
+            if (_config.ActivityConfig is not { } config) return;
+
+            uint worldId = _localPlayer.Character?.HomeWorld.RowId ?? 0;
+
+            if (!config.SyncCustomPreset(player.Name, worldId)) return;
+
+            Log.Info(LogSource, $"Switched custom preset to \"{config.CustomPresets[config.ActiveCustomPreset].Name}\" for {player.Name}.");
+            _config.Save();
+            _hasPendingPresenceUpdate = true;
         }
 
         private void ProcessPresence(bool quiet)

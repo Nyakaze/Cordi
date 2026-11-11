@@ -30,6 +30,44 @@ public class DiscordActivityConfig
 
     public EmoteTitleSettings EmoteTitles { get; set; } = new();
 
+    public bool SyncCustomPreset(string? characterName, uint worldId)
+    {
+        if (CustomPresets.Count == 0) return false;
+
+        int active = Math.Clamp(ActiveCustomPreset, 0, CustomPresets.Count - 1);
+
+        if (CustomPresets[active].VisibleTo(characterName, worldId)) return false;
+
+        var visible = Enumerable.Range(0, CustomPresets.Count)
+            .Where(index => CustomPresets[index].VisibleTo(characterName, worldId))
+            .ToList();
+
+        if (visible.Count == 0) return false;
+
+        int next = visible.FirstOrDefault(index => !CustomPresets[index].IsGlobal(), visible[0]);
+        var previous = CustomPresets[active].Config;
+        var config = CustomPresets[next].Config;
+
+        config.Enabled = previous.Enabled;
+        config.Priority = previous.Priority;
+
+        ActiveCustomPreset = next;
+        TypeConfigs[ActivityType.Custom] = config;
+
+        return true;
+    }
+
+    public string UniqueCustomPresetName(string baseName)
+    {
+        string name = baseName;
+        int index = 1;
+
+        while (CustomPresets.Any(preset => preset.Name == name))
+            name = $"{baseName} {index++}";
+
+        return name;
+    }
+
     public ActivityTypes EnabledTypes() => TypeConfigs
         .Where(entry => entry.Value is { Enabled: true })
         .Aggregate(ActivityTypes.None, (types, entry) => types | entry.Key.ToFlag());
@@ -40,6 +78,17 @@ public class ActivityPreset
 {
     public string Name { get; set; } = "Default";
     public ActivityTypeConfig Config { get; set; } = new();
+
+    public string CharacterName { get; set; } = string.Empty;
+    public uint CharacterWorldId { get; set; } = 0;
+
+    public bool IsGlobal() => string.IsNullOrEmpty(CharacterName);
+
+    public bool BelongsTo(string? characterName, uint worldId) =>
+        !IsGlobal() && CharacterWorldId == worldId && string.Equals(CharacterName, characterName, StringComparison.Ordinal);
+
+    public bool VisibleTo(string? characterName, uint worldId) =>
+        IsGlobal() || string.IsNullOrEmpty(characterName) || BelongsTo(characterName, worldId);
 }
 
 [Serializable]

@@ -1,3 +1,9 @@
+## [test-version-v2](https://github.com/Nyakaze/Cordi/compare/test-version-v1...test-version-v2) (11-11-2026)
+
+### Activity
+ - **Added:** Custom presets can be global or tied to a single character.
+ - **Added:** Import titles from Honorific, choosing to keep them per character or make them global. -> Activity -> Custom
+
 ## [test-version-v1](https://github.com/Nyakaze/Cordi/compare/test-chatbox-v5...test-version-v1) (17-10-2026)
 
 ### General
